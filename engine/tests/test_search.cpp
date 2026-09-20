@@ -1,3 +1,4 @@
+#include <cmath>
 #include <atomic>
 #include <chrono>
 #include <thread>

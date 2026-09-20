@@ -2,6 +2,7 @@
 //   texel --data positions.txt --out tuned.txt [--params-in start.txt] [--epochs 300] [--lr 1.0]
 //         [--l2 1e-8] [--val 0.1] [--max-positions N] [--k 0] [--freeze group1,group2] [--verbose]
 // positions.txt: one "FEN | result [| weight]" per line; result = White's score (1, 0.5, 0).
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
