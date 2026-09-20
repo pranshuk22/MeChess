@@ -100,3 +100,35 @@ def test_forced_move_is_never_great():
     g = game("1. e4 e5 2. Qh5 Nc6 3. Bc4 Nf6 4. Qxf7#", "1-0")
     res = R.analyse_game(g, scripted({}))
     assert res["moves"][-1]["ply"] == 7 and res["moves"][-1]["class"] in ("best", "great", "brilliant")
+
+
+def test_game_key_and_side_of():
+    g = chess.pgn.read_game(io.StringIO('[White "Alice"]\n[Black "Bob"]\n[Site "https://lichess.org/AbCd1234"]\n\n1. e4 *'))
+    assert R.game_key(g, 7) == "00007-AbCd1234"
+    assert R.game_key(game("1. e4"), 3) == "00003"
+    assert R.side_of(g, "alice") == "white" and R.side_of(g, "BOB") == "black" and R.side_of(g, "carol") is None and R.side_of(g, None) is None
+
+
+def test_report_summarises_the_players_games_and_handles_none():
+    assert "No games" in R.render_report([])
+    g = game("1. e4 f6", "1-0")
+    res = R.analyse_game(g, scripted({"rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b": [("e7e5", 0), ("f7f6", -900)],
+                                     "rnbqkbnr/ppppp1pp/5p2/8/4P3/8/PPPP1PPP/RNBQKBNR w": [("d1h5", 900)]}))
+    res["player_color"] = "black"
+    text = R.render_report([("g1", res)], "Bob")
+    assert "1 games analysed" in text and "| blunder | 1 |" in text and "| g1 | 2 | f6 | blunder |" in text
+
+
+def test_engine_search_reads_multipv_lines_from_an_engine():
+    class FakeEngine:
+        sent = []
+        def _send(self, s): self.sent.append(s)
+        def ready(self): pass
+        def go(self, fen, moves, nodes=None): 
+            self.last = (fen, list(moves), nodes)
+            return SimpleNamespace(lines=[line("e2e4", 30)], bestmove="e2e4", score=30, score_kind="cp", pv=["e2e4"])
+    eng = FakeEngine()
+    search = R.engine_search(eng, nodes=1234, multipv=3)
+    b = chess.Board(); b.push_uci("g1f3")
+    assert search(b)[0].move == "e2e4" and eng.last == (chess.STARTING_FEN, ["g1f3"], 1234)
+    assert "setoption name MultiPV value 3" in eng.sent

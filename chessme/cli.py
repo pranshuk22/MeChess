@@ -628,6 +628,57 @@ def cmd_style_games_report(args):
         Path(args.out).write_text(text + "\n")
 
 
+def cmd_analyse(args):
+    """Analyse the games of a PGN file with Stockfish: one JSON file per game (resumable and pausable), then a Markdown report."""
+    import io as _io
+    import json as _json
+
+    import chess.pgn as _pgn
+
+    from .analysis import runner as AR
+    from .jobs import JobControl, Stopped
+    from .uci_client import UciEngine
+    log = _file_logger(args.log)
+    out = Path(args.out)
+    (out / "games").mkdir(parents=True, exist_ok=True)
+    text = Path(args.pgn).read_text(errors="replace")
+    games = []
+    with _io.StringIO(text) as f:
+        while (g := _pgn.read_game(f)) is not None:
+            games.append(g)
+    games = games[: args.limit] if args.limit else games
+    ctl = JobControl(args.job, args.control_dir, log=log)
+    log(f"=== analyse {args.pgn}: {len(games)} games, {args.nodes} nodes/position, output {out}")
+    done = failed = 0
+    with UciEngine([args.engine], options={"Threads": 1, "Hash": 64}) as eng, ctl.signals():
+        search = AR.engine_search(eng, nodes=args.nodes, multipv=2)
+        try:
+            for i, g in enumerate(games):
+                ctl.checkpoint()
+                key = AR.game_key(g, i)
+                path = out / "games" / f"{key}.json"
+                if path.exists():
+                    done += 1
+                    continue
+                try:
+                    res = AR.analyse_game(g, search)
+                except Exception as e:      # a game the engine cannot finish must not stop the batch
+                    failed += 1
+                    log(f"  {key}: FAILED {e!r}")
+                    continue
+                res["player_color"] = AR.side_of(g, args.player)
+                res["headers"] = {k: g.headers.get(k, "") for k in ("White", "Black", "Result", "Date", "Site", "Opening")}
+                path.with_suffix(".tmp").write_text(_json.dumps(res))
+                path.with_suffix(".tmp").replace(path)
+                done += 1
+                log(f"  [{done}/{len(games)}] {key}: {len(res['moves'])} plies")
+        except Stopped as e:
+            log(f"stopped: {e} (rerun the same command to resume)")
+    results = [(p.stem, _json.loads(p.read_text())) for p in sorted((out / "games").glob("*.json"))]
+    (out / "report.md").write_text(AR.render_report(results, args.player))
+    log(f"finished: {done} done, {failed} failed; report {out / 'report.md'}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1067,6 +1118,12 @@ def main():
     gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
     gf.add_argument("--log", default="data/style/logs/games_fetch.log")
     gf.set_defaults(func=cmd_style_games_fetch)
+    an = sub.add_parser("analyse", help="analyse the games of a PGN file with Stockfish: move classes, accuracy, report (resumable, pausable)")
+    an.add_argument("pgn"); an.add_argument("--out", default="data/analysis"); an.add_argument("--player", help="report on this player's side (PGN name)")
+    an.add_argument("--engine", default="stockfish"); an.add_argument("--nodes", type=int, default=200000, help="nodes per position (fixed, machine independent)")
+    an.add_argument("--limit", type=int); an.add_argument("--job", default="analyse"); an.add_argument("--control-dir", default="data/control")
+    an.add_argument("--log", default="data/analysis/analyse.log")
+    an.set_defaults(func=cmd_analyse)
     gr = sub.add_parser("style-games-report", help="reliability, quality gate, identification and factors of the game-level features")
     gr.add_argument("--data", default="data/style/cohort2"); gr.add_argument("--min-games", type=int, default=30)
     gr.add_argument("--min-players", type=int, default=40); gr.add_argument("--seed", type=int, default=0)

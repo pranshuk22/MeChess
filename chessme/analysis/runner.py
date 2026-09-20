@@ -121,3 +121,76 @@ def summarise(moves, headers=None, critical=5):
             "was_losing": None if low is None else low <= 0.333, "saved": None if score is None or low is None or low > 0.333 else score > 0.0,
         }
     return out
+
+
+# ---- engine adapter, files, report ------------------------------------------------------------------------------------------------
+
+def engine_search(engine, *, nodes=200000, multipv=2):
+    """A `search(board)` for a `UciEngine` (Stockfish): MultiPV lines at a fixed node budget, so results do not depend on the machine."""
+    engine._send(f"setoption name MultiPV value {multipv}")
+    engine.ready()
+
+    def search(board):
+        root = board.root()
+        res = engine.go(root.fen(), [m.uci() for m in board.move_stack], nodes=nodes)
+        return res.lines or ([SimpleLine(res.bestmove, res.score if res.score_kind == "cp" else 0, res.pv)] if res.bestmove else [])
+    return search
+
+
+class SimpleLine:
+    def __init__(self, move, cp, pv):
+        self.move, self.cp, self.pv = move, cp, list(pv)
+
+
+def game_key(game, index):
+    """A stable id for a game: the site id when the headers have one, else the position in the file."""
+    site = game.headers.get("Site", "")
+    gid = site.rsplit("/", 1)[-1] if "lichess.org" in site else ""
+    return f"{index:05d}-{gid}" if gid else f"{index:05d}"
+
+
+def side_of(game, player):
+    """'white' / 'black' for the named player in a game, else None."""
+    p = (player or "").lower()
+    for color, tag in (("white", "White"), ("black", "Black")):
+        if p and game.headers.get(tag, "").lower() == p:
+            return color
+    return None
+
+
+def render_report(results, player=None):
+    """Markdown report over analysed games: accuracy by phase, class shares, critical moments, opportunism / luck, conversion."""
+    rows, crit = [], []
+    for key, res in results:
+        color = res.get("player_color")
+        if color:
+            rows.append((key, res["summary"][color], res))
+            crit += [(key, c) for c in res["summary"]["critical"] if c["color"] == color]
+    if not rows:
+        return "No games with the player found.\n"
+    n = len(rows)
+
+    def avg(f):
+        vals = [f(s) for _, s, _ in rows if f(s) is not None]
+        return sum(vals) / len(vals) if vals else None
+
+    def fmt(v, pct=False):
+        return "n/a" if v is None else (f"{100 * v:.0f}%" if pct else f"{v:.1f}")
+    L = [f"# Game analysis{f': {player}' if player else ''}", "", f"{n} games analysed (engine analysis at a fixed node budget; scores are expected points, Lichess sigmoid).", "",
+         f"- Accuracy: **{fmt(avg(lambda s: s['accuracy']))}**  (opening {fmt(avg(lambda s: s['accuracy_by_phase']['opening']))}, "
+         f"middlegame {fmt(avg(lambda s: s['accuracy_by_phase']['middlegame']))}, endgame {fmt(avg(lambda s: s['accuracy_by_phase']['endgame']))})",
+         f"- Opportunism (you punish their mistakes): {fmt(avg(lambda s: s['opportunism']), True)};  luck (they miss yours): {fmt(avg(lambda s: s['luck']), True)}"]
+    conv = [s["converted"] for _, s, _ in rows if s["converted"] is not None]
+    save = [s["saved"] for _, s, _ in rows if s["saved"] is not None]
+    if conv:
+        L.append(f"- Conversion (won after reaching >= 66.6% win chance): {sum(conv)}/{len(conv)}")
+    if save:
+        L.append(f"- Resourcefulness (not lost after falling to <= 33.3%): {sum(save)}/{len(save)}")
+    total = {c: sum(s["classes"][c] for _, s, _ in rows) for c in CLASSES}
+    moves = sum(s["moves"] for _, s, _ in rows) or 1
+    L += ["", "## Move classes", "", "| class | moves | share |", "|---|---|---|"]
+    L += [f"| {c} | {total[c]} | {100 * total[c] / moves:.1f}% |" for c in CLASSES if total[c]]
+    L += ["", "## Biggest mistakes", "", "| game | ply | move | class | expected points lost | engine move |", "|---|---|---|---|---|---|"]
+    L += [f"| {k} | {c['ply']} | {c['move']} | {c['class']} | {c['loss']:.2f} | {c['best_move']} |"
+          for k, c in sorted(crit, key=lambda kc: -kc[1]["loss"])[:10]]
+    return "\n".join(L) + "\n"
