@@ -97,3 +97,63 @@ def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, 
     if cal.unmeasurable():
         log(f"  not usable (beyond the opponent's measurable range, kept in the file): dial {cal.unmeasurable()}")
     return cal
+
+
+def link_calibration(cal_path, command, openings, limit, *, pairs_per_link=40, concurrency=1, redo=False, log=print):
+    """Measure the dial settings that Stockfish could not (beyond its lowest / highest UCI_Elo) by playing them against the
+    next dial setting up, then fit all settings jointly with the absolute measurements as anchors.
+
+    Uses the calibration file written by `calibrate_dial` and updates it in place: the linked points get a `measured` Elo
+    with its own standard error, `linked_to` and `raw_measured` (the discarded extrapolation); games are stored under `links`
+    so a rerun replays nothing. Returns the number of link matches played."""
+    from .mechess.calibration import censored
+
+    path = Path(cal_path)
+    data = json.loads(path.read_text())
+    pts = {p["dial"]: p for p in data["points"]}
+    todo = sorted(d for d, p in pts.items() if censored(p) or "linked_to" in p)
+    if not todo:
+        log("no dial setting needs linking")
+        return 0
+    if all(censored(p) for p in pts.values()):
+        raise SystemExit("no dial setting was measured directly, so there is nothing to anchor the links to")
+    dials = sorted(pts)
+    links = {} if redo else {(l["a"], l["b"]): l for l in data.get("links", [])}
+    played = 0
+    for d in todo:
+        higher = [x for x in dials if x > d]
+        if not higher:
+            log(f"dial {d} is above every measured setting; cannot be linked upward")
+            continue
+        hi = higher[0]
+        if (d, hi) in links:
+            log(f"link {d} vs {hi}: already played ({links[(d, hi)]['games']} games)")
+            continue
+        fens = [openings[i % len(openings)] for i in range(pairs_per_link)]
+        a = EngineSpec.make(f"mechess-{d}", command, {"Elo": d})
+        b = EngineSpec.make(f"mechess-{hi}", command, {"Elo": hi})
+        log(f"link: dial {d} vs dial {hi}, {pairs_per_link} opening pairs")
+        res = run_match(a, b, fens, limit, Adjudication(), concurrency=concurrency, max_pairs=pairs_per_link)
+        n = res.wins + res.draws + res.losses
+        links[(d, hi)] = {"a": d, "b": hi, "w": res.wins, "d": res.draws, "l": res.losses, "games": n, "faults": len(res.errors)}
+        score = (res.wins + 0.5 * res.draws) / max(n, 1)
+        log(f"  {d} scored {100 * score:.0f}% against {hi} over {n} games" + ("   (lopsided: play more games)" if score < 0.1 or score > 0.9 else ""))
+        played += 1
+    data["links"] = list(links.values())
+    anchors = {p["dial"]: (p["measured"], p["se"]) for p in data["points"] if not censored(p) and "linked_to" not in p}
+    matches = [(l["a"], l["b"], l["w"] + 0.5 * l["d"], l["games"]) for l in data["links"]]
+    fit = strength.joint_fit(matches, anchors)
+    for p in data["points"]:
+        if censored(p) or "linked_to" in p:
+            if p["dial"] in fit and any(l["a"] == p["dial"] for l in data["links"]):
+                p.setdefault("raw_measured", p["measured"])
+                p["measured"], p["se"] = round(fit[p["dial"]][0], 1), round(fit[p["dial"]][1], 1)
+                p["linked_to"] = next(l["b"] for l in data["links"] if l["a"] == p["dial"])
+                p["stop"] = f"linked to dial {p['linked_to']} by direct games"
+    path.write_text(json.dumps(data, indent=1))
+    from .mechess.calibration import Calibration
+    cal = Calibration.load(path)
+    log("\ncalibration after linking (dial -> measured Elo, monotone fit):")
+    for d, m in cal.curve():
+        log(f"  dial {d:5d} -> {m:6.0f}" + ("   (linked)" if "linked_to" in pts.get(d, {}) or any(q['dial'] == d and 'linked_to' in q for q in data['points']) else ""))
+    return played

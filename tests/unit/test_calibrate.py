@@ -137,3 +137,71 @@ def test_mechess_command_starts_the_controller_module():
 
 def test_stockfish_options():
     assert C.stockfish_options(1800) == {"UCI_LimitStrength": "true", "UCI_Elo": 1800, "Threads": 1, "Hash": 16}
+
+
+class TestLinkCalibration:
+    TRUE = {1200: 1050, 1500: 1250, 1800: 1550, 2100: 1850}     # what each dial setting really plays at
+
+    def cal_file(self, tmp_path, censored_dials=(1200, 1500)):
+        pts = []
+        for d, t in self.TRUE.items():
+            if d in censored_dials:
+                pts.append({"dial": d, "measured": t - 300.0, "se": 170.0, "games": 20, "stop": "weaker than the weakest opponent available",
+                            "pinned": "", "faults": 0})
+            else:
+                pts.append({"dial": d, "measured": float(t), "se": 35.0, "games": 200, "stop": "target precision reached", "pinned": "", "faults": 0})
+        path = tmp_path / "dial.json"
+        path.write_text(json.dumps({"scale": "stockfish-UCI_Elo", "offset": 0.0, "meta": {}, "points": pts}))
+        return path
+
+    def fake_link_match(self, seed=0):
+        rng, calls = random.Random(seed), []
+
+        def run(a, b, fens, limit, adj=None, *, concurrency=1, max_pairs=None):
+            ta, tb = self.TRUE[dict(a.options)["Elo"]], self.TRUE[dict(b.options)["Elo"]]
+            p = S.expected(ta, tb)
+            w = d = l = 0
+            for _ in range(2 * len(fens[:max_pairs])):
+                if rng.random() < p:
+                    w += 1
+                else:
+                    l += 1
+            calls.append((a.name, b.name))
+            return SimpleNamespace(wins=w, draws=d, losses=l, errors=[])
+        run.calls = calls
+        return run
+
+    def test_unmeasurable_dial_settings_are_linked_to_measured_ones_and_recover_their_strength(self, tmp_path, monkeypatch):
+        path = self.cal_file(tmp_path)
+        run = self.fake_link_match(1)
+        monkeypatch.setattr(C, "run_match", run)
+        n = C.link_calibration(path, ("mechess",), FENS, SearchLimit(movetime=5), pairs_per_link=150, log=lambda *_: None)
+        assert n == 2 and sorted(run.calls) == [("mechess-1200", "mechess-1500"), ("mechess-1500", "mechess-1800")]
+        pts = {p["dial"]: p for p in json.loads(path.read_text())["points"]}
+        assert abs(pts[1500]["measured"] - 1250) < 3 * pts[1500]["se"] + 15 and abs(pts[1200]["measured"] - 1050) < 3 * pts[1200]["se"] + 15
+        assert pts[1500]["linked_to"] == 1800 and pts[1200]["linked_to"] == 1500 and pts[1200]["raw_measured"] == 750.0
+        cal = Calibration.load(path)
+        assert cal.unmeasurable() == [] and [d for d, _ in cal.curve()] == [1200, 1500, 1800, 2100]   # all usable now
+
+    def test_a_rerun_replays_no_games_and_redo_replays_them(self, tmp_path, monkeypatch):
+        path = self.cal_file(tmp_path)
+        monkeypatch.setattr(C, "run_match", self.fake_link_match(2))
+        C.link_calibration(path, ("mechess",), FENS, SearchLimit(movetime=5), pairs_per_link=20, log=lambda *_: None)
+        run2 = self.fake_link_match(3)
+        monkeypatch.setattr(C, "run_match", run2)
+        assert C.link_calibration(path, ("mechess",), FENS, SearchLimit(movetime=5), pairs_per_link=20, log=lambda *_: None) == 0 and not run2.calls
+        assert C.link_calibration(path, ("mechess",), FENS, SearchLimit(movetime=5), pairs_per_link=20, redo=True, log=lambda *_: None) == 2
+
+    def test_nothing_to_link_is_a_no_op_and_nothing_measured_is_an_error(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(C, "run_match", self.fake_link_match())
+        assert C.link_calibration(self.cal_file(tmp_path, censored_dials=()), ("m",), FENS, SearchLimit(movetime=5), log=lambda *_: None) == 0
+        with pytest.raises(SystemExit, match="nothing to anchor"):
+            C.link_calibration(self.cal_file(tmp_path, censored_dials=tuple(self.TRUE)), ("m",), FENS, SearchLimit(movetime=5), log=lambda *_: None)
+
+    def test_a_lopsided_link_is_flagged_in_the_log(self, tmp_path, monkeypatch):
+        path = self.cal_file(tmp_path, censored_dials=(1200,))
+        run = SimpleNamespace(calls=[])
+        monkeypatch.setattr(C, "run_match", lambda a, b, fens, limit, adj=None, **k: SimpleNamespace(wins=0, draws=0, losses=2 * len(fens[:k.get("max_pairs")]), errors=[]))
+        logs = []
+        C.link_calibration(path, ("m",), FENS, SearchLimit(movetime=5), pairs_per_link=4, log=logs.append)
+        assert any("lopsided" in l for l in logs)
