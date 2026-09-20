@@ -103,12 +103,15 @@ class UciEngine:
 
     # -- searching ---------------------------------------------------------------------------------------
     def go(self, fen=STARTPOS_FEN, moves=(), *, nodes=None, depth=None, movetime=None, timeout=60):
-        """Search a position (given as start FEN + UCI moves). Exactly one of nodes/depth/movetime should be set."""
+        """Search a position (given as start FEN + UCI moves). One of nodes / depth / movetime must be set; nodes and depth may be
+        combined (`go depth D nodes N`: stop at whichever limit is reached first)."""
         pos = "position startpos" if fen == STARTPOS_FEN else f"position fen {fen}"
         if moves:
             pos += " moves " + " ".join(moves)
         self._send(pos)
-        if nodes:
+        if nodes and depth:
+            self._send(f"go depth {int(depth)} nodes {int(nodes)}")
+        elif nodes:
             self._send(f"go nodes {int(nodes)}")
         elif depth:
             self._send(f"go depth {int(depth)}")

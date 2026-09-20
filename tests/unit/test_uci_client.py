@@ -121,3 +121,23 @@ def test_partial_final_iteration_and_bounds_do_not_corrupt_multipv_lines():
         r = e.go(nodes=10)
     assert [l.move for l in r.lines] == ["e2e4", "d2d4", "g1f3"]
     assert [l.score for l in r.lines] == [24, 16, 15] and all(l.depth == 7 for l in r.lines)
+
+
+def test_nodes_and_depth_can_be_combined_in_one_go_command():
+    sent = []
+
+    class Recorder(UciEngine):
+        def _send(self, line):
+            sent.append(line)
+
+        def _readline(self, deadline):
+            return "bestmove e2e4"
+
+    e = Recorder("x")
+    e.go(nodes=5000, depth=4)
+    e.go(nodes=5000)
+    e.go(depth=4)
+    e.go(movetime=50)
+    assert [l for l in sent if l.startswith("go")] == ["go depth 4 nodes 5000", "go nodes 5000", "go depth 4", "go movetime 50"]
+    with pytest.raises(ValueError):
+        e.go()
