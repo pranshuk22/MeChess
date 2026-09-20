@@ -1,6 +1,7 @@
 import io
 import random
 from collections import Counter
+from types import SimpleNamespace
 
 import chess
 import pytest
@@ -8,7 +9,7 @@ import pytest
 from chessme.book import format as bf
 from chessme.book.keys import book_key
 from chessme.mechess import dial
-from chessme.mechess.controller import MATE_CP, BookReader, MeChess
+from chessme.mechess.controller import MATE_CP, BookReader, Choice, MeChess
 from chessme.mechess.uci import MechessUci
 from chessme.uci_client import GoResult, Line
 
@@ -268,3 +269,60 @@ def test_bad_positions_are_ignored_and_a_mated_position_gives_a_null_move():
     assert "bestmove 0000" in out
     _, out = session("position fen garbage\ngo\nquit\n")
     assert "bestmove" in out
+
+
+# ---- weak-end knobs: blunder rate and table files -------------------------------------------------------------------
+
+class TestBlunderKnobAndTables:
+    def test_rows_may_have_a_blunder_rate_and_it_interpolates_and_is_clamped(self):
+        t = {1000: (100, 4, 200, 1.5, 100.0, 6, 0.4), 2000: (100, 4, 200, 1.5, 100.0, 6, 0.0)}
+        assert dial.settings_for(1000, t).blunder_rate == 0.4 and dial.settings_for(2000, t).blunder_rate == 0.0
+        assert dial.settings_for(1500, t).blunder_rate == pytest.approx(0.2)
+        assert dial.settings_for(1000, {1000: (100, 4, 200, 1.5, 100.0, 6, 3.0)}).blunder_rate == 1.0   # clamped to a probability
+
+    def test_six_column_rows_still_work_and_never_blunder(self):
+        assert dial.settings_for(1800).blunder_rate == 0.0 and dial.settings_for(1200, table(), None).blunder_rate == 0.0
+
+    def test_table_files_round_trip_and_accept_string_keys(self, tmp_path):
+        t = {800: (100, 8, 300, 2.0, 200.0, 6, 0.3), 1800: (4000, 6, 120, 1.1, 80.0, 22)}
+        dial.save_table(t, tmp_path / "sub" / "t.json")
+        back = dial.load_table(tmp_path / "sub" / "t.json")
+        assert back == {800: (100, 8, 300, 2.0, 200.0, 6, 0.3), 1800: (4000, 6, 120, 1.1, 80.0, 22)}
+        assert list(back) == sorted(back) and all(isinstance(k, int) for k in back)
+
+    def blunder_table(self, rate):
+        return {1200: (100, 4, 100, 1.0, 50.0, 0, rate), 2600: (100, 4, 100, 1.0, 50.0, 0, rate)}
+
+    def test_a_certain_blunder_plays_a_random_other_legal_move_and_says_so(self):
+        m = mc(LINES, prior_of({"e2e4": 1, "d2d4": 1, "g1f3": 1}), self.blunder_table(1.0), seed=3)
+        c = m.choose(START, 1500)
+        assert c.source == "blunder" and c.move in START.legal_moves
+        seen = {m.choose(START, 1500).move for _ in range(60)}
+        assert len(seen) > 5                                             # random legal moves, not just the few candidates
+
+    def test_no_blunder_rate_never_blunders(self):
+        m = mc(LINES, prior_of({"e2e4": 1, "d2d4": 1, "g1f3": 1}), self.blunder_table(0.0), seed=4)
+        assert all(m.choose(START, 1500).source == "search" for _ in range(100))
+
+    def test_the_blunder_rate_is_the_frequency_of_blunders(self):
+        m = mc(LINES, prior_of({"e2e4": 1, "d2d4": 1, "g1f3": 1}), self.blunder_table(0.3), seed=5)
+        n = sum(m.choose(START, 1500).source == "blunder" for _ in range(600))
+        assert 0.22 < n / 600 < 0.38
+
+    def test_book_moves_and_forced_moves_are_never_blundered(self, tmp_path):
+        book = book_file(tmp_path, [entry(START, "e2e4", 1)])
+        t = {1200: (100, 4, 100, 1.0, 50.0, 20, 1.0), 2600: (100, 4, 100, 1.0, 50.0, 20, 1.0)}
+        assert mc(LINES, prior_of({"e2e4": 1}), t, book=book).choose(START, 1500).source == "book"
+        forced = SimpleNamespace(legal_moves=[chess.Move.from_uci("e2e4")])
+        only = Choice(chess.Move.from_uci("e2e4"), "search", [])
+        s = dial.settings_for(1500, self.blunder_table(1.0))
+        assert mc(LINES, prior_of({}), self.blunder_table(1.0))._with_blunder(forced, only, s) is only   # nothing else to play
+
+    def test_the_uci_front_end_uses_a_table_file(self, tmp_path):
+        path = tmp_path / "t.json"
+        dial.save_table(self.blunder_table(1.0), path)
+        m = MeChess(StubEngine(LINES), prior_of({"e2e4": 1, "d2d4": 1}), None, dial.load_table(path), 1)
+        out = io.StringIO()
+        u = MechessUci(m, inp=io.StringIO("position startpos\ngo\nquit\n"), out=out, elo=1500)
+        u.run()
+        assert "info string blunder" in out.getvalue()

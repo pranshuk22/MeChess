@@ -50,7 +50,7 @@ class Candidate:
 @dataclass
 class Choice:
     move: chess.Move
-    source: str  # "book" | "search"
+    source: str  # "book" | "search" | "blunder"
     candidates: list = field(default_factory=list)
 
 
@@ -98,7 +98,7 @@ class MeChess:
         cands = [Candidate(chess.Move.from_uci(l.move), l.cp, loss=min(LOSS_CAP, max(0, best - l.cp))) for l in keep]
         if len(cands) == 1:
             cands[0].prob = 1.0
-            return Choice(cands[0].move, "search", cands)
+            return self._with_blunder(board, Choice(cands[0].move, "search", cands), settings)
 
         # 3. prior over the candidates
         probs = self.prior(board, elo, opp_elo, platform)
@@ -116,7 +116,15 @@ class MeChess:
             move = max(cands, key=lambda c: c.weight).move
         else:
             move = self.rng.choices([c.move for c in cands], weights=[c.prob for c in cands])[0]
-        return Choice(move, "search", cands)
+        return self._with_blunder(board, Choice(move, "search", cands), settings)
+
+    def _with_blunder(self, board, choice, settings):
+        """With probability `blunder_rate`, replace a search move by a random other legal move (a strength knob for the weak end)."""
+        if settings.blunder_rate > 0 and self.rng.random() < settings.blunder_rate:
+            others = [m for m in board.legal_moves if m != choice.move]
+            if others:
+                return Choice(self.rng.choice(others), "blunder", choice.candidates)
+        return choice
 
     @staticmethod
     def _weight(c, settings):
