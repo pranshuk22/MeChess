@@ -100,13 +100,19 @@ def flags(control_dir=DEFAULT_DIR):
 
 # ---- a pool that can be paused between tasks -----------------------------------------------------------------------
 
-def run_pool(fn, tasks, workers, ctl, *, on_result=None, in_flight=None):
+class TaskTimeout(RuntimeError):
+    """A pooled task did not finish in time: its worker is stuck or died (a pool replaces a dead worker but the task it held is lost)."""
+
+
+def run_pool(fn, tasks, workers, ctl, *, on_result=None, in_flight=None, task_timeout=None):
     """Run `fn(task)` in worker processes, with at most `in_flight` tasks queued (default 2 x workers), checking `ctl` before each
     submission so a pause holds the *submissions* and a stop lets the running tasks finish. Yields results as they complete.
-    Stopped is raised after the in-flight tasks have been collected."""
+    Stopped is raised after the in-flight tasks have been collected. With `task_timeout` (seconds), a task that has been running longer than that
+    raises TaskTimeout instead of waiting forever (the pool is terminated)."""
     in_flight = in_flight or workers * 2
     tasks = list(tasks)
     results, pending, i, stopped = [], [], 0, None
+    started = {}
     with multiprocessing.get_context("spawn").Pool(workers) as pool:
         while i < len(tasks) or pending:
             while stopped is None and i < len(tasks) and len(pending) < in_flight:
@@ -116,11 +122,19 @@ def run_pool(fn, tasks, workers, ctl, *, on_result=None, in_flight=None):
                     stopped = e
                     break
                 pending.append(pool.apply_async(fn, (tasks[i],)))
+                started[id(pending[-1])] = (time.time(), tasks[i])
                 i += 1
             if not pending:
                 break
             done = [p for p in pending if p.ready()]
             if not done:
+                if task_timeout:
+                    now = time.time()
+                    for p in pending:
+                        t0, task = started[id(p)]
+                        if now - t0 > task_timeout:
+                            pool.terminate()
+                            raise TaskTimeout(f"a task ran for more than {task_timeout:.0f} s without finishing (a worker is stuck or died): {str(task)[:120]}")
                 time.sleep(0.05)
                 continue
             for p in done:

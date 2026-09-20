@@ -57,7 +57,7 @@ def test_run_analyses_a_sample_and_resumes(tmp_path):
         write_player(tmp_path / "games" / f"p{i}.json.gz", {"pid": f"p{i}", "short": False, "rating": 1700 + i, "games": [rec(), rec("black", 0.0)]})
     write_player(tmp_path / "games" / "short.json.gz", {"pid": "short", "short": True, "games": []})
     logs = []
-    kw = dict(nodes=3000, n_games=2, max_players=2, workers=2, control_dir=str(tmp_path / "ctl"), log=logs.append)
+    kw = dict(nodes=3000, n_games=2, max_players=2, workers=2, task_timeout=90, control_dir=str(tmp_path / "ctl"), log=logs.append)
     assert Q.run(tmp_path, **kw) == {"done": 2, "stopped": False}
     assert len(list((tmp_path / "quality").glob("*.json.gz"))) == 2
     assert Q.run(tmp_path, **kw) == {"done": 0, "stopped": False}         # finished players are not redone

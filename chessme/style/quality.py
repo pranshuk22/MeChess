@@ -65,7 +65,7 @@ def _analyse_player(task):
 
 
 def run(data_dir, *, engine="stockfish", nodes=25000, n_games=10, max_players=400, seed=0, workers=3, job="quality",
-        control_dir="data/control", log=print):
+        control_dir="data/control", task_timeout=900, log=print):
     """Analyse a seeded sample of `max_players` players (those with data), skipping finished ones. Returns {"done", "stopped"}."""
     import random
     data = Path(data_dir)
@@ -85,7 +85,7 @@ def run(data_dir, *, engine="stockfish", nodes=25000, n_games=10, max_players=40
     done, stopped = 0, False
     with ctl.signals():
         try:
-            for pid, n in run_pool(_analyse_player, todo, workers, ctl):
+            for pid, n in run_pool(_analyse_player, todo, workers, ctl, task_timeout=task_timeout):
                 done += 1
                 log(f"  [{done}/{len(todo)}] {pid[:8]}: {n} games")
         except Stopped as e:

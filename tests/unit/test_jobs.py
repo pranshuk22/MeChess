@@ -114,3 +114,28 @@ class TestRunPool:
         seen = []
         list(J.run_pool(square, range(5), 2, ctl, on_result=seen.append))
         assert sorted(seen) == [0, 1, 4, 9, 16]
+
+
+def _sleep_forever(x):
+    import time
+    time.sleep(3600)
+
+
+def _die(x):
+    import os
+    os._exit(1)                        # a worker that dies without an answer: its task is lost
+
+
+def test_a_stuck_task_raises_instead_of_hanging():
+    from chessme.jobs import JobControl, TaskTimeout, run_pool
+    import time
+    t0 = time.time()
+    with pytest.raises(TaskTimeout, match="stuck or died"):
+        list(run_pool(_sleep_forever, [1], 1, JobControl("t", control_dir="/nonexistent-control"), task_timeout=3))
+    assert time.time() - t0 < 30
+
+
+def test_a_worker_that_dies_is_detected_by_the_timeout():
+    from chessme.jobs import JobControl, TaskTimeout, run_pool
+    with pytest.raises(TaskTimeout):
+        list(run_pool(_die, [1], 1, JobControl("t", control_dir="/nonexistent-control"), task_timeout=5))
