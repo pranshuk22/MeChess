@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from chessme.style import gamefeatures as G
@@ -126,3 +127,29 @@ def test_player_matrices_split_games_into_alternating_halves():
     assert XA.shape == XB.shape == XT.shape == (2, NF)
     assert XA[0, 0] == np.mean([0, 2, 4]) and XB[0, 0] == np.mean([1, 3, 5]) and XT[0, 0] == 2.5
     assert XA[1, 0] == 12.0
+
+
+def test_time_control_profile_is_share_per_half_and_identifies_single_tc_players():
+    players = {}
+    for i, tc in enumerate(["180+0", "300+0", "600+0", "180+2"] * 5):
+        metas = [{"color": "white", "eco": "C50", "time_control": tc} for _ in range(6)]
+        players[f"p{i}"] = (1800, np.zeros((6, len(G.FEATURE_NAMES))), metas)
+    XA, XB, labels = S.time_control_profile(players)
+    assert labels == ["180+0", "180+2", "300+0", "600+0"] and XA.sum(1).tolist() == [1.0] * 20
+    assert XA[0].tolist() == XB[0].tolist() == [1.0, 0.0, 0.0, 0.0]
+    # 4 time controls among 20 players (5 each): identical profiles are ties, so top-1 is 1/5, not 1
+    assert S.identification(XA, XB, list(range(len(labels))))["top1"] == pytest.approx(0.2)
+
+
+def test_identification_counts_identical_profiles_as_ties_not_hits():
+    A = np.zeros((10, 3))
+    res = S.identification(A, A.copy(), [0, 1, 2])
+    assert abs(res["top1"] - 0.1) < 1e-9
+
+
+def test_excluded_artefact_feature_never_counts():
+    XA, XB, R = synth(signal=(G.ALL_NAMES.index("first_think_rel"),))
+    j = S.NAMES.index("first_think_rel")
+    rows = rows_for(XA, XB, R)
+    assert rows[j]["coverage"] == 0.0 and not S.passes_gate(rows[j])
+    assert S.identification_by_family(XA, XB, rows)["all"]["n_features"] == sum(r["coverage"] >= 0.6 for r in rows)

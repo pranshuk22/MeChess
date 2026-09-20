@@ -610,6 +610,24 @@ def cmd_style_games_fetch(args):
     log(f"finished: {stats}")
 
 
+def cmd_style_games_report(args):
+    from .style import gamestats as GS
+    from .style import games_fetch as GF
+    players = GF.load_players(args.data, min_games=args.min_games)
+    if len(players) < args.min_players:
+        sys.exit(f"only {len(players)} players with >= {args.min_games} games in {args.data} (need {args.min_players}); fetch more first")
+    ids, XT, XA, XB, R = GS.player_matrices(players)
+    rows = GS.feature_reliability(XA, XB, R)
+    fa = GS.factor_analysis(XA, XB, R, [j for j, r in enumerate(rows) if GS.passes_gate(r)] or [j for j, r in enumerate(rows) if r["coverage"] >= 0.6],
+                            seed=args.seed)
+    text = GS.render(rows, GS.identification_by_family(XA, XB, rows), GS.identification_by_family(XA, XB, rows, gated_only=True), fa, len(ids),
+                    tc_ident=GS.identification(*GS.time_control_profile(players)[:2], list(range(len(GS.time_control_profile(players)[2])))))
+    print(text)
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(text + "\n")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1049,6 +1067,11 @@ def main():
     gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
     gf.add_argument("--log", default="data/style/logs/games_fetch.log")
     gf.set_defaults(func=cmd_style_games_fetch)
+    gr = sub.add_parser("style-games-report", help="reliability, quality gate, identification and factors of the game-level features")
+    gr.add_argument("--data", default="data/style/cohort2"); gr.add_argument("--min-games", type=int, default=30)
+    gr.add_argument("--min-players", type=int, default=40); gr.add_argument("--seed", type=int, default=0)
+    gr.add_argument("--out", default="data/style/games_report.md")
+    gr.set_defaults(func=cmd_style_games_report)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")

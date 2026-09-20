@@ -9,6 +9,8 @@ import numpy as np
 from . import gamefeatures as G
 
 NAMES = list(G.ALL_NAMES)
+# Artefacts, excluded from every analysis: the first move's clock reading depends on the time control's increment, not on the player.
+EXCLUDED = {"first_think_rel"}
 GATE = {"min_coverage": 0.6, "min_r_full": 0.5, "max_abs_rating_corr": 0.5}
 
 
@@ -29,6 +31,22 @@ def player_matrices(players):
     return ids, np.array(XT), np.array(XA), np.array(XB), np.array(R, dtype=float)
 
 
+def time_control_profile(players):
+    """(XA, XB, labels): each player's share of games per time control in the two alternating halves (a baseline: how well does the
+    time control alone identify players? Clock features partly carry it)."""
+    ids = sorted(players)
+    labels = sorted({m.get("time_control", "?") for pid in ids for m in players[pid][2]})
+    col = {t: i for i, t in enumerate(labels)}
+    XA, XB = np.zeros((len(ids), len(labels))), np.zeros((len(ids), len(labels)))
+    for r, pid in enumerate(ids):
+        metas = players[pid][2]
+        for i, m in enumerate(metas):
+            (XA if i % 2 == 0 else XB)[r, col[m.get("time_control", "?")]] += 1
+    XA /= np.maximum(XA.sum(1, keepdims=True), 1)
+    XB /= np.maximum(XB.sum(1, keepdims=True), 1)
+    return XA, XB, labels
+
+
 def _corr(a, b):
     return float(np.corrcoef(a, b)[0, 1]) if len(a) > 2 and a.std() > 1e-12 and b.std() > 1e-12 else float("nan")
 
@@ -43,7 +61,9 @@ def feature_reliability(XA, XB, ratings, names=NAMES, min_players=30):
         ok = np.isfinite(XA[:, j]) & np.isfinite(XB[:, j])
         row = {"name": name, "family": G.FAMILY.get(name, "opening" if name.startswith("eco") or "eco" in name else "repertoire"),
                "coverage": float(ok.mean()), "r_half": float("nan"), "r_full": float("nan"), "r_net": float("nan"), "rating_corr": float("nan")}
-        if ok.sum() >= min_players:
+        if name in EXCLUDED:
+            row["coverage"] = 0.0          # never usable
+        elif ok.sum() >= min_players:
             a, b, r = XA[ok, j], XB[ok, j], ratings[ok]
             row["r_half"] = _corr(a, b)
             row["r_full"] = 2 * row["r_half"] / (1 + row["r_half"]) if row["r_half"] > -0.99 else float("nan")
@@ -86,16 +106,18 @@ def identification(XA, XB, idx, top_k=5):
     hits1 = hitsk = 0
     for ref, qry in ((A, B), (B, A)):
         d = ((qry[:, None, :] - ref[None, :, :]) ** 2).sum(-1)               # query i vs reference j
-        rank = (d < d[np.arange(n), np.arange(n)][:, None]).sum(1)           # how many references are closer than the true one
-        hits1 += (rank == 0).sum()
-        hitsk += (rank < top_k).sum()
+        true = d[np.arange(n), np.arange(n)][:, None]
+        rank = (d < true).sum(1)                                             # how many references are closer than the true one
+        ties = (d == true).sum(1) - 1                                        # identical distance: the true one is picked at random
+        hits1 += ((rank == 0) / (1.0 + ties)).sum()
+        hitsk += (rank + ties / 2.0 < top_k).sum()
     return {"top1": hits1 / (2 * n), "topk": hitsk / (2 * n), "chance": 1.0 / n, "n_features": len(idx)}
 
 
 def identification_by_family(XA, XB, rows, gated_only=False):
     """{label: identification result} for each family and for everything, using all features with data (or only gated ones)."""
     out = {}
-    usable = [j for j, r in enumerate(rows) if r["coverage"] >= 0.6 and (not gated_only or passes_gate(r))]
+    usable = [j for j, r in enumerate(rows) if r["coverage"] >= 0.6 and r["name"] not in EXCLUDED and (not gated_only or passes_gate(r))]
     for fam in ("opening", "shape", "clock", "repertoire"):
         idx = [j for j in usable if rows[j]["family"] == fam]
         if idx:
@@ -174,7 +196,7 @@ def factor_analysis(XA, XB, ratings, idx, *, dev_frac=0.5, max_components=6, see
 
 # ---- report ----------------------------------------------------------------------------------------------------------
 
-def render(rows, ident_all, ident_gated, fa, n_players):
+def render(rows, ident_all, ident_gated, fa, n_players, tc_ident=None):
     L = [f"Game-level style features: {n_players} players, games split into alternating halves.", "",
          "RELIABILITY (r_full = Spearman-Brown; net = after removing the linear effect of rating; gate = the pre-fixed keep rule)",
          f"  {'feature':22s} {'family':10s} {'cover':>6s} {'r_full':>7s} {'net':>6s} {'rating r':>9s} gate"]
@@ -188,6 +210,9 @@ def render(rows, ident_all, ident_gated, fa, n_players):
         L.append(f"  {label}:")
         for fam, r in res.items():
             L.append(f"    {fam:10s} top-1 {100 * r['top1']:5.1f}%   top-5 {100 * r['topk']:5.1f}%   ({r['n_features']} features)")
+    if tc_ident:
+        L += ["", f"  baseline, the time control alone (share of games per time control): top-1 {100 * tc_ident['top1']:.1f}%, "
+                  f"top-5 {100 * tc_ident['topk']:.1f}% -- clock features partly carry this; read their identification with it in mind"]
     if fa:
         L += ["", f"FACTORS (development players {fa['n_dev']}, held-out {fa['n_test']}; kept = reliability >= 0.6 and loading agreement >= 0.85 on held-out players)"]
         for c in fa["components"]:
