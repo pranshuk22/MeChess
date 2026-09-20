@@ -26,7 +26,7 @@ from .format import Entry, write_book
 from .keys import book_key, key_text
 
 UA = {"User-Agent": "MeChess-opening-explorer (research; CC0 Lichess database)"}
-DEFAULT_BANDS = (600, 1000, 1400, 1800, 2200, 2600, 3300)
+DEFAULT_BANDS = (600, 1000, 1400, 1800, 2200, 3300)          # the 2200+ band is one: games above 2600 are too rare for a band of their own
 MASK24 = (1 << 24) - 1
 _COMMENT = re.compile(r"\{[^}]*\}|\([^)]*\)|\$\d+")
 _MOVENUM = re.compile(r"\d+\.+")
