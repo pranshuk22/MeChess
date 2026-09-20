@@ -25,6 +25,12 @@ def isotonic(ys, weights):
     return out
 
 
+def censored(point):
+    """A point whose ladder stopped because the engine was beyond the opponent's range (e.g. weaker than Stockfish's lowest
+    UCI_Elo). Its number is an extrapolation from a few games, not a measurement, so it is kept in the file but never used."""
+    return str(point.get("stop", "")).startswith(("weaker than", "stronger than"))
+
+
 @dataclass
 class Calibration:
     points: list  # [{"dial": int, "measured": float, "se": float, ...}, ...]
@@ -34,9 +40,9 @@ class Calibration:
 
     def curve(self):
         """[(dial, calibrated measured Elo)] sorted by dial, monotone non-decreasing."""
-        pts = sorted(self.points, key=lambda p: p["dial"])
+        pts = sorted((p for p in self.points if not censored(p)), key=lambda p: p["dial"])
         if not pts:
-            raise ValueError("calibration has no points")
+            raise ValueError("calibration has no usable points (all were beyond the opponent's measurable range)")
         fitted = isotonic([p["measured"] for p in pts], [1.0 / max(p.get("se", 100.0), 1.0) ** 2 for p in pts])
         return [(p["dial"], f + self.offset) for p, f in zip(pts, fitted)]
 
@@ -64,6 +70,10 @@ class Calibration:
             if m0 <= target <= m1:
                 return d0 + (d1 - d0) * (target - m0) / (m1 - m0)
         return c[-1][0]
+
+    def unmeasurable(self):
+        """Dial settings that could not be measured because they fell outside the opponent's range."""
+        return sorted(p["dial"] for p in self.points if censored(p))
 
     def in_range(self, target):
         c = self.curve()

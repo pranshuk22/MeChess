@@ -94,4 +94,6 @@ def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, 
     log("\ncalibration (dial -> measured Elo, monotone fit):")
     for d, m in cal.curve():
         log(f"  dial {d:5d} -> {m:6.0f}")
+    if cal.unmeasurable():
+        log(f"  not usable (beyond the opponent's measurable range, kept in the file): dial {cal.unmeasurable()}")
     return cal

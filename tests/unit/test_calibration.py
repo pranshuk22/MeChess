@@ -86,3 +86,33 @@ class TestDialUsesCalibration:
         mc = MeChess(eng, prior_of({"e2e4": 1, "d2d4": 1}), None, None, 1, calibration=c)
         mc.choose(START, 1850)
         assert eng.calls[0][2] == dial.settings_for(1850, calibration=c).nodes != dial.settings_for(1850).nodes
+
+
+class TestCensoredPoints:
+    """A ladder that ends 'weaker than the weakest opponent' has no measurement, only an extrapolation."""
+
+    def points(self):
+        return [{"dial": 1200, "measured": 972.0, "se": 165.0, "stop": "weaker than the weakest opponent available"},
+                {"dial": 1500, "measured": 1450.0, "se": 40.0, "stop": "target precision reached"},
+                {"dial": 1800, "measured": 1800.0, "se": 40.0, "stop": "target precision reached"}]
+
+    def test_censored_points_are_kept_but_not_used_for_the_curve(self):
+        c = Calibration(self.points())
+        assert [d for d, _ in c.curve()] == [1500, 1800] and c.unmeasurable() == [1200]
+        assert c.measured(1200) == 1450 and c.dial_for(1000) == 1500          # clamps to the measured range, not to 972
+
+    def test_the_low_extrapolation_no_longer_makes_low_targets_look_reachable(self):
+        c = Calibration(self.points())
+        assert not c.in_range(1000) and not c.in_range(1300) and c.in_range(1600)
+
+    def test_a_stronger_than_range_point_is_censored_too(self):
+        pts = self.points() + [{"dial": 2600, "measured": 3400.0, "se": 200.0, "stop": "stronger than the strongest opponent available"}]
+        assert Calibration(pts).unmeasurable() == [1200, 2600] and Calibration(pts).curve()[-1][0] == 1800
+
+    def test_if_nothing_was_measurable_it_is_an_error(self):
+        with pytest.raises(ValueError, match="no usable points"):
+            Calibration([self.points()[0]]).curve()
+
+    def test_the_stop_reason_survives_save_and_load(self, tmp_path):
+        Calibration(self.points()).save(tmp_path / "c.json")
+        assert Calibration.load(tmp_path / "c.json").unmeasurable() == [1200]
