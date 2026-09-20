@@ -1,0 +1,31 @@
+data/
+*.pyc
+__pycache__/
+.venv/
+.DS_Store
+build/
+engine/baselines/
+engine/build/
+
+# editor / tool state
+.vscode/
+.idea/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+*.log
+
+# personal material: never commit (use configs/profiles/example.yaml as the template)
+/profiles/
+configs/profiles/*
+!configs/profiles/example.yaml
+plan.md
+plan*.md
+
+# large or licensed artefacts
+*.pt
+*.npz
+*.bin
+*.zst
+*.zip

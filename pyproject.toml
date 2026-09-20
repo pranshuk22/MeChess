@@ -1,0 +1,23 @@
+[project]
+name = "chessme"
+version = "0.1.0"
+description = "Train a chess engine to play like you, from your own games"
+license = {text = "PolyForm-Noncommercial-1.0.0"}
+requires-python = ">=3.10"
+dependencies = ["requests", "pyyaml", "chess", "numpy", "torch", "zstandard"]
+
+[project.scripts]
+chessme = "chessme.cli:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["chessme", "chessme.ingest", "chessme.dataset", "chessme.book", "chessme.model", "chessme.mechess", "chessme.style"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["integration: drives the compiled engine binary (built on demand with make)",
+           "slow: takes more than ~5 seconds; skipped by `make test`, run by `make test-all`"]
