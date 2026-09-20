@@ -58,8 +58,9 @@ class MeChess:
     """`engine` is a started UciEngine with the MultiPV option available; `prior(board, elo, opp_elo, platform)`
     returns {legal move: probability}."""
 
-    def __init__(self, engine, prior, book=None, table=None, seed=None):
+    def __init__(self, engine, prior, book=None, table=None, seed=None, calibration=None):
         self.engine, self.prior, self.book, self.table = engine, prior, book, table
+        self.calibration = calibration
         self.rng = random.Random(seed)
         self._multipv = None
 
@@ -70,7 +71,7 @@ class MeChess:
             self._multipv = k
 
     def choose(self, board, elo, opp_elo=None, platform=0):
-        settings = settings_for(elo, self.table)
+        settings = settings_for(elo, self.table, self.calibration)
         opp_elo = opp_elo or elo
         if board.legal_moves.count() == 0:
             raise ValueError("no legal moves")

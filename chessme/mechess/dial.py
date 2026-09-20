@@ -1,7 +1,8 @@
 """The rating dial: maps a target Elo to the knobs that make the engine play at that level.
 
-Placeholder table, NOT yet calibrated: `chessme calibrate` (planned) replaces these numbers with values fitted by
-playing matches. Knobs interpolate linearly in Elo (node budget geometrically).
+The table below is a starting point. `chessme calibrate` measures what each setting really plays at (against Stockfish at
+known Elo) and writes a calibration file (see calibration.py); with it, a *target* Elo is first mapped to the dial setting
+that measured closest to it. Knobs interpolate linearly in Elo (node budget geometrically).
 """
 import bisect
 import math
@@ -29,7 +30,10 @@ class DialSettings:
     book_plies: int  # the opening book is used only within this many plies of the start
 
 
-def settings_for(elo, table=None):
+def settings_for(elo, table=None, calibration=None):
+    """Knobs for a target Elo. With a `Calibration`, the target is first mapped to the dial setting that measured closest to it."""
+    if calibration is not None:
+        elo = calibration.dial_for(elo)
     table = table or DEFAULT_TABLE
     elos = sorted(table)
     e = min(max(elo, elos[0]), elos[-1])
