@@ -485,7 +485,9 @@ def cmd_calibrate(args):
     fens, limit, kw = _ladder_args(args)
     command = calibrate.mechess_command(args.engine, args.prior, args.book, table=args.table, maia3_repo=args.maia3_repo,
                                         maia3_size=args.maia3_size, extra_path=args.extra_path)
+    from .mechess import dial
     calibrate.calibrate_dial(args.dial, command, args.opponent, fens, limit, args.out, redo=args.redo, offset=args.offset,
+                             table=dial.load_table(args.table) if args.table else dial.DEFAULT_TABLE,
                              log=lambda m: print(m, flush=True), **kw)
     print(f"\ncalibration written to {args.out}; use it with:  chessme mechess --calibration {args.out} --elo <target>")
 
@@ -554,7 +556,9 @@ def cmd_calibrate_link(args):
     fens, limit, kw = _ladder_args(args)
     command = calibrate.mechess_command(args.engine, args.prior, args.book, table=args.table, maia3_repo=args.maia3_repo,
                                         maia3_size=args.maia3_size, extra_path=args.extra_path)
+    from .mechess import dial
     n = calibrate.link_calibration(args.calibration, command, fens, limit, pairs_per_link=args.link_pairs,
+                                   table=dial.load_table(args.table) if args.table else dial.DEFAULT_TABLE,
                                    concurrency=args.concurrency, redo=args.redo, log=lambda m: print(m, flush=True))
     print(f"\n{n} link match(es) played; calibration updated: {args.calibration}")
 
@@ -564,7 +568,7 @@ def cmd_dial_design(args):
     from .mechess.calibration import censored
     src = json.loads(Path(args.from_calibration).read_text())
     anchors = [p for p in src["points"] if not censored(p) and "linked_to" not in p]
-    table = design.weak_end_table(tuple(args.labels))
+    table = design.weak_end_table(tuple(args.labels), weak_label=args.weak_label)
     dial.save_table(table, args.out_table)
     keep = {k: v for k, v in table.items() if k in {p["dial"] for p in anchors} or k < 1800}
     points = design.skeleton(keep, anchors)
@@ -734,7 +738,7 @@ def cmd_mechess(args):
         from .mechess.calibration import Calibration
         cal = Calibration.load(args.calibration) if args.calibration else None
         from .mechess import dial
-        table = dial.load_table(args.table) if args.table else None
+        table = dial.load_table(args.table) if args.table else (cal.table() if cal else None)   # a calibration brings its own table
         mc = MeChess(engine, prior, book, table=table, seed=args.seed or None, calibration=cal)
         MechessUci(mc, elo=args.elo).run()
     finally:
@@ -1001,6 +1005,7 @@ def main():
     dd = sub.add_parser("dial-design", help="design the weak end of the dial: a table of settings plus a calibration skeleton to link")
     dd.add_argument("--from-calibration", default="data/calibration/dial.json", help="calibration with the absolute measurements to anchor on")
     dd.add_argument("--labels", type=int, nargs="+", default=list(range(400, 1601, 200)))
+    dd.add_argument("--weak-label", type=int, default=400, help="label of the weakest row of the path (rows for other labels follow from it)")
     dd.add_argument("--out-table", default="data/calibration/weak_table.json"); dd.add_argument("--out-calibration", default="data/calibration/weak_cal.json")
     dd.set_defaults(func=cmd_dial_design)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")

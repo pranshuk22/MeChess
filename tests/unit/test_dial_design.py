@@ -54,3 +54,11 @@ def test_the_skeleton_marks_weak_settings_for_linking_and_copies_the_measured_an
     assert not censored(by[1800]) and by[1800]["measured"] == 1236.0 and by[2100]["measured"] == 1531.0
     with pytest.raises(ValueError, match="cannot anchor"):
         D.skeleton(t, measured)                                                # 2400 / 2600 rows have no measurement here
+
+
+def test_a_path_can_start_below_its_first_label_so_rows_do_not_change_when_labels_are_dropped():
+    full = D.weak_end_table((400, 600, 800, 1000, 1200, 1400, 1600))
+    part = D.weak_end_table((1000, 1200, 1300, 1400, 1600), weak_label=400)
+    for k in (1000, 1200, 1400, 1600):
+        assert part[k] == full[k]
+    assert 1300 in part and full[1200][0] < part[1300][0] < full[1400][0]

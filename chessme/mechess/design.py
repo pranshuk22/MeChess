@@ -26,13 +26,13 @@ def path_row(label, weak_label, anchor_label, weak_row, anchor_row):
             round(max(lin[5], 0.0), 3))
 
 
-def weak_end_table(labels=DEFAULT_LABELS, *, anchor_table=None, anchor_label=1800, weak_row=WEAK_ROW):
+def weak_end_table(labels=DEFAULT_LABELS, *, anchor_table=None, anchor_label=1800, weak_row=WEAK_ROW, weak_label=None):
     """{label: row}: the new path rows below `anchor_label`, and the anchor table's own rows from `anchor_label` upwards
     (unchanged, so their measurements stay valid)."""
     anchor_table = anchor_table or DEFAULT_TABLE
     if anchor_label not in anchor_table:
         raise ValueError(f"the anchor table has no row for {anchor_label}")
-    weak_label = min(labels)
+    weak_label = min(labels) if weak_label is None else weak_label   # the path always starts at weak_label, even if fewer labels are used
     table = {lab: path_row(lab, weak_label, anchor_label, weak_row, anchor_table[anchor_label]) for lab in sorted(labels)}
     table.update({k: _row(v) for k, v in anchor_table.items() if k >= anchor_label})   # all rows have 7 columns
     return table
