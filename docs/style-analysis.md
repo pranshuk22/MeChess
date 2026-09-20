@@ -35,7 +35,11 @@ Style is measured *at the choice level*, so it is not confounded by the opening,
    vocabulary. Two checks: can the features tell the anchors apart (a confusion matrix on held-out chunks), and whose
    preferences predict your choices best. Anchors are landmarks; the wide cohort, not the anchors, is the
    yardstick for "how unusual are you".
-7. **Judge comparison** (`style-judge-compare`): how much the choice of judge changes candidate sets and results.
+7. **Summary** (`style-summary`): puts one player against all of the above in one report. Section 1 uses the cohort as the yardstick
+   (only preferences with reliability of at least 0.1 are reported; the player's distance is in between-player SD units), section 2 gives
+   each hypothesis axis its own reliability across players, section 4 tests the anchors grouped by style pole (a 5-way question
+   that needs far less data than 35 individuals).
+8. **Judge comparison** (`style-judge-compare`): how much the choice of judge changes candidate sets and results.
 
 ## Findings so far
 
