@@ -548,6 +548,15 @@ def cmd_style_rates(args):
     (Path(args.cohort) / "rates_reliability.txt").write_text(text)
 
 
+def cmd_calibrate_link(args):
+    from . import calibrate
+    fens, limit, kw = _ladder_args(args)
+    command = calibrate.mechess_command(args.engine, args.prior, args.book)
+    n = calibrate.link_calibration(args.calibration, command, fens, limit, pairs_per_link=args.link_pairs,
+                                   concurrency=args.concurrency, redo=args.redo, log=lambda m: print(m, flush=True))
+    print(f"\n{n} link match(es) played; calibration updated: {args.calibration}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -953,6 +962,16 @@ def main():
     sx.add_argument("--anchors", help="anchors folder: can habit rates tell the anchors apart?")
     sx.add_argument("--config", default="configs/anchors.yaml"); sx.add_argument("--player", help="dataset folder of a player: their habit profile")
     sx.set_defaults(func=cmd_style_rates)
+    lk = sub.add_parser("calibrate-link", help="measure dial settings below/above Stockfish's UCI_Elo range by playing them against the next dial setting")
+    lk.add_argument("--calibration", default="data/calibration/dial.json"); lk.add_argument("--engine", default=str(ENGINE_BIN))
+    lk.add_argument("--book"); lk.add_argument("--prior", default="uniform")
+    lk.add_argument("--link-pairs", type=int, default=40, help="opening pairs (2 games each) per link"); lk.add_argument("--redo", action="store_true")
+    for lp in (lk,):
+        lp.add_argument("--openings"); lp.add_argument("--random-openings", type=int, default=200); lp.add_argument("--seed", type=int, default=1)
+        lp.add_argument("--movetime", type=int, default=100); lp.add_argument("--pairs", type=int, default=5)
+        lp.add_argument("--se", type=float, default=35.0); lp.add_argument("--min-games", type=int, default=40)
+        lp.add_argument("--max-games", type=int, default=400); lp.add_argument("--concurrency", type=int, default=1)
+    lk.set_defaults(func=cmd_calibrate_link)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
