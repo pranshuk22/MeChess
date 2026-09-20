@@ -86,7 +86,7 @@ class MeChess:
         # 2. engine candidates
         self._set_multipv(settings.multipv)
         root = board.root()
-        res = self.engine.go(root.fen(), [m.uci() for m in board.move_stack], nodes=settings.nodes)
+        res = self.engine.go(root.fen(), [m.uci() for m in board.move_stack], nodes=settings.nodes, depth=settings.depth or None)
         lines = [l for l in res.lines if chess.Move.from_uci(l.move) in board.legal_moves]
         if not lines:  # engine gave no usable analysis: fall back to its best move
             return Choice(chess.Move.from_uci(res.bestmove), "search", [])

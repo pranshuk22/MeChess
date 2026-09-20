@@ -7,8 +7,8 @@ from chessme.mechess.dial import DEFAULT_TABLE, _row, settings_for
 
 def test_the_path_starts_at_the_weak_row_and_ends_at_the_anchor_row():
     anchor = DEFAULT_TABLE[1800]
-    assert D.path_row(400, 400, 1800, D.WEAK_ROW, anchor) == (60, 8, 350, 2.0, 250.0, 4, 0.4)
-    assert D.path_row(1800, 400, 1800, D.WEAK_ROW, anchor) == (4000, 6, 120, 1.1, 80.0, 22, 0.0)
+    assert D.path_row(400, 400, 1800, D.WEAK_ROW, anchor) == (60, 8, 350, 2.0, 250.0, 4, 0.4, 0)
+    assert D.path_row(1800, 400, 1800, D.WEAK_ROW, anchor) == (4000, 6, 120, 1.1, 80.0, 22, 0.0, 0)
 
 
 def test_knobs_move_monotonically_towards_the_anchor_and_nodes_grow_geometrically():
@@ -61,3 +61,11 @@ def test_a_path_can_start_below_its_first_label_so_rows_do_not_change_when_label
     for k in (1000, 1200, 1400, 1600):
         assert part[k] == full[k]
     assert 1300 in part and full[1200][0] < part[1300][0] < full[1400][0]
+
+
+def test_depth_column_defaults_to_zero_and_interpolates():
+    assert settings_for(1800).depth == 0
+    table = {1000: (1000, 5, 100, 1.0, 50, 0, 0.1, 2), 1400: (1000, 5, 100, 1.0, 50, 0, 0.1, 6)}
+    assert settings_for(1000, table).depth == 2
+    assert settings_for(1200, table).depth == 4
+    assert settings_for(1400, table).depth == 6

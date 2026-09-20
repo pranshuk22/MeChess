@@ -54,10 +54,10 @@ LINES = [L("e2e4", 30), L("d2d4", 20), L("g1f3", 10), L("a2a3", -200)]
 def test_dial_returns_table_rows_at_table_points_and_clamps_outside():
     import dataclasses
     for elo, row in dial.DEFAULT_TABLE.items():
-        nodes, k, window, temp, scale, book, blunder = dial._row(row)
+        nodes, k, window, temp, scale, book, blunder, depth = dial._row(row)
         s = dial.settings_for(elo)
         assert (s.nodes, s.multipv, s.window_cp, s.book_plies) == (nodes, k, window, book)
-        assert s.temperature == pytest.approx(temp) and s.cp_scale == pytest.approx(scale) and s.blunder_rate == pytest.approx(blunder)
+        assert s.temperature == pytest.approx(temp) and s.cp_scale == pytest.approx(scale) and s.blunder_rate == pytest.approx(blunder) and s.depth == depth
     lo, hi = min(dial.DEFAULT_TABLE), max(dial.DEFAULT_TABLE)
     assert dial.settings_for(lo - 500) == dataclasses.replace(dial.settings_for(lo), elo=lo - 500)   # below the table: the weakest row
     assert dial.settings_for(hi + 900).nodes == dial.settings_for(hi).nodes

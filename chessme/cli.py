@@ -1064,7 +1064,7 @@ def main():
     sr.add_argument("--label", default="you"); sr.add_argument("--out", default="data/style/style_report.md")
     sr.set_defaults(func=cmd_style_report)
     mch = sub.add_parser("mechess", help="run MeChess as a UCI engine (book + engine candidates + prior + rating dial)")
-    mch.add_argument("--table", help="dial table file (JSON {elo: [nodes, multipv, window, temperature, cp_scale, book_plies, blunder_rate]})")
+    mch.add_argument("--table", help="dial table file (JSON {elo: [nodes, multipv, window, temperature, cp_scale, book_plies, blunder_rate, depth]})")
     mch.add_argument("--calibration", help="calibration file from `chessme calibrate`: --elo / the Elo option then mean the measured Elo")
     mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book")
     mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT")

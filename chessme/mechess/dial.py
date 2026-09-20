@@ -10,9 +10,11 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-# elo: (search nodes, MultiPV lines, candidate window in cp, sampling temperature, cp scale, book plies[, blunder rate])
+# elo: (search nodes, MultiPV lines, candidate window in cp, sampling temperature, cp scale, book plies[, blunder rate[, depth]])
 # The optional 7th value is the probability of playing a random legal move instead of the chosen one: a strength knob that keeps
 # working below the search floor, where fewer nodes or a wider window no longer weaken the play measurably.
+# The optional 8th value is a search depth limit (0 = none), sent as `go depth D nodes N`: it stops the search from spending its
+# nodes on a few lines, so the weak levels see shallow tactics at every MultiPV line instead of stopping at depth 2.
 DEFAULT_TABLE = {
     # Weak end: a smooth path (chessme.mechess.design.weak_end_table) from a very weak row towards the 1800 row; the node budget rises
     # geometrically while the blunder rate, window, temperature and cp scale ease towards it. Measured against Stockfish (linked
@@ -42,11 +44,12 @@ class DialSettings:
     cp_scale: float  # each cp of loss multiplies a candidate's weight by exp(-1/cp_scale): small = strict
     book_plies: int  # the opening book is used only within this many plies of the start
     blunder_rate: float = 0.0  # probability of replacing the chosen search move by a random legal move
+    depth: int = 0  # search depth limit (0 = only the node budget)
 
 
 def _row(r):
-    """A table row as 7 numbers (the blunder rate defaults to 0)."""
-    return tuple(r) + (0.0,) * (7 - len(r))
+    """A table row as 8 numbers (blunder rate and depth default to 0)."""
+    return tuple(r) + (0.0,) * (8 - len(r))
 
 
 def load_table(path):
@@ -75,6 +78,6 @@ def settings_for(elo, table=None, calibration=None):
         t = (e - lo) / (hi - lo)
         a, b = table[lo], table[hi]
         row = (math.exp(math.log(a[0]) + t * (math.log(b[0]) - math.log(a[0]))),) + tuple(x + t * (y - x) for x, y in zip(a[1:], b[1:]))
-    nodes, k, window, temp, scale, book, blunder = row
+    nodes, k, window, temp, scale, book, blunder, depth = row
     return DialSettings(int(elo), max(1, int(round(nodes))), max(1, int(round(k))), int(round(window)), float(temp),
-                        float(scale), int(round(book)), min(max(float(blunder), 0.0), 1.0))
+                        float(scale), int(round(book)), min(max(float(blunder), 0.0), 1.0), max(0, int(round(depth))))
