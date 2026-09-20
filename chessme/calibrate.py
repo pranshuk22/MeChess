@@ -86,7 +86,14 @@ def mechess_command(engine, prior="uniform", book=None, *, table=None, maia3_rep
     return tuple(cmd)
 
 
-def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, *, redo=False, offset=0.0,
+def _record_table(meta, table):
+    """Store the dial table used for the measurements in the calibration's metadata (rows of every label)."""
+    if table is not None:
+        meta["table"] = {str(k): list(v) for k, v in sorted(table.items())}
+    return meta
+
+
+def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, *, redo=False, offset=0.0, table=None,
                    log=print, **ladder_kw):
     """Measure MeChess at every dial setting in `dials` and write the calibration file after each one (resumable)."""
     out = Path(out_path)
@@ -103,7 +110,7 @@ def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, 
                                "pinned": r["pinned"], "levels": r["levels"], "faults": r["faults"]})
         data["scale"] = "stockfish-UCI_Elo"
         data["offset"] = offset
-        data["meta"] = {"opponent": r["opponent"], "limit": r["limit"], "date": time.strftime("%Y-%m-%d")}
+        data["meta"] = _record_table({"opponent": r["opponent"], "limit": r["limit"], "date": time.strftime("%Y-%m-%d")}, table)
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps(data, indent=1))
     cal = Calibration.load(out)
@@ -115,7 +122,8 @@ def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, 
     return cal
 
 
-def link_calibration(cal_path, command, openings, limit, *, pairs_per_link=40, concurrency=1, redo=False, log=print):
+def link_calibration(cal_path, command, openings, limit, *, pairs_per_link=40, concurrency=1, redo=False, table=None,
+                     log=print):
     """Measure the dial settings that Stockfish could not (beyond its lowest / highest UCI_Elo) by playing them against the
     next dial setting up, then fit all settings jointly with the absolute measurements as anchors.
 
@@ -156,6 +164,7 @@ def link_calibration(cal_path, command, openings, limit, *, pairs_per_link=40, c
         log(f"  {d} scored {100 * score:.0f}% against {hi} over {n} games" + ("   (lopsided: play more games)" if score < 0.1 or score > 0.9 else ""))
         played += 1
     data["links"] = list(links.values())
+    data["meta"] = _record_table(data.get("meta", {}), table)
     anchors = {p["dial"]: (p["measured"], p["se"]) for p in data["points"] if not censored(p) and "linked_to" not in p}
     matches = [(l["a"], l["b"], l["w"] + 0.5 * l["d"], l["games"]) for l in data["links"]]
     fit = strength.joint_fit(matches, anchors)

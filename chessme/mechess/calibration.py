@@ -75,6 +75,12 @@ class Calibration:
         """Dial settings that could not be measured because they fell outside the opponent's range."""
         return sorted(p["dial"] for p in self.points if censored(p))
 
+    def table(self):
+        """The dial table this calibration was measured with ({label: row}), or None for files that did not record it. Using
+        a different table than the one measured would make the numbers meaningless, so `mechess --calibration` uses this one."""
+        t = self.meta.get("table")
+        return {int(k): tuple(v) for k, v in t.items()} if t else None
+
     def in_range(self, target):
         c = self.curve()
         return c[0][1] <= target <= c[-1][1]

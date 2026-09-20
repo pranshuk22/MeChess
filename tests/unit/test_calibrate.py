@@ -222,3 +222,16 @@ class TestMechessCommand:
     def test_absent_options_are_absent(self):
         cmd = C.mechess_command("eng", "ours=m.pt")
         assert "--table" not in cmd and "--book" not in cmd and "--maia3-repo" not in cmd
+
+
+class TestCalibrationCarriesItsTable:
+    def test_the_table_used_for_the_measurements_is_stored_and_read_back(self, tmp_path, monkeypatch, sf_range):
+        monkeypatch.setattr(C, "run_match", fake_match(lambda a: dict(a.options)["Elo"] - 150, seed=9))
+        table = {1500: (100, 4, 100, 1.0, 50.0, 0, 0.1), 1800: (400, 4, 100, 1.0, 50.0, 0, 0.0)}
+        C.calibrate_dial([1800], ("m",), "sf", FENS, SearchLimit(movetime=5), tmp_path / "d.json", log=lambda *_: None,
+                         table=table, target_se=60, max_games=120, min_games=20)
+        cal = Calibration.load(tmp_path / "d.json")
+        assert cal.table() == {1500: (100, 4, 100, 1.0, 50.0, 0, 0.1), 1800: (400, 4, 100, 1.0, 50.0, 0, 0.0)}
+
+    def test_files_without_a_recorded_table_return_none(self):
+        assert Calibration([{"dial": 1800, "measured": 1200.0, "se": 50.0}]).table() is None
