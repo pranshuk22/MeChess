@@ -71,6 +71,7 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-anchors-fetch` | Download famous players' archives, sample decisions from their peak years, delete the archives |
 | `style-anchors-build` | Same, from game files you supply |
 | `style-anchors-verify` | Check every anchor's name aliases against the archives, so spelling variants do not lose games |
+| `style-status` | One-screen status of the long jobs: running processes, progress, ETA, latest log lines (`--watch N` to refresh) |
 | `style-anchors-report` | Can the features tell the anchors apart? Which anchor is closest to you? |
 
 ## Engine UCI options

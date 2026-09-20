@@ -21,9 +21,21 @@ Give every job its own `WATCH_OUT`, otherwise jobs overwrite each other's logs.
 | `tools/cohort_analyze_loop.sh <fetch-pid>` | analyses cohort players with Stockfish while the fetch (that process id) is still running, then once more at the end |
 | `tools/anchors_pipeline.sh` | anchors end to end: fetch archives, sample peak-year decisions, Stockfish analysis |
 
+## Status at a glance
+
+```bash
+python -m chessme style-status              # one screen: running jobs, progress, ETA, latest log lines
+python -m chessme style-status --watch 10   # refresh every 10 seconds
+```
+
+It reads the files the jobs write (`players.json`, `items/`, `cands/`) and the progress timestamps in the logs, so it also works
+after a job has stopped. Options: `--cohort`, `--anchors`, `--logs`, `--target` (players wanted).
+
 ## Logs
 
-Long jobs write timestamped lines you can follow with `tail -f`. A convention: everything under `data/style/logs/`.
+Long jobs write timestamped lines you can follow with `tail -f`. A convention: everything under `data/style/logs/`
+(`cohort_fetch.log`, `cohort_analyze.log`, `anchors_analyze.log`, ...). Do not keep links or copies elsewhere: old
+symlinks to files that a later run replaced silently show stale output.
 Fetch logs show per anchor or player what was found, dropped and used; analysis logs show progress per player.
 
 ## Resuming
