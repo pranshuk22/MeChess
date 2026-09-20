@@ -37,9 +37,9 @@ Details, scale caveats and costs: [calibration.md](calibration.md). `mechess --c
 | Command | What it does |
 |---|---|
 | `book` | Build `book.bin` (position graph of your repertoire) and a readable report; `--sanity-engine` checks lines with an engine |
+| `theory-book --out FILE` | Build an opening book of known theory for both colours from the CC0 Lichess opening names (`--download` fetches them), weighted by what players in a rating band play (`--games COHORT --band LO HI`, or `--pgn FILES`). Popular moves beyond the names are added when played often enough. `mechess --book DIR` picks the band of the target Elo from files named `theory_LO_HI.bin` |
 
 Use it in the engine with the UCI options `OwnBook`, `BookFile`, `BookMaxPly`, `BookTemperature`, `BookSeed`.
-| `theory-book --out FILE` | Build an opening book of known theory for both colours from the CC0 Lichess opening names (`--download` fetches them), weighted by what players in a rating band play (`--games COHORT --band LO HI`, or `--pgn FILES`). Popular moves beyond the names are added when played often enough. `mechess --book DIR` picks the band of the target Elo from files named `theory_LO_HI.bin` |
 
 ## The "me" model (move prediction)
 
