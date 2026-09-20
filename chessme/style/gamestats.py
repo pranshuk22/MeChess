@@ -16,6 +16,20 @@ GATE = {"min_coverage": 0.6, "min_r_full": 0.5, "max_abs_rating_corr": 0.5}
 
 # ---- matrices --------------------------------------------------------------------------------------------------------
 
+def quality_matrices(players, min_games=6):
+    """(ids, XA, XB, ratings) of the plain per-half means of move-quality features (NaN-aware) for players with enough games."""
+    ids = [p for p in sorted(players) if len(players[p][1]) >= min_games]
+    def half(arr, par):
+        with np.errstate(all="ignore"):
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                return np.nanmean(arr[par::2], axis=0)
+    XA = np.array([half(players[p][1], 0) for p in ids])
+    XB = np.array([half(players[p][1], 1) for p in ids])
+    return ids, XA, XB, np.array([players[p][0] for p in ids], dtype=float)
+
+
 def player_matrices(players):
     """(ids, X_all, X_A, X_B, ratings): aggregated feature vectors (over G.ALL_NAMES) for all games and for each alternating half."""
     ids = sorted(players)
@@ -59,7 +73,7 @@ def feature_reliability(XA, XB, ratings, names=NAMES, min_players=30):
     rows = []
     for j, name in enumerate(names):
         ok = np.isfinite(XA[:, j]) & np.isfinite(XB[:, j])
-        row = {"name": name, "family": G.FAMILY.get(name, "opening" if name.startswith("eco") or "eco" in name else "repertoire"),
+        row = {"name": name, "family": G.FAMILY.get(name, "quality" if name.startswith("q_") else "opening" if "eco" in name else "repertoire"),
                "coverage": float(ok.mean()), "r_half": float("nan"), "r_full": float("nan"), "r_net": float("nan"), "rating_corr": float("nan")}
         if name in EXCLUDED:
             row["coverage"] = 0.0          # never usable

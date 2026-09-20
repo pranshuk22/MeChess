@@ -695,6 +695,35 @@ def cmd_style_embed_train(args):
     log(f"{'stopped' if res['stopped'] else 'finished'} at step {res['step']}")
 
 
+def cmd_style_games_quality(args):
+    from .style import quality as Q
+    log = _file_logger(args.log)
+    log(f"=== style-games-quality {' '.join(sys.argv[2:])}")
+    print(Q.run(args.data, engine=args.engine, nodes=args.nodes, n_games=args.games, max_players=args.players, seed=args.seed,
+                workers=args.workers, control_dir=args.control_dir, log=log))
+
+
+def cmd_style_quality_report(args):
+    from .style import gamestats as GS
+    from .style import quality as Q
+    players = Q.load_quality(args.data)
+    ids, XA, XB, R = GS.quality_matrices(players)
+    if len(ids) < args.min_players:
+        sys.exit(f"only {len(ids)} players analysed (need {args.min_players}); run style-games-quality first")
+    rows = GS.feature_reliability(XA, XB, R, names=list(Q.QUALITY_NAMES))
+    good = [j for j, r in enumerate(rows) if GS.passes_gate(r)]
+    print(f"Move-quality features: {len(ids)} players (about {len(players[ids[0]][1])} games each), games split into alternating halves")
+    print(f"  {'feature':20s} {'cover':>6s} {'r_full':>7s} {'net':>6s} {'rating r':>9s} gate")
+    for r in sorted(rows, key=lambda r: -(r['r_full'] if r['r_full'] == r['r_full'] else -9)):
+        print(f"  {r['name']:20s} {r['coverage']:6.2f} {r['r_full']:+7.2f} {r['r_net']:+6.2f} {r['rating_corr']:+9.2f} {'KEEP' if GS.passes_gate(r) else ''}")
+    print(f"{len(good)} of {len(rows)} pass the gate")
+    if good:
+        import numpy as np
+        A, B = np.nan_to_num(XA), np.nan_to_num(XB)
+        res = GS.identification(A, B, good, ratings=R, window=100)
+        print(f"identification among rating-matched players from the kept quality features alone: top-1 {100 * res['top1']:.1f}% (chance {100 * res['chance']:.1f}%)")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1134,6 +1163,15 @@ def main():
     gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
     gf.add_argument("--log", default="data/style/logs/games_fetch.log")
     gf.set_defaults(func=cmd_style_games_fetch)
+    sq = sub.add_parser("style-games-quality", help="engine move-quality features (accuracy, class rates, conversion...) for a sample of the cohort (resumable, pausable)")
+    sq.add_argument("--data", default="data/style/cohort2"); sq.add_argument("--engine", default="stockfish")
+    sq.add_argument("--nodes", type=int, default=25000); sq.add_argument("--games", type=int, default=10); sq.add_argument("--players", type=int, default=400)
+    sq.add_argument("--seed", type=int, default=0); sq.add_argument("--workers", type=int, default=3)
+    sq.add_argument("--control-dir", default="data/control"); sq.add_argument("--log", default="data/style/logs/quality.log")
+    sq.set_defaults(func=cmd_style_games_quality)
+    qr = sub.add_parser("style-quality-report", help="reliability and gate of the move-quality features")
+    qr.add_argument("--data", default="data/style/cohort2"); qr.add_argument("--min-players", type=int, default=40)
+    qr.set_defaults(func=cmd_style_quality_report)
     et = sub.add_parser("style-embed-train", help="train the contrastive player embedding on the game-level features (resumable, pausable)")
     et.add_argument("--data", default="data/style/cohort2"); et.add_argument("--out", default="data/style/embed")
     et.add_argument("--min-games", type=int, default=30); et.add_argument("--min-players", type=int, default=60)
