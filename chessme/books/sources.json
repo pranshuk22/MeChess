@@ -1,5 +1,5 @@
 {
- "note": "Public-domain texts only (each verified to exist on 2026-09-21). Copyright status depends on country and the author's death date: check before relying on a work outside the US. Modern books are NOT listed and must not be added.",
+ "note": "Public-domain texts only (each verified to exist on 2026-09-21). Copyright depends on country and the author's death date: check before relying on a work outside the US. Modern books are NOT listed and must not be added. kind: instruction | openings | games | periodical (periodicals and tournament books carry annotated games).",
  "books": [
   {
    "id": "capablanca-chess-fundamentals",
@@ -100,6 +100,816 @@
    "year": 1924,
    "notation": "german",
    "archive": "diehypermodernes00tart_0"
+  },
+  {
+   "id": "hastings-1895",
+   "author": "Cheshire (ed.)",
+   "title": "The Hastings Chess Tournament 1895 (annotated games)",
+   "year": 1896,
+   "notation": "unknown",
+   "archive": "cu31924029919820"
+  },
+  {
+   "id": "stpetersburg-1909",
+   "author": "E. Lasker (ed.)",
+   "title": "The International Chess Congress, St. Petersburg 1909 (annotated games)",
+   "year": 1910,
+   "notation": "unknown",
+   "archive": "internationalche00lask"
+  },
+  {
+   "id": "first-american-congress",
+   "author": "Fiske",
+   "title": "The Book of the First American Chess Congress (annotated games)",
+   "year": 1859,
+   "notation": "unknown",
+   "archive": "bookoffirstameri00fisk"
+  },
+  {
+   "id": "staunton-theory-practice",
+   "author": "Staunton",
+   "title": "Chess: Theory and Practice",
+   "year": 1876,
+   "notation": "unknown",
+   "archive": "chesstheorypract00stau"
+  },
+  {
+   "id": "mason-art-of-chess",
+   "author": "Mason",
+   "title": "The Art of Chess",
+   "year": 1913,
+   "notation": "unknown",
+   "archive": "artofchess00maso"
+  },
+  {
+   "id": "marshall-chess-openings",
+   "author": "Marshall",
+   "title": "Chess Openings",
+   "year": 1904,
+   "notation": "unknown",
+   "archive": "cu31924029919556"
+  },
+  {
+   "id": "freeborough-openings",
+   "author": "Freeborough / Ranken",
+   "title": "Chess Openings Ancient and Modern",
+   "year": 1905,
+   "notation": "unknown",
+   "archive": "chessopeningsanc00freerich"
+  },
+  {
+   "id": "rogers-how-to-play",
+   "author": "Rogers",
+   "title": "How to Play Chess",
+   "year": 1907,
+   "notation": "unknown",
+   "archive": "howtoplaychess00rogerich"
+  },
+  {
+   "id": "walker-art-of-chess-play",
+   "author": "Walker",
+   "title": "The Art of Chess-Play",
+   "year": 1846,
+   "notation": "unknown",
+   "archive": "artofchessplayne00walk"
+  },
+  {
+   "id": "chess-chess-players-unkngoog",
+   "author": "",
+   "title": "Chess & chess-players",
+   "year": 1850,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chesschessplaye00unkngoog"
+  },
+  {
+   "id": "the-british-chess-magazine-unkngoog",
+   "author": "",
+   "title": "The British Chess Magazine",
+   "year": 1884,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "britishchessmag01unkngoog"
+  },
+  {
+   "id": "the-chess-primer-cookgoog",
+   "author": "",
+   "title": "The chess primer",
+   "year": 1880,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessprimer00cookgoog"
+  },
+  {
+   "id": "chess-greegoog",
+   "author": "",
+   "title": "Chess",
+   "year": 1893,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chess01greegoog"
+  },
+  {
+   "id": "chess-hoffgoog",
+   "author": "",
+   "title": "Chess",
+   "year": 1916,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chess00hoffgoog"
+  },
+  {
+   "id": "columbia-chess-chronicle-clubgoog",
+   "author": "",
+   "title": "Columbia Chess Chronicle",
+   "year": 1887,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "columbiachessch00clubgoog"
+  },
+  {
+   "id": "chess-openings-wormgoog",
+   "author": "",
+   "title": "Chess Openings",
+   "year": 1875,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessopenings00wormgoog"
+  },
+  {
+   "id": "the-chess-player-s-chronicle-hursgoog",
+   "author": "",
+   "title": "The chess player's chronicle",
+   "year": 1847,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayerschr00hursgoog"
+  },
+  {
+   "id": "chess-openings-for-beginners-cunngoog",
+   "author": "",
+   "title": "Chess Openings for Beginners",
+   "year": 1900,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessopeningsfo00cunngoog"
+  },
+  {
+   "id": "chess-mitcgoog",
+   "author": "",
+   "title": "Chess",
+   "year": 1917,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chess00mitcgoog"
+  },
+  {
+   "id": "chess-for-beginners-and-the-beginnings-swingoog",
+   "author": "",
+   "title": "Chess for Beginners: And the Beginnings of Chess",
+   "year": 1891,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessforbeginne00swingoog"
+  },
+  {
+   "id": "the-art-of-chess-hoffgoog",
+   "author": "",
+   "title": "The Art of Chess",
+   "year": 1905,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "artchess00hoffgoog"
+  },
+  {
+   "id": "chess-studies-or-endings-of-games-by-k-horwgoog",
+   "author": "",
+   "title": "Chess studies; or endings of games, by Kling and Horwitz, ed. by H.C. Mott",
+   "year": 1851,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "chessstudiesore00horwgoog"
+  },
+  {
+   "id": "brooklyn-chess-chronicle-00mugoog",
+   "author": "",
+   "title": "Brooklyn Chess Chronicle",
+   "year": 1883,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "brooklynchessch00mugoog"
+  },
+  {
+   "id": "chess-studies-comprising-one-thousand-g-walkgoog",
+   "author": "",
+   "title": "Chess Studies, Comprising One Thousand Games: A Collection of Classical and Brillant Specimens ...",
+   "year": 1893,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "chessstudiescom01walkgoog"
+  },
+  {
+   "id": "gioachino-greco-on-the-game-of-chess-lewigoog",
+   "author": "",
+   "title": "Gioachino Greco on the Game of Chess",
+   "year": 1819,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "gioachinogrecoo00lewigoog"
+  },
+  {
+   "id": "chess-world-unkngoog",
+   "author": "",
+   "title": "Chess World",
+   "year": 1869,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessworld01unkngoog"
+  },
+  {
+   "id": "paul-morphy-the-chess-champion-by-an-e-morpgoog",
+   "author": "",
+   "title": "Paul Morphy, the chess champion, by an Englishman [F. M. Edge].",
+   "year": 1859,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "paulmorphychess00morpgoog"
+  },
+  {
+   "id": "the-principles-of-chess-in-theory-prac-masogoog",
+   "author": "",
+   "title": "The Principles of Chess in Theory & Practice...",
+   "year": 1894,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "principleschess01masogoog"
+  },
+  {
+   "id": "the-chess-player-containing-frankli-frangoog",
+   "author": "",
+   "title": "The Chess Player ...: Containing Franklin's Essay on the Morals of Chess, Introduction to the ...",
+   "year": 1841,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessplayercont00frangoog"
+  },
+  {
+   "id": "the-exploits-and-triumphs-in-europe-of-edgegoog",
+   "author": "",
+   "title": "The Exploits and Triumphs, in Europe, of Paul Morphy, the Chess Champion: Including an ...",
+   "year": 1859,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "exploitsandtriu00edgegoog"
+  },
+  {
+   "id": "chess-openings-longgoog",
+   "author": "",
+   "title": "Chess openings",
+   "year": 1870,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessopenings01longgoog"
+  },
+  {
+   "id": "how-to-play-chess-rogegoog",
+   "author": "",
+   "title": "How to Play Chess",
+   "year": 1907,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "howtoplaychess00rogegoog"
+  },
+  {
+   "id": "a-complete-guide-to-the-game-of-chess-f-meyegoog",
+   "author": "",
+   "title": "A Complete Guide to the Game of Chess: From the Alphabet to the Solution and Construction of ...",
+   "year": 1882,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "acompleteguidet00meyegoog"
+  },
+  {
+   "id": "analysis-of-the-chess-ending-king-and-qu-freegoog",
+   "author": "",
+   "title": "Analysis of the Chess Ending King and Queen Against King and Rook",
+   "year": 1895,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "analysischessen00freegoog"
+  },
+  {
+   "id": "chess-player-klingoog",
+   "author": "",
+   "title": "Chess Player",
+   "year": 1852,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayer00klingoog"
+  },
+  {
+   "id": "the-chess-openings-gunsgoog",
+   "author": "",
+   "title": "The chess openings",
+   "year": 1901,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessopenings00gunsgoog"
+  },
+  {
+   "id": "analysis-of-the-game-of-chess-illus-by-philgoog",
+   "author": "",
+   "title": "Analysis of the Game of Chess: Illus. by Diagrams, on which are Marked the ...",
+   "year": 1824,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "analysisgameche02philgoog"
+  },
+  {
+   "id": "chess-player-aaaayaaj",
+   "author": "",
+   "title": "Chess Player",
+   "year": 1852,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "bub_gb_jC0CAAAAYAAJ"
+  },
+  {
+   "id": "paul-morphy-the-chess-champion-by-an-e-aaaaqaaj",
+   "author": "",
+   "title": "Paul Morphy, the chess champion, by an Englishman F. M. Edge.",
+   "year": 1859,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "bub_gb_PHcBAAAAQAAJ"
+  },
+  {
+   "id": "chess-match-between-steinitz-blackburn-blacgoog",
+   "author": "",
+   "title": "Chess Match Between Steinitz & Blackburne: Played at the West End Chess Club, London, February ...",
+   "year": 1876,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "chessmatchbetwe00blacgoog"
+  },
+  {
+   "id": "the-chess-journal-unkngoog",
+   "author": "",
+   "title": "The Chess Journal",
+   "year": 1874,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessjournal01unkngoog"
+  },
+  {
+   "id": "an-easy-introduction-to-the-game-of-ches-jonegoog",
+   "author": "",
+   "title": "An Easy Introduction to the Game of Chess: Containing One Hundred Examples of Games, and a Great ...",
+   "year": 1816,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "aneasyintroduct00jonegoog"
+  },
+  {
+   "id": "the-chess-digest-containing-the-opening-morggoog",
+   "author": "",
+   "title": "The Chess Digest: Containing the Opening Moves of Over Fifteen Thousand ...",
+   "year": 1905,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessdigestcont02morggoog"
+  },
+  {
+   "id": "chess-gems-some-of-the-finest-examples-milegoog",
+   "author": "",
+   "title": "Chess Gems: Some of the Finest Examples of Chess Strategy, by Ancient and Modern Masters ...",
+   "year": 1860,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessgemssomefi00milegoog"
+  },
+  {
+   "id": "practical-chess-grammar-or-an-introduc-kenngoog",
+   "author": "",
+   "title": "Practical Chess Grammar: Or, An Introduction to the Royal Game of Chess; in a Series of Plates",
+   "year": 1817,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "practicalchessg01kenngoog"
+  },
+  {
+   "id": "the-grand-tactics-of-chess-an-expositio-youngoog",
+   "author": "",
+   "title": "The Grand Tactics of Chess: An Exposition of the Laws and Principles of Chess Strategetics, the ...",
+   "year": 1897,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "grandtacticsche00youngoog"
+  },
+  {
+   "id": "the-chess-player-s-magazine-00lwgoog",
+   "author": "",
+   "title": "The Chess Player's Magazine",
+   "year": 1866,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayersmag00lwgoog"
+  },
+  {
+   "id": "chess-rendered-familiar-by-tabular-demon-philgoog",
+   "author": "",
+   "title": "Chess Rendered Familiar by Tabular Demonstrations of the Various Positions ...",
+   "year": 1819,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessrenderedfa00philgoog"
+  },
+  {
+   "id": "chess-player-s-chronicle-unkngoog",
+   "author": "",
+   "title": "Chess Player's Chronicle",
+   "year": 1854,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayerschr07unkngoog"
+  },
+  {
+   "id": "the-principles-of-chess-in-theory-and-pr-unkngoog",
+   "author": "",
+   "title": "The Principles of Chess in Theory and Practice",
+   "year": 1902,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "principleschess00unkngoog"
+  },
+  {
+   "id": "the-chess-openings-wormgoog",
+   "author": "",
+   "title": "The Chess Openings",
+   "year": 1864,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessopenings01wormgoog"
+  },
+  {
+   "id": "mitchell-s-guide-to-the-game-of-chess-b-laskgoog",
+   "author": "",
+   "title": "Mitchell's Guide to the game of chess: being a complete course of ...",
+   "year": 1920,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "mitchellsguidet00laskgoog"
+  },
+  {
+   "id": "the-chess-players-chronicle-hastgoog",
+   "author": "",
+   "title": "The Chess Players Chronicle.",
+   "year": 1841,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayerschr00hastgoog"
+  },
+  {
+   "id": "analysis-of-the-game-of-chess-frangoog",
+   "author": "",
+   "title": "Analysis of the Game of Chess",
+   "year": 1826,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "analysisgameche00frangoog"
+  },
+  {
+   "id": "elements-of-the-game-of-chess-or-a-new-lewigoog",
+   "author": "",
+   "title": "Elements of the Game of Chess, Or A New Method of Instruction in that Celebrated Game, Founded ...",
+   "year": 1827,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "elementsgameche01lewigoog"
+  },
+  {
+   "id": "the-chess-player-s-chronicle-hr01goog",
+   "author": "",
+   "title": "The chess player's chronicle",
+   "year": 1849,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayerschr01goog"
+  },
+  {
+   "id": "the-celebrated-analysis-of-the-game-of-c-danigoog",
+   "author": "",
+   "title": "The celebrated analysis of the game of chess, tr. from the Fr. of A.D. Philidor, with notes and ...",
+   "year": 1832,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "celebratedanaly00danigoog"
+  },
+  {
+   "id": "a-handbook-of-chess-pardgoog",
+   "author": "",
+   "title": "A handbook of chess",
+   "year": 1860,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "ahandbookchess00pardgoog"
+  },
+  {
+   "id": "stratagems-of-chess-or-a-collection-of-montgoog",
+   "author": "",
+   "title": "Stratagems of Chess, Or, a Collection of Critical and Remarkable Situations",
+   "year": 1817,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "stratagemschess00montgoog"
+  },
+  {
+   "id": "an-easy-introduction-to-the-game-of-ches-frangoog",
+   "author": "",
+   "title": "An Easy Introduction to the Game of Chess: Containing One Hundred Examples of Games, and a Great ...",
+   "year": 1817,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "aneasyintroduct01frangoog"
+  },
+  {
+   "id": "chess-rendered-familiar-by-tabular-demon-pohlgoog",
+   "author": "",
+   "title": "Chess rendered familiar by tabular demonstrations of the various positions and movements, as ...",
+   "year": 1819,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessrenderedfa00pohlgoog"
+  },
+  {
+   "id": "chess-at-odds-of-pawn-and-move-a-comple-berkgoog",
+   "author": "",
+   "title": "Chess at Odds of Pawn and Move, a Complete Analysis of the Opening ...",
+   "year": 1891,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "chessatoddspawn00berkgoog"
+  },
+  {
+   "id": "a-selection-of-games-at-chess-actually-p-macdgoog",
+   "author": "",
+   "title": "A Selection of Games at Chess Actually Played in London by the Late Alexander M'Donnell: The ...",
+   "year": 1836,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "aselectiongames00macdgoog"
+  },
+  {
+   "id": "crumbs-from-the-chess-board-gilbgoog",
+   "author": "",
+   "title": "Crumbs from the Chess-board",
+   "year": 1890,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "crumbsfromchess00gilbgoog"
+  },
+  {
+   "id": "a-second-series-of-lessons-on-the-game-o-lewigoog",
+   "author": "",
+   "title": "A Second Series of Lessons on the Game of Chess",
+   "year": 1834,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "asecondseriesle00lewigoog"
+  },
+  {
+   "id": "the-chess-player-s-chronicle-hr00goog",
+   "author": "",
+   "title": "The chess player's chronicle",
+   "year": 1849,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "chessplayerschr00goog"
+  },
+  {
+   "id": "chess-exemplified-in-a-concise-easy-no-peargoog",
+   "author": "",
+   "title": "Chess Exemplified in a Concise & Easy Notation ...",
+   "year": 1842,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessexemplifie00peargoog"
+  },
+  {
+   "id": "chess-made-easy-new-and-comprehensive-ru-aaaayaaj",
+   "author": "",
+   "title": "Chess Made Easy New and Comprehensive Rules for Playing the Game of Chess",
+   "year": 1812,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "bub_gb_6CgVAAAAYAAJ"
+  },
+  {
+   "id": "the-manual-of-chess-containing-the-elem-kenngoog",
+   "author": "",
+   "title": "The Manual of Chess: Containing the Elementary Principles of the Game",
+   "year": 1859,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "manualchesscont01kenngoog"
+  },
+  {
+   "id": "a-popular-introduction-to-the-study-and-aaaaqaaj",
+   "author": "",
+   "title": "A popular introduction to the study and practice of chess, by an amateur S.S. Boden.",
+   "year": 1851,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "bub_gb_mzkCAAAAQAAJ"
+  },
+  {
+   "id": "chess-studies-or-endings-of-games-by-k-aaaaqaaj",
+   "author": "",
+   "title": "Chess studies; or endings of games, by Kling and Horwitz, ed. by H.C. Mott",
+   "year": 1851,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "bub_gb_5ZACAAAAQAAJ"
+  },
+  {
+   "id": "the-chess-handbook-teaching-the-rudimen-walkgoog",
+   "author": "",
+   "title": "The Chess Handbook: Teaching the Rudiments of the Game and Giving an ...",
+   "year": 1859,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chesshandbookte00walkgoog"
+  },
+  {
+   "id": "elements-of-the-game-of-chess-lewigoog",
+   "author": "",
+   "title": "Elements of the Game of Chess",
+   "year": 1822,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "elementsgameche00lewigoog"
+  },
+  {
+   "id": "the-manual-of-chess-kenngoog",
+   "author": "",
+   "title": "The manual of chess",
+   "year": 1847,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "manualchess00kenngoog"
+  },
+  {
+   "id": "the-chess-player-s-text-book-an-element-gossgoog",
+   "author": "",
+   "title": "The chess player's text book: an elementary treatise on the game of chess",
+   "year": 1889,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessplayerstex01gossgoog"
+  },
+  {
+   "id": "the-chess-player-s-hand-book-containing-etiqgoog",
+   "author": "",
+   "title": "The Chess-player's Hand-book: Containing a Full Account of the Game of Chess ...",
+   "year": 1849,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessplayershan00etiqgoog"
+  },
+  {
+   "id": "a-selection-of-games-from-the-internatio-unkngoog",
+   "author": "",
+   "title": "A Selection of Games from the International Tournament Played at New York,U ...",
+   "year": 1889,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "aselectiongames00unkngoog"
+  },
+  {
+   "id": "a-treatise-on-the-game-of-chess-con-sarrgoog",
+   "author": "",
+   "title": "A Treatise on the Game of Chess ...: containing a regular system of attack and defense; also ...",
+   "year": 1808,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "atreatiseongame01sarrgoog"
+  },
+  {
+   "id": "fifty-games-at-chess-which-have-actuall-lewigoog",
+   "author": "",
+   "title": "Fifty Games at Chess: Which Have Actually Been Played, Most of which Occurreed Between the ...",
+   "year": 1832,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "fiftygamesatche00lewigoog"
+  },
+  {
+   "id": "chess-for-beginners-in-a-series-of-prog-lewigoog",
+   "author": "",
+   "title": "Chess for Beginners: In a Series of Progressive Lessons, Showing the Most Approved Methods of ...",
+   "year": 1846,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chessforbeginne02lewigoog"
+  },
+  {
+   "id": "the-new-century-chess-book-and-companion-mortgoog",
+   "author": "",
+   "title": "The New Century Chess-book and Companion to the Chess Player's Pocket-book",
+   "year": 1901,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "newcenturychess00mortgoog"
+  },
+  {
+   "id": "mr-hoyl-s-game-of-chess-including-his-frangoog",
+   "author": "",
+   "title": "Mr. Hoyl's Game of Chess: Including His Chess Lectures, with Selections from ...",
+   "year": 1808,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "mrhoylsgameches00frangoog"
+  },
+  {
+   "id": "the-chess-player-s-chronicle-aaaaqaaj",
+   "author": "",
+   "title": "The Chess player's chronicle",
+   "year": 1843,
+   "kind": "periodical",
+   "notation": "unknown",
+   "archive": "bub_gb_h3wEAAAAQAAJ"
+  },
+  {
+   "id": "key-to-the-chess-openings-on-a-novel-pl-longgoog",
+   "author": "",
+   "title": "Key to the Chess Openings: On a Novel Plan, Theoretically and Practically Considered, and ...",
+   "year": 1871,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "keytochessopeni00longgoog"
+  },
+  {
+   "id": "letters-on-chess-containing-an-account-lewigoog",
+   "author": "",
+   "title": "Letters on Chess: Containing an Account of Some of the Principal Works on that Celebrated Game ...",
+   "year": 1848,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "lettersonchessc00lewigoog"
+  },
+  {
+   "id": "the-chess-handbook-teaching-the-rudimen-amatgoog",
+   "author": "",
+   "title": "The Chess Handbook: Teaching the Rudiments of the Game, and Giving an ...",
+   "year": 1859,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "chesshandbookte00amatgoog"
+  },
+  {
+   "id": "the-works-of-damiano-ruy-lopez-and-sal-sarrgoog",
+   "author": "",
+   "title": "The Works of Damiano, Ruy-Lopez, and Salvio on the Game of Chess",
+   "year": 1813,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "worksdamianoruy00sarrgoog"
+  },
+  {
+   "id": "a-treatise-on-the-game-of-chess-contain-lewigoog",
+   "author": "",
+   "title": "A Treatise on the Game of Chess: Containing an Introduction, and an Analysis of the Various ...",
+   "year": 1844,
+   "kind": "openings",
+   "notation": "unknown",
+   "archive": "atreatiseongame02lewigoog"
+  },
+  {
+   "id": "a-new-treatise-of-the-game-of-chess-sarrgoog",
+   "author": "",
+   "title": "A New Treatise of the Game of Chess ...",
+   "year": 1828,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "anewtreatisegam01sarrgoog"
+  },
+  {
+   "id": "a-treatise-on-the-game-of-chess-aaaayaaj",
+   "author": "",
+   "title": "A Treatise on the Game of Chess ...",
+   "year": 1808,
+   "kind": "instruction",
+   "notation": "unknown",
+   "archive": "bub_gb__B4CAAAAYAAJ"
+  },
+  {
+   "id": "stamma-on-the-game-of-chess-containing-lewigoog",
+   "author": "",
+   "title": "Stamma on the Game of Chess: Containing Numerous Openings of Games, and One ...",
+   "year": 1819,
+   "kind": "games",
+   "notation": "unknown",
+   "archive": "stammaongameche00lewigoog"
   }
  ]
 }

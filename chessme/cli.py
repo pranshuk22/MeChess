@@ -739,7 +739,8 @@ def cmd_books_learn(args):
     log = _file_logger(args.log)
     log(f"=== books-learn {' '.join(sys.argv[2:])}")
     res = BL.run(args.out, steps=tuple(args.steps), limit_per_source=args.limit_per_source, extra_pgn_dir=args.studies_dir,
-                 redo=args.redo, archive=args.archive, control_dir=args.control_dir, log=log)
+                 redo=args.redo, archive=args.archive, no_csv=args.no_csv, no_openings=args.no_openings, no_chessgpt=args.no_chessgpt,
+                 control_dir=args.control_dir, log=log)
     log(str(res))
 
 
@@ -766,6 +767,44 @@ def cmd_books_topics(args):
     print(f"{len(paras)} paragraphs")
     for r in TP.cluster(paras, k=args.k):
         print(f"cluster {r['cluster']:2d} ({r['size']:5d}): {', '.join(r['words'])}")
+
+
+def cmd_books_nlp_train(args):
+    from .books import nlp as NLP
+    from .jobs import JobControl
+    log = _file_logger(args.log)
+    data = Path(args.data)
+    log(f"=== books-nlp-train {' '.join(sys.argv[2:])}")
+    ex = NLP.build_examples(annotated=data / "annotated" / "annotated_moves.jsonl.gz", prose_dir=data, books_dir=data / "books",
+                            max_per_kind=args.max_per_source)
+    by = {}
+    for e in ex:
+        by[e["source"]] = by.get(e["source"], 0) + 1
+    log(f"{len(ex)} examples: {by}")
+    if len(ex) < 200:
+        sys.exit("too few examples: run books-learn first")
+    ctl = JobControl(args.job, args.control_dir, log=log)
+    with ctl.signals():
+        res = NLP.train(ex, Path(args.out) if args.out else data / "nlp", backend=args.backend, model_name=args.model, epochs=args.epochs,
+                        batch=args.batch, lr=args.lr, dry_run=args.dry_run, deadline_minutes=args.deadline_minutes,
+                        ckpt_every=args.ckpt_every, ctl=ctl, log=log)
+    t = res["metrics"].get("test", {})
+    log(f"{'DRY RUN ' if args.dry_run else ''}{'stopped' if res['stopped'] else 'finished'} at step {res['step']}; test: "
+        + json.dumps({k: round(v, 3) for k, v in t.items() if isinstance(v, float)}))
+
+
+def cmd_books_nlp_predict(args):
+    from .books import nlp as NLP
+    model, cfg = NLP.load(args.model_dir)
+    for text, r in zip(args.texts, NLP.predict(model, args.texts, cfg)):
+        print(f"{text[:80]!r}\n   concepts {r['concepts']}  judgement {r['judgement']}  evaluation {r['evaluation']}")
+
+
+def cmd_books_preflight(args):
+    from .books import preflight as PF
+    ok = PF.run(args.out, need_gpu=args.need_gpu, need_transformers=args.backend == "transformer", model_name=args.model if args.backend == "transformer" else None,
+                min_free_gb=args.min_free_gb, network=not args.no_network)
+    sys.exit(0 if ok else 1)
 
 
 def cmd_style_status(args):
@@ -1212,12 +1251,31 @@ def main():
     bk.add_argument("--log", default="data/books/books.log")
     bk.set_defaults(func=cmd_books_fetch)
     bl = sub.add_parser("books-learn", help="everything from books and annotated games in one command: books, concept-line pairs, annotated archive, report (resumable)")
-    bl.add_argument("--out", default="data/books_learn"); bl.add_argument("--steps", nargs="+", default=["books", "pairs", "annotated", "report"],
-                                                                        choices=["books", "pairs", "annotated", "report"])
+    bl.add_argument("--out", default="data/books_learn"); bl.add_argument("--steps", nargs="+", default=["books", "pairs", "annotated", "prose", "report"],
+                                                                        choices=["books", "pairs", "annotated", "prose", "report"])
     bl.add_argument("--limit-per-source", type=int, help="at most this many games per annotated source (a trial)")
     bl.add_argument("--studies-dir", help="folder with extra PGN files, e.g. from books-studies"); bl.add_argument("--archive", help="an already downloaded annotated_pgn_free.tar.gz")
+    bl.add_argument("--no-chessgpt", action="store_true", help="skip the large ChessGPT annotated-PGN shards (175 MB)")
+    bl.add_argument("--no-csv", action="store_true", help="skip the extra CC0 studies dataset"); bl.add_argument("--no-openings", action="store_true", help="skip opening names")
     bl.add_argument("--redo", action="store_true"); bl.add_argument("--control-dir", default="data/control"); bl.add_argument("--log", default="data/books_learn/learn.log")
     bl.set_defaults(func=cmd_books_learn)
+    nt = sub.add_parser("books-nlp-train", help="train the chess-text language model (concepts, move judgement, evaluation) on the books-learn output")
+    nt.add_argument("--data", default="data/books_learn"); nt.add_argument("--out"); nt.add_argument("--backend", choices=["bow", "transformer"], default="bow")
+    nt.add_argument("--model", default="distilroberta-base", help="Hugging Face encoder for --backend transformer")
+    nt.add_argument("--epochs", type=int, default=3); nt.add_argument("--batch", type=int, default=64); nt.add_argument("--lr", type=float)
+    nt.add_argument("--max-per-source", type=int, help="cap examples per source (a trial)")
+    nt.add_argument("--dry-run", action="store_true", help="a few seconds on a few hundred examples: checks the whole path, writes nothing")
+    nt.add_argument("--deadline-minutes", type=float, help="stop cleanly with a checkpoint after this many minutes (Kaggle: below 12 h)")
+    nt.add_argument("--ckpt-every", type=int, default=500); nt.add_argument("--job", default="nlp"); nt.add_argument("--control-dir", default="data/control")
+    nt.add_argument("--log", default="data/books_learn/nlp.log")
+    nt.set_defaults(func=cmd_books_nlp_train)
+    npd = sub.add_parser("books-nlp-predict", help="read comments with a trained chess-text model")
+    npd.add_argument("model_dir"); npd.add_argument("texts", nargs="+")
+    npd.set_defaults(func=cmd_books_nlp_predict)
+    pf = sub.add_parser("books-preflight", help="check dependencies, disk, network and GPU before a long run (exit code 1 on failure)")
+    pf.add_argument("--out", default="data/books_learn"); pf.add_argument("--need-gpu", action="store_true"); pf.add_argument("--backend", choices=["bow", "transformer"], default="bow")
+    pf.add_argument("--model", default="distilroberta-base"); pf.add_argument("--min-free-gb", type=float, default=3.0); pf.add_argument("--no-network", action="store_true")
+    pf.set_defaults(func=cmd_books_preflight)
     bs = sub.add_parser("books-studies", help="export public Lichess studies of users or by study id (one request at a time)")
     bs.add_argument("--out", default="data/books_learn/studies"); bs.add_argument("--users", nargs="*"); bs.add_argument("--users-file")
     bs.add_argument("--study-ids", nargs="*"); bs.add_argument("--pause", type=float, default=2.0); bs.add_argument("--log", default="data/books_learn/studies.log")

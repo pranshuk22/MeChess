@@ -103,14 +103,15 @@ def test_learn_runs_all_steps_reports_and_resumes(tmp_path):
     try:
         opener = lambda u: BOOK
         logs = []
-        res = L.run(tmp_path / "out", archive=archive, opener=opener, control_dir=str(tmp_path / "ctl"), log=logs.append)
+        res = L.run(tmp_path / "out", steps=("books", "pairs", "annotated", "report"), archive=archive, opener=opener, no_csv=True, no_openings=True,
+                    no_chessgpt=True, control_dir=str(tmp_path / "ctl"), log=logs.append)
         assert res == {"steps": ["books", "pairs", "annotated", "report"], "stopped": False}
         report = (tmp_path / "out" / "report.md").read_text()
         assert "| bk |" in report and "gameknot" in report and "Human move glyphs found" in report and "`!`" in report
         assert (tmp_path / "out" / "concept_line_pairs.jsonl").exists()
         before = (tmp_path / "out" / "annotated" / "stats.json").stat().st_mtime_ns
-        L.run(tmp_path / "out", archive=archive, opener=lambda u: (_ for _ in ()).throw(AssertionError("refetched")),
-              control_dir=str(tmp_path / "ctl"), log=lambda *_: None)
+        L.run(tmp_path / "out", steps=("books", "pairs", "annotated", "report"), archive=archive, no_csv=True, no_openings=True, no_chessgpt=True,
+              opener=lambda u: (_ for _ in ()).throw(AssertionError("refetched")), control_dir=str(tmp_path / "ctl"), log=lambda *_: None)
         assert (tmp_path / "out" / "annotated" / "stats.json").stat().st_mtime_ns == before          # nothing was redone
     finally:
         F.load_sources = real
@@ -121,3 +122,32 @@ def test_learn_stops_cleanly_when_asked(tmp_path):
     (tmp_path / "ctl" / "books.stop").write_text("")
     res = L.run(tmp_path / "out", steps=("annotated",), archive=make_archive(tmp_path), control_dir=str(tmp_path / "ctl"), log=lambda *_: None)
     assert res == {"steps": [], "stopped": True}
+
+
+def test_learn_prose_step_writes_stackexchange_and_wikipedia_and_reports_them(tmp_path):
+    import io
+    se = json.dumps({"text": "Q: Why is an outpost strong?\n\nA: Because no pawn can chase the knight away, so it stays there for good and the plan is simple."}) + "\n"
+    wk = json.dumps({"metadata": {"title": "Outpost (chess)", "url": "https://en.wikipedia.org/wiki/Outpost_(chess)"}, "text": "An outpost in chess is a square. " * 30}) + "\n"
+    class R(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+    def opener(u):
+        body = (se if "stackexchange" in u else wk).encode()
+        return R(body + b" " * (1_100_000 - len(body)))               # padded over the size the downloader expects
+    res = L.run(tmp_path / "out", steps=("prose", "report"), opener=opener, control_dir=str(tmp_path / "ctl"), log=lambda *_: None)
+    assert res["steps"] == ["prose", "report"]
+    text = (tmp_path / "out" / "report.md").read_text()
+    assert "Stack Exchange: 1 threads, 1 answers" in text and "Wikipedia: 1 chess articles" in text
+
+
+def test_preflight_reports_each_check_and_fails_when_a_source_is_down(tmp_path):
+    from chessme.books import preflight as PF
+    lines = []
+    ok = PF.run(tmp_path, network=True, head=lambda u: (True, "HTTP 200"), log=lines.append)
+    assert ok and any("free disk" in l for l in lines) and any("network: gutenberg" in l for l in lines) and lines[-1].startswith("preflight: all")
+    lines = []
+    ok = PF.run(tmp_path, network=True, head=lambda u: (("archive.org" not in u), "HTTP 500"), log=lines.append)
+    assert not ok and any(l.strip().startswith("FAIL") and "internet archive" in l for l in lines)
+    assert lines[-1].startswith("preflight FAILED") and "internet archive" in lines[-1]
+    import torch
+    assert PF.run(tmp_path, need_gpu=True, network=False, log=lambda *_: None) == torch.cuda.is_available()   # requiring a GPU passes only where there is one
