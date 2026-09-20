@@ -18,6 +18,7 @@ from . import gamefeatures as G
 from . import gamestats as S
 from ..jobs import Stopped
 
+MATCH_WINDOW = 100          # rating-matched identification: candidates within this many rating points
 EXCLUDE = [G.FEATURE_NAMES.index(n) for n in S.EXCLUDED if n in G.FEATURE_NAMES]
 
 
@@ -122,17 +123,21 @@ def evaluate(model, norm, games, ratings, idx):
     gn = [norm(g) for g in games]
     EA, EB = embed_bags(model, gn, idx, 0), embed_bags(model, gn, idx, 1)
     emb = S.identification(EA, EB, list(range(EA.shape[1])))
+    r_idx = ratings[idx]
+    emb_m = S.identification(EA, EB, list(range(EA.shape[1])), ratings=r_idx, window=MATCH_WINDOW)
     XA = np.array([np.nanmean(np.where(np.isfinite(games[i][0::2]), games[i][0::2], np.nan), axis=0) for i in idx])
     XB = np.array([np.nanmean(np.where(np.isfinite(games[i][1::2]), games[i][1::2], np.nan), axis=0) for i in idx])
     keep = norm.keep
     raw = S.identification(XA[:, keep], XB[:, keep], list(range(len(keep))))
+    raw_m = S.identification(XA[:, keep], XB[:, keep], list(range(len(keep))), ratings=r_idx, window=MATCH_WINDOW)
     # rating leakage: R^2 of a linear map from the embedding (half A) to rating
     r = ratings[idx]
     Xr = np.hstack([EA, np.ones((len(EA), 1))])
     coef, *_ = np.linalg.lstsq(Xr, r, rcond=None)
     ss_res, ss_tot = ((r - Xr @ coef) ** 2).sum(), ((r - r.mean()) ** 2).sum()
     return {"embedding_top1": emb["top1"], "embedding_top5": emb["topk"], "raw_top1": raw["top1"], "raw_top5": raw["topk"],
-            "chance": emb["chance"], "rating_r2": float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan"), "n_heldout": len(idx)}
+            "chance": emb["chance"],
+            "matched_embedding_top1": emb_m["top1"], "matched_raw_top1": raw_m["top1"], "matched_chance": emb_m["chance"], "rating_r2": float(1 - ss_res / ss_tot) if ss_tot > 0 else float("nan"), "n_heldout": len(idx)}
 
 
 # ---- training (resumable) --------------------------------------------------------------------------------------------

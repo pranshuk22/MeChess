@@ -96,22 +96,26 @@ def _standardise(XA, XB, idx):
     return prep(XA), prep(XB)
 
 
-def identification(XA, XB, idx, top_k=5):
+def identification(XA, XB, idx, top_k=5, ratings=None, window=None):
     """Nearest-profile identification among all players: reference = half A, query = half B (and the reverse, averaged).
-    Returns accuracy, top-k accuracy and the chance level."""
+    With `ratings` and `window`, only candidates within `window` rating points of the true player compete (identification that
+    rating alone cannot explain). Returns accuracy, top-k accuracy and the chance level."""
+    n = len(XA)
     if len(idx) == 0:
-        return {"top1": float("nan"), "topk": float("nan"), "chance": 1.0 / len(XA), "n_features": 0}
+        return {"top1": float("nan"), "topk": float("nan"), "chance": 1.0 / n, "n_features": 0}
     A, B = _standardise(XA, XB, idx)
-    n = len(A)
+    allowed = np.ones((n, n), bool)
+    if window is not None and ratings is not None:
+        allowed = np.abs(ratings[:, None] - ratings[None, :]) <= window
     hits1 = hitsk = 0
     for ref, qry in ((A, B), (B, A)):
         d = ((qry[:, None, :] - ref[None, :, :]) ** 2).sum(-1)               # query i vs reference j
         true = d[np.arange(n), np.arange(n)][:, None]
-        rank = (d < true).sum(1)                                             # how many references are closer than the true one
-        ties = (d == true).sum(1) - 1                                        # identical distance: the true one is picked at random
+        rank = ((d < true) & allowed).sum(1)                                 # how many allowed references are closer than the true one
+        ties = ((d == true) & allowed).sum(1) - 1                            # identical distance: the true one is picked at random
         hits1 += ((rank == 0) / (1.0 + ties)).sum()
         hitsk += (rank + ties / 2.0 < top_k).sum()
-    return {"top1": hits1 / (2 * n), "topk": hitsk / (2 * n), "chance": 1.0 / n, "n_features": len(idx)}
+    return {"top1": hits1 / (2 * n), "topk": hitsk / (2 * n), "chance": float((1.0 / allowed.sum(1)).mean()), "n_features": len(idx)}
 
 
 def identification_by_family(XA, XB, rows, gated_only=False):

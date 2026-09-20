@@ -57,7 +57,7 @@ def test_a_feature_that_only_tracks_rating_is_not_kept_when_net_reliability_is_l
 def test_identification_beats_chance_with_signal_and_matches_chance_without():
     XA, XB, R = synth(n=100, signal=(0, 1, 2, 3, 4), noise=0.2)
     good = S.identification(XA, XB, [0, 1, 2, 3, 4])
-    assert good["top1"] > 0.8 and good["topk"] >= good["top1"] and good["chance"] == 0.01
+    assert good["top1"] > 0.8 and good["topk"] >= good["top1"] and good["chance"] == pytest.approx(0.01)
     bad = S.identification(XA, XB, [10, 11, 12])
     assert bad["top1"] < 0.15
     assert S.identification(XA, XB, [])["n_features"] == 0
@@ -153,3 +153,14 @@ def test_excluded_artefact_feature_never_counts():
     rows = rows_for(XA, XB, R)
     assert rows[j]["coverage"] == 0.0 and not S.passes_gate(rows[j])
     assert S.identification_by_family(XA, XB, rows)["all"]["n_features"] == sum(r["coverage"] >= 0.6 for r in rows)
+
+
+def test_rating_matched_identification_only_lets_close_ratings_compete():
+    XA, XB, R = synth(n=60, signal=(0, 1, 2), noise=0.3)
+    R = np.linspace(1500, 2500, 60)
+    plain = S.identification(XA, XB, [0, 1, 2])
+    matched = S.identification(XA, XB, [0, 1, 2], ratings=R, window=100)
+    assert matched["chance"] > plain["chance"] and matched["top1"] >= plain["top1"] - 1e-9
+    assert matched["chance"] == pytest.approx(np.mean([1 / (np.abs(R - r) <= 100).sum() for r in R]))
+    # with a window wider than the whole rating range nothing is excluded
+    assert S.identification(XA, XB, [0, 1, 2], ratings=R, window=10 ** 6)["top1"] == pytest.approx(plain["top1"])

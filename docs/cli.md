@@ -85,6 +85,10 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-rates` | Reliability across the cohort of plain habit rates (no engine); with `--anchors` whether they separate the anchors, with `--player` a player's habit profile |
 | `style-status` | One-screen status of the long jobs: running processes, progress, ETA, latest log lines (`--watch N` to refresh) |
 | `style-anchors-report` | Can the features tell the anchors apart? Which anchor is closest to you? |
+| `style-games-fetch` | Refetch each cohort player's games with clocks and openings and compute the game-level features (resumable; `chessme control pause fetch2`) |
+| `style-games-report` | Reliability of the game-level features, the pre-fixed keep rule, identification of players (with the time-control-only baseline) and held-out factors |
+| `style-embed-train` | Train the contrastive player embedding on the game-level features (resumable, pausable); reports held-out identification, also among rating-matched players, and how much of the embedding is rating |
+| `analyse PGN` | Analyse the games of a PGN file with Stockfish: every move classed (book, brilliant, great, best, excellent, good, inaccuracy, mistake, miss, blunder), accuracy by phase, opportunism / luck, conversion / resourcefulness, biggest mistakes; one file per game, so a stopped run resumes (`--player NAME` picks a side, `--nodes N` fixes the budget) |
 
 ## Engine UCI options
 
