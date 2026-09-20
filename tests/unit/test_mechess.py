@@ -257,7 +257,7 @@ def test_go_answers_with_a_legal_move_for_the_given_position():
 
 def test_elo_option_reaches_the_controller_and_is_clamped():
     fc, _ = session("setoption name Elo value 2000\nposition startpos\ngo\nsetoption name Elo value 99999\ngo\nquit\n")
-    assert [e[0] for e in fc.elo_seen] == [2000, 2800]
+    assert [e[0] for e in fc.elo_seen] == [2000, 4000]   # clamped to the option range (0..4000)
     fc, _ = session("setoption name OppElo value 1500\nsetoption name Platform value 1\nposition startpos\ngo\n")
     assert fc.elo_seen[0][1:] == (1500, 1)
 
@@ -326,3 +326,13 @@ class TestBlunderKnobAndTables:
         u = MechessUci(m, inp=io.StringIO("position startpos\ngo\nquit\n"), out=out, elo=1500)
         u.run()
         assert "info string blunder" in out.getvalue()
+
+
+def test_the_uci_elo_option_accepts_labels_below_800():
+    """Regression: the Elo option was clamped to 800..2800, so dial labels 400 and 600 silently played as 800."""
+    from chessme.mechess.uci import OPTIONS
+    assert OPTIONS["Elo"][1] <= 0 and OPTIONS["Elo"][2] >= 3500
+    m = mc(LINES, prior_of({"e2e4": 1, "d2d4": 1}), {400: (60, 4, 100, 1.0, 50.0, 0), 1800: (60, 4, 100, 1.0, 50.0, 0)})
+    u = MechessUci(m, inp=io.StringIO("setoption name Elo value 400\nquit\n"), out=io.StringIO(), elo=1800)
+    u.run()
+    assert u.opts["Elo"] == 400

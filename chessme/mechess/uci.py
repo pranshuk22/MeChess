@@ -5,7 +5,7 @@ import chess
 
 from .controller import MeChess
 
-OPTIONS = {"Elo": (1800, 800, 2800), "OppElo": (0, 0, 3000), "Platform": (0, 0, 1), "Seed": (0, 0, 2**31 - 1)}
+OPTIONS = {"Elo": (1800, 0, 4000), "OppElo": (0, 0, 3000), "Platform": (0, 0, 1), "Seed": (0, 0, 2**31 - 1)}
 
 
 class MechessUci:
