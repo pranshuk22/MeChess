@@ -104,3 +104,4 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `MeNetFile`, `MeRating`, `MeOppRating`, `MePlatform` | | use an exported "me" network as the move prior (C++ inference) |
 
 Search limits: `go nodes N`, `go depth D`, `go movetime MS`, plus the usual clock arguments.
+| `theory-book --out FILE` | Build an opening book of known theory for both colours from the CC0 Lichess opening names (`--download` fetches them), weighted by what players in a rating band play (`--games COHORT --band LO HI`, or `--pgn FILES`). Popular moves beyond the names are added when played often enough. `mechess --book DIR` picks the band of the target Elo from files named `theory_LO_HI.bin` |

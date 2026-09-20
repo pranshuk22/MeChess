@@ -19,7 +19,7 @@ def run(tmp_path, *extra):
 
 
 def test_analyse_writes_games_and_report_and_resumes(tmp_path):
-    r = run(tmp_path)
+    r = run(tmp_path, "--openings-dir", str(tmp_path / "no_names"))         # no opening names: every move is classed by its loss
     assert r.returncode == 0, r.stderr
     files = list((tmp_path / "out" / "games").glob("*.json"))
     assert len(files) == 1
@@ -28,5 +28,15 @@ def test_analyse_writes_games_and_report_and_resumes(tmp_path):
     assert any(m["class"] in ("mistake", "blunder") and m["move"] in ("f6", "fxe5") for m in data["moves"])
     assert "Game analysis: Bob" in (tmp_path / "out" / "report.md").read_text()
     before = files[0].stat().st_mtime_ns
-    assert run(tmp_path).returncode == 0
+    assert run(tmp_path, "--openings-dir", str(tmp_path / "no_names")).returncode == 0
     assert files[0].stat().st_mtime_ns == before          # the finished game is not analysed again
+
+
+def test_analyse_marks_theory_moves_as_book_when_opening_names_are_given(tmp_path):
+    names = tmp_path / "names"
+    names.mkdir()
+    (names / "a.tsv").write_text("eco\tname\tpgn\nC44\tKing's Pawn Game\t1. e4 e5 2. Nf3\n")
+    r = run(tmp_path, "--openings-dir", str(names))
+    assert r.returncode == 0, r.stderr
+    data = json.loads(next((tmp_path / "out" / "games").glob("*.json")).read_text())
+    assert [m["class"] for m in data["moves"][:3]] == ["book", "book", "book"] and data["moves"][3]["class"] != "book"      # 2...f6 is not theory

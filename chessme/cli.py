@@ -648,6 +648,15 @@ def cmd_analyse(args):
             games.append(g)
     games = games[: args.limit] if args.limit else games
     ctl = JobControl(args.job, args.control_dir, log=log)
+    book = None
+    tsvs = sorted(Path(args.openings_dir).glob("*.tsv")) if args.openings_dir else []
+    if tsvs:
+        from .book import theory as _TH
+        positions = _TH.theory_positions(_TH.load_lines(tsvs))
+        book = lambda board, move: _TH.is_theory(board, move, positions)
+        log(f"Book class from {len(positions)} theory moves in {args.openings_dir}")
+    else:
+        log(f"no opening names in {args.openings_dir} (run `chessme theory-book --download` once): moves in theory are classed by loss like any other")
     log(f"=== analyse {args.pgn}: {len(games)} games, {args.nodes} nodes/position, output {out}")
     done = failed = 0
     with UciEngine([args.engine], options={"Threads": 1, "Hash": 64}) as eng, ctl.signals():
@@ -661,7 +670,7 @@ def cmd_analyse(args):
                     done += 1
                     continue
                 try:
-                    res = AR.analyse_game(g, search)
+                    res = AR.analyse_game(g, search, book=book)
                 except Exception as e:      # a game the engine cannot finish must not stop the batch
                     failed += 1
                     log(f"  {key}: FAILED {e!r}")
@@ -810,6 +819,35 @@ def cmd_books_preflight(args):
     ok = PF.run(args.out, need_gpu=args.need_gpu, need_transformers=args.backend == "transformer", model_name=args.model if args.backend == "transformer" else None,
                 min_free_gb=args.min_free_gb, network=not args.no_network)
     sys.exit(0 if ok else 1)
+
+
+def cmd_theory_book(args):
+    from .book import theory as TH
+    from .book.format import write_book
+    from .books import openings as OP
+    log = _file_logger(args.log)
+    od = Path(args.openings_dir)
+    if not list(od.glob("*.tsv")):
+        if not args.download:
+            sys.exit(f"no opening files in {od}; rerun with --download (5 small CC0 files from the Lichess chess-openings dataset)")
+        OP.download(od)
+    lines = TH.load_lines(sorted(od.glob("*.tsv")))
+    band = tuple(args.band) if args.band else None
+    games = []
+    if args.games:
+        games = TH.games_from_cohort(args.games, band)
+    if args.pgn:
+        import itertools
+        games = itertools.chain(games, TH.games_from_pgn(args.pgn, band))
+    entries, stats = TH.build(lines, games, max_ply=args.max_ply, min_games=args.min_games, min_share=args.min_share,
+                              extend_min_games=args.extend_min_games, extend_min_share=args.extend_min_share)
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    write_book(out, entries)
+    report = TH.render(stats, band)
+    out.with_name(out.stem + "_report.md").write_text(report)
+    log(f"theory book {out}: {stats}")
+    print(report)
 
 
 def cmd_style_status(args):
@@ -965,7 +1003,12 @@ def cmd_mechess(args):
         raise SystemExit("--prior must be uniform, ours=CHECKPOINT or maia3=CHECKPOINT")
     engine = UciEngine([args.engine]).start()
     try:
-        book = BookReader(args.book) if args.book else None
+        book_path = args.book
+        if book_path and Path(book_path).is_dir():                       # a folder of theory books: pick the band of the target Elo
+            from .book import theory as _TH
+            book_path = _TH.pick_book(book_path, args.elo)
+            print(f"theory book for Elo {args.elo}: {book_path}", file=sys.stderr)
+        book = BookReader(book_path) if book_path else None
         from .mechess.calibration import Calibration
         cal = Calibration.load(args.calibration) if args.calibration else None
         from .mechess import dial
@@ -1255,6 +1298,15 @@ def main():
     bk.add_argument("--out", default="data/books"); bk.add_argument("--only", nargs="*", help="book ids"); bk.add_argument("--pause", type=float, default=3.0)
     bk.add_argument("--log", default="data/books/books.log")
     bk.set_defaults(func=cmd_books_fetch)
+    tb = sub.add_parser("theory-book", help="build an opening book of known theory (both colours), weighted by what players at a rating band play")
+    tb.add_argument("--out", required=True); tb.add_argument("--openings-dir", default="data/opening_names"); tb.add_argument("--download", action="store_true", help="fetch the CC0 opening list if missing")
+    tb.add_argument("--games", help="cohort folder with games/ (style-games-fetch output) for popularity"); tb.add_argument("--pgn", nargs="*", help="extra PGN files for popularity")
+    tb.add_argument("--band", nargs=2, type=int, metavar=("LO", "HI"), help="only games of players rated in this range")
+    tb.add_argument("--max-ply", type=int, default=20); tb.add_argument("--min-games", type=int, default=2); tb.add_argument("--min-share", type=float, default=0.03)
+    tb.add_argument("--extend-min-games", type=int, default=15, help="also follow popular moves beyond the opening names (0: named lines only)")
+    tb.add_argument("--extend-min-share", type=float, default=0.08)
+    tb.add_argument("--log", default="data/book/theory.log")
+    tb.set_defaults(func=cmd_theory_book)
     bl = sub.add_parser("books-learn", help="everything from books and annotated games in one command: books, concept-line pairs, annotated archive, report (resumable)")
     bl.add_argument("--out", default="data/books_learn"); bl.add_argument("--steps", nargs="+", default=["books", "pairs", "annotated", "prose", "report"],
                                                                         choices=["books", "pairs", "annotated", "prose", "report"])
@@ -1312,6 +1364,7 @@ def main():
     an = sub.add_parser("analyse", help="analyse the games of a PGN file with Stockfish: move classes, accuracy, report (resumable, pausable)")
     an.add_argument("pgn"); an.add_argument("--out", default="data/analysis"); an.add_argument("--player", help="report on this player's side (PGN name)")
     an.add_argument("--engine", default="stockfish"); an.add_argument("--nodes", type=int, default=200000, help="nodes per position (fixed, machine independent)")
+    an.add_argument("--openings-dir", default="data/opening_names", help="Lichess opening names (from `theory-book --download`): moves in named theory are classed Book")
     an.add_argument("--limit", type=int); an.add_argument("--job", default="analyse"); an.add_argument("--control-dir", default="data/control")
     an.add_argument("--log", default="data/analysis/analyse.log")
     an.set_defaults(func=cmd_analyse)
