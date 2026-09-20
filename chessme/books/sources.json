@@ -1,0 +1,104 @@
+{
+ "note": "Public-domain texts only (each verified to exist on 2026-09-21). Copyright status depends on country and the author's death date: check before relying on a work outside the US. Modern books are NOT listed and must not be added.",
+ "books": [
+  {
+   "id": "capablanca-chess-fundamentals",
+   "author": "Capablanca",
+   "title": "Chess Fundamentals",
+   "year": 1921,
+   "notation": "descriptive",
+   "gutenberg": 33870,
+   "archive": "chessfundamental00capa"
+  },
+  {
+   "id": "e-lasker-chess-strategy",
+   "author": "Edward Lasker",
+   "title": "Chess Strategy",
+   "year": 1921,
+   "notation": "descriptive",
+   "gutenberg": 5614,
+   "archive": "chessstrategy00lask"
+  },
+  {
+   "id": "e-lasker-chess-and-checkers",
+   "author": "Edward Lasker",
+   "title": "Chess and Checkers: the Way to Mastership",
+   "year": null,
+   "notation": "descriptive",
+   "gutenberg": 4913
+  },
+  {
+   "id": "nimzowitsch-my-system",
+   "author": "Nimzowitsch",
+   "title": "My System",
+   "year": 1925,
+   "notation": "algebraic",
+   "archive": "nimzowitsch-my-system",
+   "archive_file": "nimzowitsch - my system_djvu.txt"
+  },
+  {
+   "id": "em-lasker-manual",
+   "author": "Emanuel Lasker",
+   "title": "Lasker's Manual of Chess",
+   "year": 1925,
+   "notation": "descriptive",
+   "archive": "lasker-s-manual-of-chess"
+  },
+  {
+   "id": "em-lasker-common-sense",
+   "author": "Emanuel Lasker",
+   "title": "Common Sense in Chess",
+   "year": 1910,
+   "notation": "descriptive",
+   "archive": "commonsenseinche00laskrich"
+  },
+  {
+   "id": "znosko-middle-game",
+   "author": "Znosko-Borovsky",
+   "title": "The Middle Game in Chess",
+   "year": 1922,
+   "notation": "descriptive",
+   "archive": "middlegameinches00znos"
+  },
+  {
+   "id": "steinitz-modern-instructor",
+   "author": "Steinitz",
+   "title": "The Modern Chess Instructor",
+   "year": 1889,
+   "notation": "descriptive",
+   "archive": "modernchessinstr00steirich"
+  },
+  {
+   "id": "morphy-games",
+   "author": "Morphy / Lowenthal",
+   "title": "Morphy's Games of Chess",
+   "year": 1898,
+   "notation": "descriptive",
+   "archive": "morphysgamesofch00morpiala"
+  },
+  {
+   "id": "young-grand-tactics",
+   "author": "Young",
+   "title": "The Grand Tactics of Chess",
+   "year": 1897,
+   "notation": "descriptive",
+   "archive": "grandtacticsofch00younrich"
+  },
+  {
+   "id": "staunton-blue-book",
+   "author": "Staunton",
+   "title": "The Blue Book of Chess",
+   "year": null,
+   "notation": "descriptive",
+   "gutenberg": 16377
+  },
+  {
+   "id": "tartakower-hypermodern",
+   "author": "Tartakower",
+   "title": "Die hypermoderne Schachpartie",
+   "year": 1924,
+   "notation": "german",
+   "archive": "diehypermodernes00tart_0"
+  }
+ ]
+}

@@ -724,6 +724,16 @@ def cmd_style_quality_report(args):
         print(f"identification among rating-matched players from the kept quality features alone: top-1 {100 * res['top1']:.1f}% (chance {100 * res['chance']:.1f}%)")
 
 
+def cmd_books_fetch(args):
+    from .books import fetch as BF
+    log = _file_logger(args.log)
+    books = BF.load_sources()
+    if args.only:
+        books = [b for b in books if b["id"] in args.only]
+    log(f"=== books-fetch: {len(books)} books -> {args.out}")
+    log(str(BF.run(args.out, books, pause=args.pause, log=log)))
+
+
 def cmd_style_status(args):
     import time
 
@@ -1163,6 +1173,10 @@ def main():
     gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
     gf.add_argument("--log", default="data/style/logs/games_fetch.log")
     gf.set_defaults(func=cmd_style_games_fetch)
+    bk = sub.add_parser("books-fetch", help="download the public-domain chess books in books/sources.json and extract game lines and concept counts")
+    bk.add_argument("--out", default="data/books"); bk.add_argument("--only", nargs="*", help="book ids"); bk.add_argument("--pause", type=float, default=3.0)
+    bk.add_argument("--log", default="data/books/books.log")
+    bk.set_defaults(func=cmd_books_fetch)
     sq = sub.add_parser("style-games-quality", help="engine move-quality features (accuracy, class rates, conversion...) for a sample of the cohort (resumable, pausable)")
     sq.add_argument("--data", default="data/style/cohort2"); sq.add_argument("--engine", default="stockfish")
     sq.add_argument("--nodes", type=int, default=25000); sq.add_argument("--games", type=int, default=10); sq.add_argument("--players", type=int, default=400)
