@@ -174,3 +174,22 @@ def test_training_logs_each_heads_loss_and_a_validation_check_every_few_steps(tm
     step_lines = [l for l in logs if l.startswith("step ")]
     assert step_lines and "concepts " in step_lines[0] and "judgement " in step_lines[0] and "evaluation " in step_lines[0] and "wobble" in step_lines[0]
     assert any("step 5 validation" in l or "step 10 validation" in l for l in logs) and any("epoch 1 validation" in l for l in logs)
+
+
+def test_the_validation_sample_includes_glyph_labelled_examples_even_when_they_come_last():
+    plain = [N._example(f"white plays a quiet move number {i} here and it is fine", f"g{i}", "gameknot") for i in range(3000)]
+    labelled = [N._example(f"a terrible blunder number {i} which is not good at all", f"h{i}", "pathtochessmastery", judgement=5, evaluation=3) for i in range(100)]
+    ex = plain + labelled
+    prefix_has_labels = any(e["judgement"] >= 0 for e in ex[:2000])
+    sample = N.val_sample(ex, 200)
+    assert not prefix_has_labels and sum(e["judgement"] >= 0 for e in sample) == 100 and len(sample) == 200
+    assert [e["text"] for e in N.val_sample(ex, 200)] == [e["text"] for e in sample]                        # deterministic
+
+
+def test_progress_validation_lines_measure_all_three_heads_when_glyphs_are_rare_and_late(tmp_path):
+    plain = [N._example(f"white plays a careful move number {i} in the position and black replies", f"p{i}", "gameknot") for i in range(1500)]
+    labelled = [N._example(f"what a terrible blunder number {i}, a complete disaster for white", f"q{i}", "pathtochessmastery", judgement=5, evaluation=6) for i in range(300)]
+    logs = []
+    N.train(plain + labelled, tmp_path, backend="bow", epochs=1, batch=32, dim=32, val_every=10, ckpt_every=10 ** 9, log=logs.append)
+    lines = [l for l in logs if "validation:" in l]
+    assert lines and all("judgement acc nan" not in l and "evaluation acc nan" not in l for l in lines)      # (concept AP is legitimately nan: no concept occurs here)

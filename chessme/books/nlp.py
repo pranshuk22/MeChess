@@ -125,6 +125,17 @@ def build_examples(*, annotated=None, prose_dir=None, books_dir=None, max_per_ki
     return out
 
 
+def val_sample(examples, n, seed=0):
+    """A validation sample for progress checks: up to half of it glyph-labelled examples (so the judgement and evaluation heads can be measured),
+    the rest random. The first examples of a list come from one source (GameKnot, no glyphs at all), so taking a prefix measures nothing."""
+    rng = np.random.default_rng(seed)
+    lab = [e for e in examples if e["judgement"] >= 0 or e["eval"] >= 0]
+    rest = [e for e in examples if e["judgement"] < 0 and e["eval"] < 0]
+    take_lab = lab if len(lab) <= n // 2 else [lab[i] for i in rng.choice(len(lab), n // 2, replace=False)]
+    take_rest = [rest[i] for i in rng.choice(len(rest), min(len(rest), n - len(take_lab)), replace=False)] if rest else []
+    return take_lab + take_rest
+
+
 def split_of(group, val=0.1, test=0.1):
     """'train' / 'val' / 'test' from a stable hash of the group (a whole game or document stays on one side)."""
     r = (zlib.crc32(group.encode()) % 1000) / 1000.0
@@ -329,6 +340,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         opt.load_state_dict(st["opt"])
         step, history = st["step"], st["history"]
         log(f"resuming from step {step}")
+    val_small = val_sample(parts["val"], 2000)
     train_ex = parts["train"]
     per_epoch = (len(train_ex) + batch - 1) // batch
     total = 40 if dry_run else epochs * per_epoch
@@ -383,15 +395,15 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
                 mean = lambda i: (np.mean([x[i] for x in w if x[i] is not None]) if any(x[i] is not None for x in w) else float("nan"))
                 log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} = concepts {mean(0):.3f} + judgement {mean(1):.3f} + evaluation {mean(2):.3f} "
                     f"(the last two exist only in batches that contain a glyph: expect this total to wobble by +-0.2; {(time.time() - t0) / 60:.1f} min)")
-            if not dry_run and val_every and step % val_every == 0 and step % per_epoch != 0 and parts["val"]:
-                v = evaluate(model, parts["val"][:1500], mask=mask, batch=batch)
+            if not dry_run and val_every and step % val_every == 0 and step % per_epoch != 0 and val_small:
+                v = evaluate(model, val_small, mask=mask, batch=batch)
                 log(f"  step {step} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
                     f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
                     f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
             if step % ckpt_every == 0:
                 save()
             if not dry_run and step % per_epoch == 0 and parts["val"]:            # a learning curve in the log, once per epoch
-                v = evaluate(model, parts["val"][:2000], mask=mask, batch=batch)
+                v = evaluate(model, val_small, mask=mask, batch=batch)
                 log(f"epoch {step // per_epoch} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
                     f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
                     f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
