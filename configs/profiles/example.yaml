@@ -1,0 +1,41 @@
+# Example profile: copy this file to configs/profiles/<your-name>.yaml and edit it (your copy is git-ignored, so your
+# account names never leave your machine). Select it with --profile <your-name> or `export CHESSME_PROFILE=<your-name>`.
+profile: example
+accounts:                                  # every account whose games should count as "you"
+  - {platform: lichess,  username: your_lichess_name}
+  - {platform: lichess,  username: your_second_lichess_name}     # optional: as many accounts as you like
+  - {platform: chesscom, username: your_chesscom_name}
+# LICHESS_TOKEN is read from the environment (optional, raises API rate limits); never put it in this file.
+paths:
+  raw: data/raw                            # downloaded PGN files go here (git-ignored)
+# The Elo dial range MeChess can be set to. Lichess and chess.com rating scales are kept SEPARATE
+# (chess.com ratings run roughly 200-300 points lower); the dial is defined on one scale, chosen with `scale`.
+rating_range: {min: 1200, max: 2200, default: 1800, scale: lichess, presets: {current: 1800, peak: 2000}}
+
+filters:
+  # Ignore games where your rating at the time was below the floor (per platform scale).
+  min_rating: {lichess: 1400, chesscom: 1200}
+  # Recent games count more: weight = max(min_weight, 0.5 ** (age_days / half_life_days)),
+  # age measured from the newest game in the data (reproducible, not from today's date).
+  recency: {half_life_days: 1460, min_weight: 0.1}
+  # Per time class. A number = flat weight. A mapping = trusted early, down-weighted later:
+  # plies < full_until_ply get weight 1.0, later plies get late_weight
+  # (fast games are reliable in the opening, noisy once the clock runs down).
+  time_class_weights:
+    ultrabullet: {full_until_ply: 20, late_weight: 0.1}
+    bullet:      {full_until_ply: 20, late_weight: 0.1}
+    blitz: 1.0
+    rapid: 1.0
+    classical: 1.0
+    correspondence: 0.0                    # engine-assisted / not comparable to live play
+    daily: 0.0
+
+book:
+  max_ply: 30              # the book never reaches past this many plies from the start
+  min_games: 2             # a move must have been played at least this often at that position
+  min_position_games: 2    # ...and the position reached at least this often with you to move
+  min_share: 0.05          # ...and be at least this share of your (weighted) moves there
+  sanity: {depth: 10, max_cp_loss: 80}   # only used when `chessme book --sanity-engine` is given
+
+# Lichess data used to pretrain the "me" model (a wide range gives the model many rating levels to learn from).
+lichess_pretrain: {rating_min: 1100, rating_max: 2600, bin_width: 100}
