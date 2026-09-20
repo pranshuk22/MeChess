@@ -453,6 +453,36 @@ def cmd_style_anchors_report(args):
     (Path(args.out) / "anchor_report.txt").write_text(text)
 
 
+def _ladder_args(args):
+    from . import openings
+    from .match import SearchLimit
+    fens = openings.read_openings(args.openings) if args.openings else openings.random_openings(args.random_openings, seed=args.seed)
+    return fens, SearchLimit(movetime=args.movetime), dict(
+        pairs_per_round=args.pairs, target_se=args.se, min_games=args.min_games, max_games=args.max_games,
+        concurrency=args.concurrency)
+
+
+def cmd_strength(args):
+    from . import calibrate
+    from .match import EngineSpec
+    fens, limit, kw = _ladder_args(args)
+    spec = EngineSpec.make(Path(args.engine).name, args.engine, _opts(args.opt))
+    r = calibrate.measure(spec, args.opponent, fens, limit, start=args.start, log=lambda m: print(m, flush=True), **kw)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(json.dumps(r, indent=1))
+    print(f"\n{r['name']}: {r['elo']:.0f} +/- {r['ci95']:.0f} Elo on the {r['opponent']} UCI_Elo scale "
+          f"(movetime {r['limit'].get('movetime')} ms, {r['games']} games, {r['stop']}) -> {args.out}")
+
+
+def cmd_calibrate(args):
+    from . import calibrate
+    fens, limit, kw = _ladder_args(args)
+    command = calibrate.mechess_command(args.engine, args.prior, args.book)
+    calibrate.calibrate_dial(args.dial, command, args.opponent, fens, limit, args.out, redo=args.redo, offset=args.offset,
+                             log=lambda m: print(m, flush=True), **kw)
+    print(f"\ncalibration written to {args.out}; use it with:  chessme mechess --calibration {args.out} --elo <target>")
+
+
 def cmd_style_status(args):
     import time
 
@@ -607,7 +637,9 @@ def cmd_mechess(args):
     engine = UciEngine([args.engine]).start()
     try:
         book = BookReader(args.book) if args.book else None
-        mc = MeChess(engine, prior, book, seed=args.seed or None)
+        from .mechess.calibration import Calibration
+        cal = Calibration.load(args.calibration) if args.calibration else None
+        mc = MeChess(engine, prior, book, seed=args.seed or None, calibration=cal)
         MechessUci(mc, elo=args.elo).run()
     finally:
         engine.close()
@@ -825,6 +857,25 @@ def main():
     ar.add_argument("--player", help="dataset folder (train.npz / test.npz) of the player to rank against the anchors")
     ar.add_argument("--chunk", type=int, default=30)
     ar.set_defaults(func=cmd_style_anchors_report)
+    stg = sub.add_parser("strength", help="measure an engine's strength by an adaptive ladder against Stockfish UCI_Elo")
+    stg.add_argument("--engine", default=str(ENGINE_BIN)); stg.add_argument("--opt", action="append", default=[])
+    stg.add_argument("--start", type=int, help="first guess of the engine's Elo"); stg.add_argument("--out", default="data/calibration/engine_strength.json")
+    cal = sub.add_parser("calibrate", help="measure MeChess at several dial settings against Stockfish and write a calibration file")
+    cal.add_argument("--engine", default=str(ENGINE_BIN)); cal.add_argument("--book"); cal.add_argument("--prior", default="uniform")
+    cal.add_argument("--dial", type=int, nargs="+", default=[1200, 1500, 1800, 2100, 2400])
+    cal.add_argument("--out", default="data/calibration/dial.json"); cal.add_argument("--redo", action="store_true")
+    cal.add_argument("--offset", type=float, default=0.0, help="shift measured Elo to another scale (only after validating it)")
+    for lp in (stg, cal):
+        lp.add_argument("--opponent", default="stockfish", help="UCI engine with UCI_Elo support used as the ladder")
+        lp.add_argument("--openings", help="file of opening FENs (default: random 6-ply openings)")
+        lp.add_argument("--random-openings", type=int, default=200); lp.add_argument("--seed", type=int, default=1)
+        lp.add_argument("--movetime", type=int, default=100, help="milliseconds per move for both sides")
+        lp.add_argument("--pairs", type=int, default=5, help="opening pairs (2 games each) per ladder round")
+        lp.add_argument("--se", type=float, default=35.0, help="stop when the standard error is this small (95%% CI = 1.96 x)")
+        lp.add_argument("--min-games", type=int, default=40); lp.add_argument("--max-games", type=int, default=400)
+        lp.add_argument("--concurrency", type=int, default=1)
+    stg.set_defaults(func=cmd_strength)
+    cal.set_defaults(func=cmd_calibrate)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
@@ -840,6 +891,7 @@ def main():
     sr.add_argument("--label", default="you"); sr.add_argument("--out", default="data/style/style_report.md")
     sr.set_defaults(func=cmd_style_report)
     mch = sub.add_parser("mechess", help="run MeChess as a UCI engine (book + engine candidates + prior + rating dial)")
+    mch.add_argument("--calibration", help="calibration file from `chessme calibrate`: --elo / the Elo option then mean the measured Elo")
     mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book")
     mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT")
     mch.add_argument("--maia3-repo"); mch.add_argument("--maia3-size", default="5m"); mch.add_argument("--extra-path")
