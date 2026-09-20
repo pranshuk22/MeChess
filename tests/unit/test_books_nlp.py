@@ -172,7 +172,7 @@ def test_training_logs_each_heads_loss_and_a_validation_check_every_few_steps(tm
     logs = []
     N.train(synth(600), tmp_path, backend="bow", epochs=2, batch=32, dim=32, val_every=5, ckpt_every=10 ** 9, log=logs.append)
     step_lines = [l for l in logs if l.startswith("step ")]
-    assert step_lines and "concepts " in step_lines[0] and "judgement " in step_lines[0] and "evaluation " in step_lines[0] and "wobble" in step_lines[0]
+    assert step_lines and "concepts " in step_lines[0] and "judgement " in step_lines[0] and "evaluation " in step_lines[0] and "smoothed" in step_lines[0]
     assert any("step 5 validation" in l or "step 10 validation" in l for l in logs) and any("epoch 1 validation" in l for l in logs)
 
 
@@ -193,3 +193,103 @@ def test_progress_validation_lines_measure_all_three_heads_when_glyphs_are_rare_
     N.train(plain + labelled, tmp_path, backend="bow", epochs=1, batch=32, dim=32, val_every=10, ckpt_every=10 ** 9, log=logs.append)
     lines = [l for l in logs if "validation:" in l]
     assert lines and all("judgement acc nan" not in l and "evaluation acc nan" not in l for l in lines)      # (concept AP is legitimately nan: no concept occurs here)
+
+
+# ---- steadiness of training ---------------------------------------------------------------------------------------------
+
+def test_the_learning_rate_warms_up_then_decays_to_a_floor():
+    total = 1000
+    f = [N.lr_factor(s, total) for s in range(total)]
+    w = int(total * 0.06)
+    assert f[0] < 0.05 and abs(f[w - 1] - 1.0) < 1e-9 and all(a <= b for a, b in zip(f[:w], f[1:w]))          # warm-up rises to the base rate
+    assert all(a >= b for a, b in zip(f[w:], f[w + 1:])) and abs(f[-1] - 0.05) < 0.01 and min(f) >= 0.05        # then falls, never below the floor
+    assert N.lr_factor(3, 0) == 1.0
+
+
+class Recorder(N.BowEncoder):
+    """A bag-of-words encoder that remembers the texts of every training batch (and can inject a NaN once)."""
+    def __init__(self, nan_at=None):
+        super().__init__(32)
+        self.batches, self.calls, self.nan_at = [], 0, nan_at
+
+    def forward(self, texts):
+        if self.training:
+            self.batches.append(list(texts))
+            self.calls += 1
+        out = super().forward(texts)
+        if self.training and self.nan_at is not None and self.calls == self.nan_at:
+            out = out * float("nan")
+        return out
+
+
+def labelled_pool(n_plain=600, n_lab=24):
+    plain = [N._example(f"plain comment number {i} about a quiet and careful move in the position", f"p{i}", "gameknot") for i in range(n_plain)]
+    lab = [N._example(f"LAB comment number {i} what a terrible blunder that was, a disaster", f"l{i}", "pathtochessmastery", judgement=5, evaluation=6) for i in range(n_lab)]
+    return plain + lab
+
+
+def test_every_training_batch_contains_glyph_labelled_examples_even_when_they_are_rare(tmp_path):
+    enc = Recorder()
+    N.train(labelled_pool(), tmp_path, backend="bow", epochs=1, batch=32, lab_per_batch=6, val_every=0, ckpt_every=10 ** 9, encoder=enc, log=lambda *_: None)
+    assert enc.batches and all(sum(t.startswith("LAB") for t in b) >= 6 for b in enc.batches)                       # 24 of 624 examples are labelled (4%), yet 6 of every 32
+    assert all(len(b) == 32 for b in enc.batches)
+
+
+def test_a_non_finite_gradient_never_reaches_the_weights(tmp_path):
+    enc = Recorder(nan_at=3)
+    res = N.train(labelled_pool(), tmp_path, backend="bow", epochs=1, batch=32, val_every=0, ckpt_every=10 ** 9, encoder=enc, device="cpu", log=lambda *_: None)
+    assert res["metrics"]["skipped_steps"] >= 1
+    assert all(torch.isfinite(p).all() for p in res["model"].parameters())
+
+
+def test_the_step_log_shows_the_learning_rate_factor_and_the_gradient_norm(tmp_path):
+    logs = []
+    N.train(labelled_pool(), tmp_path, backend="bow", epochs=2, batch=32, val_every=0, log=logs.append)
+    line = next(l for l in logs if l.startswith("step "))
+    assert "lr x" in line and "grad " in line and "smoothed" in line
+
+
+def test_the_best_validated_model_is_kept_not_merely_the_last(tmp_path, monkeypatch):
+    calls = {"n": 0}
+    real = N.evaluate
+
+    def fake(model, examples, mask=True, batch=64, thresholds=None):
+        v = real(model, examples, mask=mask, batch=batch, thresholds=thresholds)
+        calls["n"] += 1
+        v["concept_ap_macro"] = 1.0 / calls["n"]                                # every validation is worse than the first one
+        return v
+    monkeypatch.setattr(N, "evaluate", fake)
+    logs = []
+    res = N.train(labelled_pool(), tmp_path / "best", backend="bow", epochs=3, batch=32, val_every=0, keep_best=True, log=logs.append)
+    assert res["metrics"]["best_step"] is not None and res["metrics"]["selected"].startswith("best") and any("new best model" in l for l in logs)
+    assert (tmp_path / "best" / "model.pt").exists() and not (tmp_path / "best" / "best.pt").exists()
+    calls["n"] = 0
+    last = N.train(labelled_pool(), tmp_path / "last", backend="bow", epochs=3, batch=32, val_every=0, keep_best=False, log=lambda *_: None)
+    assert last["metrics"]["selected"] == "last"
+
+
+def test_load_uses_the_selected_weights_and_still_reads_older_checkpoints(tmp_path):
+    N.train(labelled_pool(), tmp_path, backend="bow", epochs=2, batch=32, dim=32, val_every=0, log=lambda *_: None)
+    model, cfg = N.load(tmp_path, device="cpu")
+    assert len(N.predict(model, ["a quiet move"], cfg)) == 1
+    (tmp_path / "model.pt").unlink()                                             # an old run only has ckpt.pt
+    model2, _ = N.load(tmp_path, device="cpu")
+    assert len(N.predict(model2, ["a quiet move"], cfg)) == 1
+
+
+def test_examples_are_grouped_by_game_id_so_a_game_never_spans_train_and_test(tmp_path):
+    ann = tmp_path / "a.jsonl.gz"
+    rows = [{"source": "gameknot", "game": i % 3, "game_id": f"gameknot:g{i // 40}", "comment": f"White plays a careful move number {i} in this position and it is fine", "nags": []}
+            for i in range(400)]
+    with gzip.open(ann, "wt") as f:
+        f.write("\n".join(json.dumps(r) for r in rows))
+    ex = N.build_examples(annotated=ann)
+    by_game = {}
+    for e in ex:
+        by_game.setdefault(e["group"], set()).add(N.split_of(e["group"]))
+    assert set(by_game) == {f"gameknot:g{i}" for i in range(10)} and all(len(v) == 1 for v in by_game.values())
+
+
+def test_missing_sources_are_reported():
+    have = [N._example(f"white plays a careful move number {i} and it is fine", f"g{i}", s) for i, s in enumerate(N.REQUIRED_SOURCES[:-2])]
+    assert N.missing_sources(have) == list(N.REQUIRED_SOURCES[-2:]) and N.missing_sources(have, required=("gameknot",)) == []

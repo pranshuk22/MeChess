@@ -33,6 +33,15 @@ CONCEPTS = list(T.LEXICON)
 JUDGEMENT = ["!!", "!", "!?", "?!", "?", "??"]
 EVAL_CLASSES = ["equal", "white slightly better", "white clearly better", "white winning", "black slightly better", "black clearly better", "black winning"]
 MASK = "unk"
+# everything a full training run is expected to contain; a missing source means an incomplete data notebook, found before any GPU time is spent
+REQUIRED_SOURCES = ("gameknot", "pgnlib", "pathtochessmastery", "lichess_studies", "chess_studies_lichess", "chess_studies_others", "chessgpt_annotated",
+                    "stackexchange", "wikipedia", "books")
+
+
+def missing_sources(examples, required=REQUIRED_SOURCES):
+    """The expected sources that have no example at all."""
+    have = {e["source"] for e in examples}
+    return [r for r in required if r not in have]
 
 
 # ---- examples --------------------------------------------------------------------------------------------------------
@@ -105,7 +114,7 @@ def build_examples(*, annotated=None, prose_dir=None, books_dir=None, max_per_ki
                 m = json.loads(line)
                 nags = m.get("nags") or []
                 if m["comment"]:
-                    add(_example(m["comment"], f"{m['source']}:{m['game']}", m["source"], judgement_class(nags), eval_class(nags)))
+                    add(_example(m["comment"], m.get("game_id") or f"{m['source']}:{m['game']}", m["source"], judgement_class(nags), eval_class(nags)))
     prose = Path(prose_dir) / "prose" if prose_dir else None
     if prose and (prose / "stackexchange.jsonl.gz").exists():
         with gzip.open(prose / "stackexchange.jsonl.gz", "rt", encoding="utf-8") as fh:
@@ -304,34 +313,65 @@ def _class_weights(values, n):
     return torch.tensor(w / w.mean(), dtype=torch.float32)
 
 
+def lr_factor(step, total, warmup=0.06, floor=0.05):
+    """Learning-rate multiplier: linear warm-up over the first `warmup` share of the steps, then linear decay down to `floor` of the base rate."""
+    if total <= 0:
+        return 1.0
+    w = max(1, int(total * warmup))
+    if step < w:
+        return (step + 1) / w
+    return max(floor, 1.0 - (1.0 - floor) * (step - w) / max(1, total - w))
+
+
+def _score(v):
+    """One number for model selection: concept average precision plus the macro-F1 of the two glyph heads (those that could be measured)."""
+    return sum(x for x in (v.get("concept_ap_macro"), v.get("judgement_f1_macro"), v.get("eval_f1_macro")) if x is not None and x == x)
+
+
+def _fmt_val(v):
+    return (f"concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
+            f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
+            f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
+
+
 def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", epochs=3, batch=64, lr=None, seed=0, mask=True,
-          dim=256, max_len=128, ckpt_every=500, val_every=1000, dry_run=False, deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
+          dim=256, max_len=128, ckpt_every=500, val_every=1000, warmup=0.06, clip=1.0, lab_per_batch=8, keep_best=True, dry_run=False,
+          deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
     """Train (or resume) the tagger on `examples` (from `build_examples`). Returns {"metrics", "stopped", "step"}.
-    `dry_run` uses at most 400 training examples for 20 steps and evaluates on what there is: the same code path, a few seconds.
+
+    Steadiness: the learning rate warms up and decays (`lr_factor`), gradients are clipped to norm `clip`, every batch contains `lab_per_batch`
+    glyph-labelled examples (the judgement and evaluation heads otherwise see about two labelled examples per batch of 64, which makes the
+    loss swing), and the model that is kept is the best validated one (`keep_best`), not merely the last.
+    `dry_run` uses 64 training examples for 40 steps and checks that the loss falls: the same code path, a few seconds.
     `deadline_minutes` is a wall-clock budget: at the deadline a checkpoint is written and the function returns stopped=True."""
     t0 = time.time()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    ckpt = out / "ckpt.pt"
+    ckpt, best_path = out / "ckpt.pt", out / "best.pt"
     device = device or _device()
     lr = lr or (5e-4 if backend == "bow" else 3e-5)
     parts = {k: [e for e in examples if split_of(e["group"]) == k] for k in ("train", "val", "test")}
     if dry_run:                                # the model must be able to memorise a handful of examples: proves the loss, heads and step work
         parts["train"] = parts["train"][:64]
         parts["val"], parts["test"] = parts["val"][:200], parts["test"][:200]
-        epochs, batch = 1, min(batch, 32)
+        epochs, batch, lab_per_batch = 1, min(batch, 32), 0
     if not parts["train"]:
         raise ValueError("no training examples")
+    train_ex = parts["train"]
+    lab_pool = [i for i, e in enumerate(train_ex) if e["judgement"] >= 0 or e["eval"] >= 0]
+    k_lab = min(lab_per_batch, batch // 4) if lab_pool else 0
+    regular = batch - k_lab
     cfg = {"backend": backend, "model_name": model_name, "epochs": epochs, "batch": batch, "lr": lr, "seed": seed, "mask": mask, "dim": dim,
-           "max_len": max_len, "n_train": len(parts["train"])}
+           "max_len": max_len, "n_train": len(train_ex), "warmup": warmup, "clip": clip, "lab_per_batch": k_lab}
     torch.manual_seed(seed)
     model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len)).to(device)
     heads = [p for n, p in model.named_parameters() if not n.startswith("enc.")]
     body = [p for n, p in model.named_parameters() if n.startswith("enc.")]
     # the classification heads start from random weights: they need a much larger step than a pretrained encoder
     opt = torch.optim.AdamW([{"params": body, "lr": lr}, {"params": heads, "lr": max(lr, 1e-3 if backend == "transformer" else lr)}], weight_decay=0.01)
+    base_lrs = [g["lr"] for g in opt.param_groups]
     scaler = torch.amp.GradScaler("cuda") if device == "cuda" else None
-    step, history, parts_log = 0, [], []
+    step, history, parts_log, ema, skipped, best_score, best_step = 0, [], [], None, 0, float("-inf"), None
     if ckpt.exists() and not dry_run:
         st = torch.load(ckpt, weights_only=False, map_location=device)
         if st["cfg"] != cfg:
@@ -339,20 +379,33 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         model.load_state_dict(st["model"])
         opt.load_state_dict(st["opt"])
         step, history = st["step"], st["history"]
+        best_score, best_step = st.get("best_score", float("-inf")), st.get("best_step")
         log(f"resuming from step {step}")
     val_small = val_sample(parts["val"], 2000)
-    train_ex = parts["train"]
-    per_epoch = (len(train_ex) + batch - 1) // batch
+    per_epoch = (len(train_ex) + regular - 1) // regular
     total = 40 if dry_run else epochs * per_epoch
     wj = _class_weights([e["judgement"] for e in train_ex], len(JUDGEMENT)).to(device)
     we = _class_weights([e["eval"] for e in train_ex], len(EVAL_CLASSES)).to(device)
     stopped = False
+    gnorms = []
 
     def save():
         if not dry_run:
             tmp = ckpt.with_suffix(".tmp")
-            torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": cfg, "history": history}, tmp)
+            torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": cfg, "history": history,
+                        "best_score": best_score, "best_step": best_step}, tmp)
             tmp.replace(ckpt)
+
+    def validate(label):
+        nonlocal best_score, best_step
+        v = evaluate(model, val_small, mask=mask, batch=batch)
+        sc = _score(v)
+        log(f"  {label} validation: {_fmt_val(v)}; selection score {sc:.3f}")
+        if keep_best and sc > best_score:
+            best_score, best_step = sc, step
+            torch.save(model.state_dict(), best_path)
+            log(f"  new best model at step {step}")
+        return v
 
     try:
         while step < total:
@@ -360,7 +413,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
             if dry_run:
                 epoch, i = 0, step % per_epoch                            # the same 64 examples again and again
             order = np.random.default_rng(seed * 1000 + epoch).permutation(len(train_ex))     # deterministic per epoch: resume-safe
-            idx = order[i * batch:(i + 1) * batch]
+            idx = list(order[i * regular:(i + 1) * regular])
+            if k_lab:                                                      # a fixed share of glyph-labelled examples in every batch
+                idx += list(np.random.default_rng(seed * 1_000_003 + step).choice(lab_pool, k_lab, replace=True))
             if ctl:
                 ctl.checkpoint()
             if deadline_minutes is not None and (time.time() - t0) / 60 >= deadline_minutes:
@@ -368,6 +423,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
                 log(f"time budget of {deadline_minutes} min reached at step {step}/{total}: saving a checkpoint")
                 break
             torch.manual_seed(seed * 1_000_003 + step)                 # dropout draws depend on the step only: resume gives the same run
+            f = lr_factor(step, total, warmup)
+            for g, base in zip(opt.param_groups, base_lrs):
+                g["lr"] = base * f
             b = [train_ex[j] for j in idx]
             texts = [mask_keywords(e["text"]) if mask else e["text"] for e in b]
             yc = torch.tensor([e["concepts"] for e in b], device=device)
@@ -382,39 +440,48 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
             opt.zero_grad()
             if scaler:
                 scaler.scale(loss).backward()
-                scaler.step(opt)
+                scaler.unscale_(opt)
+                gn = float(torch.nn.utils.clip_grad_norm_(model.parameters(), clip))
+                scaler.step(opt)                                            # skips the step by itself when the gradients overflowed
                 scaler.update()
             else:
                 loss.backward()
-                opt.step()
+                gn = float(torch.nn.utils.clip_grad_norm_(model.parameters(), clip))
+                if np.isfinite(gn):
+                    opt.step()
+                else:
+                    skipped += 1                                            # a non-finite gradient must never reach the weights
             step += 1
-            history.append(float(loss.detach()))
+            lv = float(loss.detach())
+            history.append(lv)
+            ema = lv if ema is None else 0.98 * ema + 0.02 * lv
+            gnorms.append(gn if np.isfinite(gn) else float("nan"))
             parts_log.append((float(l_c.detach()), None if l_j is None else float(l_j.detach()), None if l_e is None else float(l_e.detach())))
             if step % 50 == 0 or step == total:
                 w = parts_log[-50:]
                 mean = lambda i: (np.mean([x[i] for x in w if x[i] is not None]) if any(x[i] is not None for x in w) else float("nan"))
-                log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} = concepts {mean(0):.3f} + judgement {mean(1):.3f} + evaluation {mean(2):.3f} "
-                    f"(the last two exist only in batches that contain a glyph: expect this total to wobble by +-0.2; {(time.time() - t0) / 60:.1f} min)")
+                log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} (smoothed {ema:.3f}) = concepts {mean(0):.3f} + judgement {mean(1):.3f} + evaluation {mean(2):.3f}"
+                    f" | lr x{f:.2f} grad {np.nanmean(gnorms[-50:]):.2f}{f' skipped {skipped}' if skipped else ''} | {(time.time() - t0) / 60:.1f} min")
             if not dry_run and val_every and step % val_every == 0 and step % per_epoch != 0 and val_small:
-                v = evaluate(model, val_small, mask=mask, batch=batch)
-                log(f"  step {step} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
-                    f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
-                    f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
+                validate(f"step {step}")
             if step % ckpt_every == 0:
                 save()
-            if not dry_run and step % per_epoch == 0 and parts["val"]:            # a learning curve in the log, once per epoch
-                v = evaluate(model, val_small, mask=mask, batch=batch)
-                log(f"epoch {step // per_epoch} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
-                    f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
-                    f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
+            if not dry_run and step % per_epoch == 0 and val_small:            # a learning curve in the log, once per epoch
+                v = validate(f"epoch {step // per_epoch}")
                 if v.get("concept_ap_macro", 1) < 1.5 * v.get("concept_ap_baseline", 0):
                     log("WARNING: concept average precision is not clearly above a random ranking yet")
     except Stopped as e:
         stopped = True
         log(f"stopped: {e}")
     save()
+    selected = "last"
+    if keep_best and not dry_run and best_step is not None and best_step != step and best_path.exists():
+        model.load_state_dict(torch.load(best_path, map_location=device))
+        selected = f"best (step {best_step}, score {best_score:.3f}) instead of the last (step {step})"
+        log(f"using the best validated model: {selected}")
     metrics = {"steps": step, "total_steps": total, "stopped": stopped, "device": device, "minutes": round((time.time() - t0) / 60, 2),
-               "config": cfg, "sources": {k: sum(1 for e in examples if e["source"] == k) for k in sorted({e["source"] for e in examples})}}
+               "config": cfg, "selected": selected, "best_step": best_step, "skipped_steps": skipped,
+               "sources": {k: sum(1 for e in examples if e["source"] == k) for k in sorted({e["source"] for e in examples})}}
     if dry_run and len(history) >= 10:
         first, last = float(np.mean(history[:5])), float(np.mean(history[-5:]))
         metrics["dry_run"] = {"first_loss": first, "last_loss": last, "learned": last < 0.8 * first}
@@ -429,6 +496,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     if thresholds is not None and not dry_run:
         (out / "thresholds.json").write_text(json.dumps([float(t) for t in thresholds]))
     if not dry_run:
+        torch.save(model.state_dict(), out / "model.pt")                    # the model that was evaluated (best or last); `load` uses this one
+        if best_path.exists():
+            best_path.unlink()
         (out / "metrics.json").write_text(json.dumps(metrics, indent=1))
         (out / "config.json").write_text(json.dumps(cfg))
     return {"metrics": metrics, "stopped": stopped, "step": step, "model": model}
@@ -440,7 +510,9 @@ def load(out_dir, device=None):
     cfg = json.loads((out / "config.json").read_text())
     device = device or _device()
     model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"])).to(device)
-    model.load_state_dict(torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])
+    final = out / "model.pt"                                                  # the evaluated (best or last) weights; older runs only have ckpt.pt
+    model.load_state_dict(torch.load(final, map_location=device, weights_only=False) if final.exists()
+                          else torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])
     model.eval()
     th = out / "thresholds.json"
     cfg["thresholds"] = json.loads(th.read_text()) if th.exists() else None

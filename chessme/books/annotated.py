@@ -13,6 +13,7 @@ import gzip
 import io
 import json
 import logging
+import re
 import tarfile
 import urllib.request
 from pathlib import Path
@@ -81,6 +82,7 @@ def iter_csv_games(paths, limit_per_source=None):
                     continue
                 if game is not None:
                     n += 1
+                    game.headers["MeChessGid"] = str(n)
                     yield source, game
 
 
@@ -96,6 +98,7 @@ def iter_games(archive, sources=SOURCES, limit_per_source=None):
             if source not in sources or (limit_per_source and counts.get(source, 0) >= limit_per_source):
                 continue
             stream = io.TextIOWrapper(tar.extractfile(member), encoding="utf-8", errors="replace")
+            stem, k = Path(member.name).stem, 0
             while limit_per_source is None or counts.get(source, 0) < limit_per_source:
                 try:
                     game = chess.pgn.read_game(stream)
@@ -103,6 +106,8 @@ def iter_games(archive, sources=SOURCES, limit_per_source=None):
                     break
                 if game is None:
                     break
+                k += 1
+                game.headers["MeChessGid"] = f"{stem}#{k}"                       # the file the game came from and its place in it
                 counts[source] = counts.get(source, 0) + 1
                 yield source, game
 
@@ -120,7 +125,29 @@ def iter_pgn_files(directory, source="lichess_api", limit=None):
                 if game is None:
                     break
                 n += 1
+                game.headers["MeChessGid"] = f"{Path(f).stem}#{n}"
                 yield source, game
+
+
+_STUDY = re.compile(r"lichess\.org/study/([A-Za-z0-9]+)(?:/([A-Za-z0-9]+))?")
+
+
+def game_meta(game):
+    """Non-personal game metadata for the records: a stable id inside its source (a Lichess study chapter keeps its public study/chapter id, other
+    games the file and position they came from), the average rating when known, the opening code and the result. Never player names or
+    annotators."""
+    h = game.headers
+    m = _STUDY.search(h.get("Site", ""))
+    gid = f"study/{m.group(1)}/{m.group(2) or ''}".rstrip("/") if m else h.get("MeChessGid", "")
+    elos = []
+    for k in ("WhiteElo", "BlackElo"):
+        try:
+            elos.append(int(h.get(k, "")))
+        except ValueError:
+            pass
+    eco = h.get("ECO", "")
+    return {"gid": gid, "elo": round(sum(elos) / len(elos)) if elos else None, "eco": eco if eco and eco != "?" else None,
+            "result": h.get("Result") if h.get("Result") in ("1-0", "0-1", "1/2-1/2") else None}
 
 
 def annotated_moves(game, openings=None):
@@ -130,11 +157,12 @@ def annotated_moves(game, openings=None):
     Variations are ignored; a comment before the first move is returned as ply 0. Figurine pieces in comments become letters.
     With an `openings` table ({epd: name}) each record also carries the `opening` the position before the move belongs to."""
     out = []
+    meta = game_meta(game)
     board = game.board()
     if game.comment.strip():
         c0 = GL.normalise_figurines(game.comment.strip())
         out.append({"ply": 0, "color": None, "fen": board.fen(), "uci": None, "san": None, "nags": [], "glyph": None, "eval": None,
-                    "comment": c0, "concepts": T.concept_counts(c0), "text_nags": GL.symbols_in(c0), "opening": None})
+                    "comment": c0, "concepts": T.concept_counts(c0), "text_nags": GL.symbols_in(c0), "opening": None, **meta})
     node, ply = game, 0
     while node.variations:
         node = node.variations[0]
@@ -151,7 +179,7 @@ def annotated_moves(game, openings=None):
         if comment or nags:
             out.append({"ply": ply, "color": "white" if board.turn == chess.WHITE else "black", "fen": board.fen(), "uci": move.uci(),
                         "san": san, "nags": nags, "glyph": glyph, "eval": ev, "comment": comment, "concepts": T.concept_counts(comment),
-                        "text_nags": GL.symbols_in(comment), "opening": openings.get(board.epd()) if openings else None})
+                        "text_nags": GL.symbols_in(comment), "opening": openings.get(board.epd()) if openings else None, **meta})
         board.push(move)
     return out
 
@@ -188,7 +216,7 @@ def extract(archive, out_dir, *, sources=SOURCES, limit_per_source=None, max_com
             stats["games"][source] = stats["games"].get(source, 0) + 1
             gi = stats["games"][source]
             for m in annotated_moves(game, openings):
-                m = {**m, "comment": m["comment"][:max_comment], "source": source, "game": gi}
+                m = {**m, "comment": m["comment"][:max_comment], "source": source, "game": gi, "game_id": f"{source}:{m.pop('gid') or gi}"}
                 fh.write(json.dumps(m) + "\n")
                 stats["annotated_moves"][source] = stats["annotated_moves"].get(source, 0) + 1
                 stats["with_comment"] += bool(m["comment"])

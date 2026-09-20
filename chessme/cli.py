@@ -787,9 +787,9 @@ def cmd_books_nlp_train(args):
     log = _file_logger(args.log)
     data = Path(args.data)
     log(f"=== books-nlp-train {' '.join(sys.argv[2:])}")
-    if args.input_root:
+    if args.input_root or args.data_dir:
         from . import kaggle as KG
-        KG.prepare_nlp(data, args.input_root, log=log)
+        KG.prepare_nlp(data, args.input_root or "/kaggle/input", log=log, data_dir=args.data_dir)
     ex = NLP.build_examples(annotated=data / "annotated" / "annotated_moves.jsonl.gz", prose_dir=data, books_dir=data / "books",
                             max_per_kind=args.max_per_source)
     by = {}
@@ -798,6 +798,11 @@ def cmd_books_nlp_train(args):
     log(f"{len(ex)} examples: {by}")
     if len(ex) < 200:
         sys.exit("too few examples: run books-learn first")
+    missing = NLP.missing_sources(ex)
+    if missing and not args.allow_missing_sources:
+        sys.exit(f"these sources have no training examples: {missing}. The collection notebook did not finish or its output is incomplete; "
+                 "rerun it, or pass --allow-missing-sources to train without them")
+    log("sources in the training data: " + ", ".join(f"{k} {v:,}" for k, v in sorted(by.items())))
     ctl = JobControl(args.job, args.control_dir, log=log)
     with ctl.signals():
         res = NLP.train(ex, Path(args.out) if args.out else data / "nlp", backend=args.backend, model_name=args.model, epochs=args.epochs,
@@ -821,6 +826,8 @@ def cmd_books_nlp_report(args):
     m = json.loads((Path(args.model_dir) / "metrics.json").read_text())
     t = m["test"]
     print(f"steps {m['steps']}/{m['total_steps']}  stopped early: {m['stopped']}  device {m['device']}  {m['minutes']} min")
+    print(f"model kept: {m.get('selected', 'last')};  steps skipped for a non-finite gradient: {m.get('skipped_steps', 0)}")
+    print("examples per source: " + ", ".join(f"{k} {v:,}" for k, v in sorted(m.get("sources", {}).items())))
     for k in ("concept_ap_macro", "concept_ap_baseline", "concept_f1_micro_tuned", "concept_f1_micro_prior", "judgement_f1_macro", "judgement_acc",
               "judgement_acc_majority", "eval_acc", "eval_acc_majority"):
         if k in t:
@@ -1426,6 +1433,8 @@ def main():
     nt.add_argument("--max-per-source", type=int, help="cap examples per source (a trial)")
     nt.add_argument("--dry-run", action="store_true", help="a few seconds on a few hundred examples: checks the whole path, writes nothing")
     nt.add_argument("--deadline-minutes", type=float, help="stop cleanly with a checkpoint after this many minutes (Kaggle: below 12 h)")
+    nt.add_argument("--data-dir", help="the collection notebook's output folder (searched recursively), e.g. /kaggle/input/notebooks/<user>/<notebook>")
+    nt.add_argument("--allow-missing-sources", action="store_true", help="train even if some expected source has no examples")
     nt.add_argument("--input-root", help="Kaggle: link the data and restore an earlier checkpoint from the inputs under this folder (e.g. /kaggle/input)")
     nt.add_argument("--slim", action="store_true", help="after training, remove the linked data and the dry-run folder")
     nt.add_argument("--val-every", type=int, default=1000, help="log a validation check (concept AP, judgement / evaluation accuracy vs the majority guess) every N steps")

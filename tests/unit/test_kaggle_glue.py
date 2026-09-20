@@ -64,3 +64,24 @@ def test_slim_removes_raw_downloads_and_links_but_keeps_results(tmp_path):
     os.symlink(src, work / "annotated")
     K.slim_nlp(work)
     assert not (work / "annotated").exists() and src.exists() and not (work / "nlp_dry").exists() and (work / "nlp").exists()
+
+
+def test_an_explicit_data_dir_is_used_and_a_wrong_one_lists_what_is_there(tmp_path):
+    inp = tmp_path / "input"
+    d = make_collection(inp)
+    other = inp / "other-dataset"
+    other.mkdir()
+    (other / "unrelated.txt").write_text("x")
+    res = K.prepare_nlp(tmp_path / "w", inp, log=lambda *_: None, data_dir=str(d.parent))          # the notebook output folder, one level above learn/
+    assert res["data"] == str(d)
+    with pytest.raises(FileNotFoundError, match="other-dataset"):
+        K.prepare_nlp(tmp_path / "w2", inp, log=lambda *_: None, data_dir=str(other))
+
+
+def test_the_inventory_lists_every_expected_file_and_marks_missing_ones(tmp_path):
+    d = make_collection(tmp_path / "in")
+    (d / "books" / "b.txt").write_text("x" * 1000)
+    rows, text = K.inventory(d)
+    got = dict(rows)
+    assert got["annotated/annotated_moves.jsonl.gz"].endswith("MB") and got["prose/wikipedia.jsonl.gz"] == "MISSING" and got["books/*.txt"].startswith("1 books")
+    assert "MISSING" in text and "annotated_moves" in text

@@ -86,3 +86,28 @@ def test_download_keeps_an_existing_archive_and_writes_atomically(tmp_path):
     assert p.stat().st_size == 1_500_000 and not list(tmp_path.glob("*.part")) and len(calls) == 1
     A.download(tmp_path, opener=opener)
     assert len(calls) == 1
+
+
+def test_game_metadata_is_a_stable_id_rating_opening_and_result_and_never_names():
+    pgn = ('[Event "Some Study"]\n[Site "https://lichess.org/study/AbCd1234/wXyZ5678"]\n[White "Real Player"]\n[Black "Other Player"]\n[Annotator "https://lichess.org/@/someone"]\n'
+           '[WhiteElo "2400"]\n[BlackElo "2500"]\n[ECO "B90"]\n[Result "1-0"]\n\n1. e4 c5 {A comment.} *\n')
+    game = chess.pgn.read_game(io.StringIO(pgn))
+    assert A.game_meta(game) == {"gid": "study/AbCd1234/wXyZ5678", "elo": 2450, "eco": "B90", "result": "1-0"}
+    plain = chess.pgn.read_game(io.StringIO('[ECO "?"]\n[Result "*"]\n\n1. e4 *\n'))
+    plain.headers["MeChessGid"] = "game_59222#1"
+    assert A.game_meta(plain) == {"gid": "game_59222#1", "elo": None, "eco": None, "result": None}
+    rec = A.annotated_moves(game)[0]
+    assert rec["gid"] == "study/AbCd1234/wXyZ5678" and rec["elo"] == 2450 and "Real Player" not in json.dumps(rec) and "someone" not in json.dumps(rec)
+
+
+def test_extract_gives_every_record_a_game_id_from_its_source_file_or_study(tmp_path):
+    p = tmp_path / "s.tar.gz"
+    with tarfile.open(p, "w:gz") as t:
+        for name, text in (("gameknot/game_59222.pgn", GK), ("pgnlib/collection.pgn", GK + GK)):
+            data = text.encode()
+            info = tarfile.TarInfo("./" + name)
+            info.size = len(data)
+            t.addfile(info, io.BytesIO(data))
+    A.extract(p, tmp_path / "out", log=lambda *_: None)
+    ids = {json.loads(l)["game_id"] for l in gzip.open(tmp_path / "out" / "annotated_moves.jsonl.gz", "rt")}
+    assert ids == {"gameknot:game_59222#1", "pgnlib:collection#1", "pgnlib:collection#2"}

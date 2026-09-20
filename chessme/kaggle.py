@@ -20,14 +20,29 @@ def find_data(input_root):
     return Path(found[0]).parent.parent if found else None
 
 
-def prepare_nlp(out, input_root="/kaggle/input", log=print):
-    """Link the collected data into `out` and restore an earlier training checkpoint. Raises when no data is found (before any GPU time
-    is spent). Returns {"data": path, "resumed_from": path or None}."""
+def inventory(data):
+    """What the collected data folder holds: [(name, size in MB or item count)] and a printable text."""
+    d = Path(data)
+    rows = []
+    for rel in ("annotated/annotated_moves.jsonl.gz", "prose/stackexchange.jsonl.gz", "prose/wikipedia.jsonl.gz", "concept_line_pairs.jsonl", "report.md"):
+        p = d / rel
+        rows.append((rel, f"{p.stat().st_size / 1e6:.1f} MB" if p.exists() else "MISSING"))
+    books = list((d / "books").glob("*.txt")) if (d / "books").exists() else []
+    rows.append(("books/*.txt", f"{len(books)} books, {sum(f.stat().st_size for f in books) / 1e6:.1f} MB" if books else "MISSING"))
+    return rows, "\n".join(f"  {n:42s} {v}" for n, v in rows)
+
+
+def prepare_nlp(out, input_root="/kaggle/input", log=print, data_dir=None):
+    """Link the collected data into `out` and restore an earlier training checkpoint. `data_dir` names the collection notebook's output folder
+    explicitly (searched recursively); otherwise everything under `input_root` is searched. Raises when no data is found (before any GPU time
+    is spent), listing what is there. Returns {"data": path, "resumed_from": path or None}."""
     out = Path(out)
-    data = find_data(input_root)
+    root = data_dir or input_root
+    data = find_data(root)
     if data is None:
-        raise FileNotFoundError(f"no annotated_moves.jsonl.gz under {input_root}: add the output of the collection notebook as an input "
-                                "(Add Input -> Notebook output files)")
+        seen = sorted(p.name for p in Path(root).glob("*"))[:20] if Path(root).exists() else []
+        raise FileNotFoundError(f"no annotated_moves.jsonl.gz under {root} (found there: {seen or 'nothing'}): add the output of the collection notebook "
+                                "as an input (Add Input -> Notebook output files) or set DATA_DIR to its folder")
     out.mkdir(parents=True, exist_ok=True)
     for name in DATA_DIRS:
         src, dst = data / name, out / name
@@ -43,6 +58,7 @@ def prepare_nlp(out, input_root="/kaggle/input", log=print):
         resumed = prev[0]
         log(f"restored the checkpoint of an earlier run: {resumed}")
     log(f"data: {data}")
+    log(inventory(data)[1])
     return {"data": str(data), "resumed_from": resumed}
 
 
