@@ -65,7 +65,7 @@ In `bot/lichess-bot/config.yml` (copy of `config.yml.default`) the settings that
 | `challenge.min_base` / `max_base` | 180 / 900 | same reason |
 | `challenge.concurrency` | 1 | one game at a time keeps the timing predictable |
 | `matchmaking.allow_matchmaking` | `false` at first | no unsolicited challenges until you decide |
-| `greeting.hello` | say that the bot is a research bot with **deliberately limited strength** | Lichess expects bots that do not try to win to say so, especially in rated games |
+| `greeting.hello` | say that the bot is a research bot with **deliberately limited strength**, in **at most 140 characters after `{me}` is replaced by the bot's name** | Lichess expects bots that do not try to win to say so, especially in rated games; longer chat messages are silently not sent (check `bot.log` for a WARNING) |
 
 ### Keeping the token out of files but available to a launcher (macOS)
 
