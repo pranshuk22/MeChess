@@ -11,6 +11,7 @@ never stored."""
 import gzip
 import io
 import json
+import logging
 import tarfile
 import urllib.request
 from pathlib import Path
@@ -117,6 +118,7 @@ def annotated_moves(game):
 def extract(archive, out_dir, *, sources=SOURCES, limit_per_source=None, max_comment=600, extra_pgn_dir=None, ctl=None, log=print):
     """Write `annotated_moves.jsonl.gz` (one record per annotated move, plus source and game index) and return the statistics:
     games and annotated moves per source, glyph counts, share of moves with comments, concept mentions."""
+    logging.getLogger("chess.pgn").setLevel(logging.CRITICAL)      # broken game records are skipped, not reported one by one
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     stats = {"games": {}, "annotated_moves": {}, "glyphs": {}, "nags": {}, "text_nags": {}, "with_comment": 0, "with_glyph": 0, "concepts": {}}
