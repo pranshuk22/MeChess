@@ -166,3 +166,11 @@ def test_each_epoch_logs_validation_and_warns_when_concepts_are_not_learned(tmp_
     logs = []
     N.train(synth(300), tmp_path, backend="bow", epochs=2, batch=64, dim=32, lr=1e-12, log=logs.append)
     assert sum("validation:" in l for l in logs) == 2 and any("WARNING" in l for l in logs)
+
+
+def test_training_logs_each_heads_loss_and_a_validation_check_every_few_steps(tmp_path):
+    logs = []
+    N.train(synth(600), tmp_path, backend="bow", epochs=2, batch=32, dim=32, val_every=5, ckpt_every=10 ** 9, log=logs.append)
+    step_lines = [l for l in logs if l.startswith("step ")]
+    assert step_lines and "concepts " in step_lines[0] and "judgement " in step_lines[0] and "evaluation " in step_lines[0] and "wobble" in step_lines[0]
+    assert any("step 5 validation" in l or "step 10 validation" in l for l in logs) and any("epoch 1 validation" in l for l in logs)

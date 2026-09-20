@@ -802,7 +802,7 @@ def cmd_books_nlp_train(args):
     with ctl.signals():
         res = NLP.train(ex, Path(args.out) if args.out else data / "nlp", backend=args.backend, model_name=args.model, epochs=args.epochs,
                         batch=args.batch, lr=args.lr, dry_run=args.dry_run, deadline_minutes=args.deadline_minutes,
-                        ckpt_every=args.ckpt_every, ctl=ctl, log=log)
+                        ckpt_every=args.ckpt_every, val_every=args.val_every, ctl=ctl, log=log)
     t = res["metrics"].get("test", {})
     if args.dry_run:
         d = res["metrics"].get("dry_run", {})
@@ -884,19 +884,21 @@ def cmd_explorer_build(args):
     log(f"=== explorer-build {' '.join(sys.argv[2:])}")
     ctl = JobControl(args.job, args.control_dir, log=log)
     with ctl.signals():
-        res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, sample_every=args.sample_every, max_scan=args.max_scan,
-                     holdout=args.holdout, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
-                     eval_margin_cp=args.eval_margin, max_entries=args.max_entries, max_memory_gb=args.max_memory_gb, max_minutes=args.max_minutes,
-                     checkpoint_every=args.checkpoint_every, checkpoint_minutes=args.checkpoint_minutes, resume=not args.fresh,
-                     resume_glob=args.resume_glob, drop_state_when_finished=args.drop_state_when_finished, openings_dir=args.openings_dir,
-                     full_from=args.full_from, should_stop=ctl.stop_requested, log=log)
+        res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, max_per_band=args.max_per_band, max_scan=args.max_scan,
+                     holdout=args.holdout, db_min_games=args.db_min_games, db_min_frac=args.db_min_frac, book_min_games=args.book_min_games,
+                     book_min_frac=args.book_min_frac, book_min_share=args.book_min_share, eval_margin_cp=args.eval_margin, max_entries=args.max_entries,
+                     max_memory_gb=args.max_memory_gb, max_minutes=args.max_minutes, checkpoint_every=args.checkpoint_every,
+                     checkpoint_minutes=args.checkpoint_minutes, resume=not args.fresh, resume_glob=args.resume_glob,
+                     drop_state_when_finished=args.drop_state_when_finished, openings_dir=args.openings_dir, min_base=args.min_base,
+                     should_stop=ctl.stop_requested, log=log)
     print((Path(args.out) / "report.md").read_text())
 
 
 def cmd_explorer_rebuild(args):
     from .book import explorer as EX
     log = _file_logger(args.log)
-    EX.rebuild(args.state, args.out, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
+    EX.rebuild(args.state, args.out, db_min_games=args.db_min_games, db_min_frac=args.db_min_frac, book_min_games=args.book_min_games,
+               book_min_frac=args.book_min_frac, book_min_share=args.book_min_share,
                eval_margin_cp=args.eval_margin, max_ply=args.max_ply, openings_dir=args.openings_dir, log=log)
     print((Path(args.out) / "report.md").read_text())
 
@@ -908,10 +910,13 @@ def cmd_explorer_query(args):
     name = EX.opening_at(args.db, fen)
     if name:
         print(f"{name[0]} {name[1]}")
-    rows = EX.query(args.db, fen, rating=args.rating)
-    print(EX.format_rows(rows, args.top) if rows else "no games in the explorer for this position at this rating")
-    if rows:
+    ans = EX.query_position(args.db, fen, rating=args.rating)
+    if ans["moves"]:
+        print(f"{ans['total']:,} games reached this position")
+        print(EX.format_rows(ans["moves"], args.top, other=ans["other"]))
         print("bar: ░ White wins  ▒ draws  █ Black wins")
+    else:
+        print("no games in the explorer for this position at this rating")
 
 
 def cmd_style_status(args):
@@ -1362,18 +1367,21 @@ def main():
     bk.add_argument("--out", default="data/books"); bk.add_argument("--only", nargs="*", help="book ids"); bk.add_argument("--pause", type=float, default=3.0)
     bk.add_argument("--log", default="data/books/books.log")
     bk.set_defaults(func=cmd_books_fetch)
-    eb = sub.add_parser("explorer-build", help="build an opening explorer (SQLite) and per-band theory books from the Lichess database (streamed, CC0)")
+    eb = sub.add_parser("explorer-build", help="build an opening explorer (SQLite) and per-band theory books from the Lichess database (streamed, CC0; exact counts)")
     eb.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst", help="a .pgn.zst URL or path (or plain .pgn)")
-    eb.add_argument("--out", default="data/explorer"); eb.add_argument("--bands", nargs="+", type=int, default=list(__import__("chessme.book.explorer", fromlist=["x"]).DEFAULT_BANDS), help="rating band edges (default: every range, 0 to 4000)")
-    eb.add_argument("--max-ply", type=int, default=24); eb.add_argument("--sample-every", type=int, default=4, help="keep every Nth game (spreads the sample over the file)")
-    eb.add_argument("--max-scan", type=int, default=20_000_000, help="games to scan at most"); eb.add_argument("--holdout", type=int, default=2000, help="held-out games per band for coverage")
-    eb.add_argument("--db-min-games", type=int, default=20); eb.add_argument("--book-min-games", type=int, default=50); eb.add_argument("--book-min-share", type=float, default=0.03)
-    eb.add_argument("--max-entries", type=int, default=30_000_000); eb.add_argument("--max-minutes", type=float, help="stop counting after this long and still write the outputs")
-    eb.add_argument("--max-memory-gb", type=float, default=16.0, help="prune the rarest entries when the process grows past this")
+    eb.add_argument("--out", default="data/explorer"); eb.add_argument("--bands", nargs="+", type=int, default=[0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4000],
+                                                                      help="rating band edges (default: every range, 0 to 4000)")
+    eb.add_argument("--max-ply", type=int, default=24)
+    eb.add_argument("--max-per-band", type=int, default=1_000_000, help="a band stops collecting at this many games; rare bands collect over the whole scan (exact counts, no sampling)")
+    eb.add_argument("--max-scan", type=int, default=100_000_000, help="games to scan at most (a month is about 100 million)"); eb.add_argument("--holdout", type=int, default=1000, help="games per band kept aside for the coverage test (counted afterwards)")
+    eb.add_argument("--db-min-games", type=int, default=5); eb.add_argument("--db-min-frac", type=float, default=1e-5, help="database keeps moves with at least max(db-min-games, this fraction of the band's games)")
+    eb.add_argument("--book-min-games", type=int, default=20); eb.add_argument("--book-min-frac", type=float, default=5e-5); eb.add_argument("--book-min-share", type=float, default=0.03)
+    eb.add_argument("--max-entries", type=int, default=60_000_000); eb.add_argument("--max-minutes", type=float, help="stop counting after this long and still write the outputs")
+    eb.add_argument("--max-memory-gb", type=float, default=20.0, help="prune the rarest entries when the process grows past this (recorded in the report)")
     eb.add_argument("--checkpoint-every", type=int, default=1_000_000, help="games between checkpoints"); eb.add_argument("--checkpoint-minutes", type=float, default=15, help="and at least this often")
     eb.add_argument("--fresh", action="store_true", help="ignore an earlier checkpoint"); eb.add_argument("--resume-glob", help="search this glob (e.g. an earlier run mounted as an input) for a checkpoint when the output folder has none")
     eb.add_argument("--drop-state-when-finished", action="store_true", help="delete the checkpoint after a complete run (a stopped run keeps it)")
-    eb.add_argument("--full-from", type=int, default=2200, help="bands starting at this rating are rare: count every game there, not one in --sample-every")
+    eb.add_argument("--min-base", type=int, default=30, help="skip games with a base time under this many seconds (ultra-bullet); bullet and above are all counted")
     eb.add_argument("--eval-margin", type=float, help="also drop book moves whose average engine evaluation is worse than the best sibling's by more than this many centipawns")
     eb.add_argument("--openings-dir", default="data/opening_names", help="Lichess opening names, stored in the explorer database (from `theory-book --download`)")
     eb.add_argument("--job", default="explorer"); eb.add_argument("--control-dir", default="data/control")
@@ -1382,7 +1390,8 @@ def main():
     eb.set_defaults(func=cmd_explorer_build)
     er = sub.add_parser("explorer-rebuild", help="rebuild explorer.db, the books and the report from a saved checkpoint with other thresholds (no streaming)")
     er.add_argument("state", help="state.pkl.gz written by explorer-build"); er.add_argument("--out", default="data/explorer")
-    er.add_argument("--db-min-games", type=int, default=20); er.add_argument("--book-min-games", type=int, default=50); er.add_argument("--book-min-share", type=float, default=0.03)
+    er.add_argument("--db-min-games", type=int, default=5); er.add_argument("--db-min-frac", type=float, default=1e-5)
+    er.add_argument("--book-min-games", type=int, default=20); er.add_argument("--book-min-frac", type=float, default=5e-5); er.add_argument("--book-min-share", type=float, default=0.03)
     er.add_argument("--eval-margin", type=float, help="drop book moves whose average engine evaluation is worse than the best sibling's by more than this (centipawns)")
     er.add_argument("--max-ply", type=int, help="a shallower book than the counts allow"); er.add_argument("--openings-dir", default="data/opening_names")
     er.add_argument("--log", default="data/explorer/explorer.log")
@@ -1419,6 +1428,7 @@ def main():
     nt.add_argument("--deadline-minutes", type=float, help="stop cleanly with a checkpoint after this many minutes (Kaggle: below 12 h)")
     nt.add_argument("--input-root", help="Kaggle: link the data and restore an earlier checkpoint from the inputs under this folder (e.g. /kaggle/input)")
     nt.add_argument("--slim", action="store_true", help="after training, remove the linked data and the dry-run folder")
+    nt.add_argument("--val-every", type=int, default=1000, help="log a validation check (concept AP, judgement / evaluation accuracy vs the majority guess) every N steps")
     nt.add_argument("--ckpt-every", type=int, default=500); nt.add_argument("--job", default="nlp"); nt.add_argument("--control-dir", default="data/control")
     nt.add_argument("--log", default="data/books_learn/nlp.log")
     nt.set_defaults(func=cmd_books_nlp_train)

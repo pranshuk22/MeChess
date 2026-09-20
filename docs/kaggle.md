@@ -5,7 +5,7 @@ Three notebooks, on purpose. Collecting text and counting openings are CPU work 
 | Notebook | Accelerator | What it does | Typical cost |
 |---|---|---|---|
 | `notebooks/1_collect_data_cpu.ipynb` | **None** | preflight, then `chessme books-learn`: 100+ books, all annotated-game sources, Stack Exchange, Wikipedia, opening names | CPU only; expect roughly 1 to 2 hours for the full run (the archive downloads are about 300 MB) |
-| `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds an opening explorer for **every rating range** (`explorer.db`: games, White/draw/Black, average rating, engine evaluation, opening names, clock use), a playable theory book per band (`theory_LO_HI.bin`) and a report | CPU only; roughly 2 to 5 hours with the defaults (20 M games scanned); checkpointed, with a time budget |
+| `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds an opening explorer for **every rating range** (`explorer.db`: games, White/draw/Black, average rating, engine evaluation, opening names, clock use), a playable theory book per band (`theory_LO_HI.bin`) and a report | CPU only; roughly 4 to 8 hours with the defaults (about 100 M games scanned, about 10 M counted, exact counts); checkpointed, with a time budget |
 | `notebooks/2_train_language_model_gpu.ipynb` | **GPU** | preflight (GPU, dependencies, model download), a dry-run of the whole training path, then the real run with a time budget | GPU; the budget (`BUDGET_MIN`, default 600 min) caps it |
 
 ## The notebooks are adapters

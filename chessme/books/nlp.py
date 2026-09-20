@@ -294,7 +294,7 @@ def _class_weights(values, n):
 
 
 def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", epochs=3, batch=64, lr=None, seed=0, mask=True,
-          dim=256, max_len=128, ckpt_every=500, dry_run=False, deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
+          dim=256, max_len=128, ckpt_every=500, val_every=1000, dry_run=False, deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
     """Train (or resume) the tagger on `examples` (from `build_examples`). Returns {"metrics", "stopped", "step"}.
     `dry_run` uses at most 400 training examples for 20 steps and evaluates on what there is: the same code path, a few seconds.
     `deadline_minutes` is a wall-clock budget: at the deadline a checkpoint is written and the function returns stopped=True."""
@@ -320,7 +320,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     # the classification heads start from random weights: they need a much larger step than a pretrained encoder
     opt = torch.optim.AdamW([{"params": body, "lr": lr}, {"params": heads, "lr": max(lr, 1e-3 if backend == "transformer" else lr)}], weight_decay=0.01)
     scaler = torch.amp.GradScaler("cuda") if device == "cuda" else None
-    step, history = 0, []
+    step, history, parts_log = 0, [], []
     if ckpt.exists() and not dry_run:
         st = torch.load(ckpt, weights_only=False, map_location=device)
         if st["cfg"] != cfg:
@@ -363,11 +363,10 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
             ye = torch.tensor([e["eval"] for e in b], device=device)
             with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=scaler is not None):
                 c, j, e = model(texts)
-                loss = F.binary_cross_entropy_with_logits(c.float(), yc)
-                if (yj >= 0).any():
-                    loss = loss + F.cross_entropy(j.float(), yj, weight=wj, ignore_index=-1)
-                if (ye >= 0).any():
-                    loss = loss + F.cross_entropy(e.float(), ye, weight=we, ignore_index=-1)
+                l_c = F.binary_cross_entropy_with_logits(c.float(), yc)
+                l_j = F.cross_entropy(j.float(), yj, weight=wj, ignore_index=-1) if (yj >= 0).any() else None
+                l_e = F.cross_entropy(e.float(), ye, weight=we, ignore_index=-1) if (ye >= 0).any() else None
+                loss = l_c + (l_j if l_j is not None else 0) + (l_e if l_e is not None else 0)
             opt.zero_grad()
             if scaler:
                 scaler.scale(loss).backward()
@@ -378,8 +377,17 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
                 opt.step()
             step += 1
             history.append(float(loss.detach()))
+            parts_log.append((float(l_c.detach()), None if l_j is None else float(l_j.detach()), None if l_e is None else float(l_e.detach())))
             if step % 50 == 0 or step == total:
-                log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} ({(time.time() - t0) / 60:.1f} min)")
+                w = parts_log[-50:]
+                mean = lambda i: (np.mean([x[i] for x in w if x[i] is not None]) if any(x[i] is not None for x in w) else float("nan"))
+                log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} = concepts {mean(0):.3f} + judgement {mean(1):.3f} + evaluation {mean(2):.3f} "
+                    f"(the last two exist only in batches that contain a glyph: expect this total to wobble by +-0.2; {(time.time() - t0) / 60:.1f} min)")
+            if not dry_run and val_every and step % val_every == 0 and step % per_epoch != 0 and parts["val"]:
+                v = evaluate(model, parts["val"][:1500], mask=mask, batch=batch)
+                log(f"  step {step} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
+                    f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
+                    f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
             if step % ckpt_every == 0:
                 save()
             if not dry_run and step % per_epoch == 0 and parts["val"]:            # a learning curve in the log, once per epoch

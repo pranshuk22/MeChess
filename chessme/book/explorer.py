@@ -8,6 +8,11 @@ evaluation after the move. Also per band: results, game length, and how long pla
   theory_LO_HI.bin     one playable book per band (`book.bin` format; the controller and `mechess --book DIR` read it)
   report.md            how deep each book carries games it has never seen (held-out games), and population statistics per band
 
+Counts are exact, never sampled: every qualifying game is counted, up to `max_per_band` games per rating band. Dense bands fill early in the scan
+and stop; rare bands keep collecting over the whole scan, so each band has its own window (reported). Thresholds scale with the size of the band.
+Population statistics (speed, termination, rating histogram) cover every scanned game. Held-out games (used to measure coverage honestly) are
+added to the counts afterwards, and anything dropped by the memory guard is recorded.
+
 Design points: positions are keyed by a 64-bit hash of "placement turn castling" (transpositions merge), so no FEN is stored;
 the counts of one entry (games, White wins, draws, rating sum) are packed into one integer; memory is bounded by `max_entries` (rare
 entries are dropped first); a checkpoint lets a stopped run continue; the stream is re-opened and fast-forwarded if the connection drops;
@@ -20,6 +25,7 @@ import pickle
 import re
 import shutil
 import sqlite3
+import struct
 import time
 import urllib.request
 from pathlib import Path
@@ -32,8 +38,8 @@ from .keys import book_key, key_text
 UA = {"User-Agent": "MeChess-opening-explorer (research; CC0 Lichess database)"}
 # every rating range is kept: 200-point bands from 800 to 2600, and open-ended ends (Lichess ratings run from a few hundred to over 3000)
 DEFAULT_BANDS = (0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4000)
-FULL_FROM = 2200                                             # bands starting here are rare: every game is counted, not one in `sample_every`
 DEFAULT_MAX_PLY = 24
+DEFAULT_MAX_PER_BAND = 1_000_000                             # exact counting: a band stops collecting when it has this many games
 MASK24 = (1 << 24) - 1
 EVAL_CLAMP = 1000                                            # centipawns: mates count as +-10 pawns
 _MOVENUM = re.compile(r"\d+\.+")
@@ -47,9 +53,15 @@ _BRACES = re.compile(r"\{[^}]*\}")
 
 # ---- keys and packed counts ----------------------------------------------------------------------------------------------
 
+_PACK = struct.Struct("<QQQQQQQQBQ")
+
+
 def pos_key(board):
-    """64-bit key of a position (placement, side to move, castling: transpositions merge)."""
-    return int.from_bytes(hashlib.blake2b(key_text(board).encode(), digest_size=8).digest(), "big")
+    """64-bit key of a position: piece placement, side to move and castling rights (transpositions merge). Hashes the bitboards directly:
+    building a FEN string for every ply was three quarters of the counting time."""
+    return int.from_bytes(hashlib.blake2b(_PACK.pack(board.pawns, board.knights, board.bishops, board.rooks, board.queens, board.kings,
+                                                      board.occupied_co[chess.WHITE], board.occupied_co[chess.BLACK], board.turn,
+                                                      board.clean_castling_rights()), digest_size=8).digest(), "big")
 
 
 def move16(move):
@@ -155,20 +167,24 @@ def header_record(tags):
 
 
 def speed_of(base, inc):
-    """blitz / rapid / classical from the estimated duration base + 40 x increment (bullet is excluded earlier)."""
+    """Lichess speed class from the estimated duration base + 40 x increment: bullet < 180 s, blitz < 480 s, rapid < 1500 s, else classical."""
     t = base + 40 * inc
-    return "blitz" if t < 480 else "rapid" if t < 1500 else "classical"
+    return "bullet" if t < 180 else "blitz" if t < 480 else "rapid" if t < 1500 else "classical"
 
 
-def band_of(game, edges, max_diff=300, min_base=180):
-    """Band index for a game, or None: average rating inside a band, similar strength, no bullet, normal end."""
-    if game["base"] < min_base or game["termination"] not in ("Normal", "Time forfeit") or abs(game["white"] - game["black"]) > max_diff:
-        return None
-    avg = (game["white"] + game["black"]) / 2
+def rating_band(avg, edges):
     for i in range(len(edges) - 1):
         if edges[i] <= avg < edges[i + 1]:
             return i
     return None
+
+
+def band_of(game, edges, max_diff=300, min_base=30):
+    """Band index for a game, or None: average rating inside a band, similar strength, a normal ending, and not ultra-bullet (base time under
+    `min_base` seconds). Bullet is included: above 2400 it is most of what is played."""
+    if game["base"] < min_base or game["termination"] not in ("Normal", "Time forfeit") or abs(game["white"] - game["black"]) > max_diff:
+        return None
+    return rating_band((game["white"] + game["black"]) / 2, edges)
 
 
 # ---- counting -----------------------------------------------------------------------------------------------------------
@@ -184,9 +200,17 @@ class Counts:
         self.stats = [{"games": 0, "white": 0, "draws": 0, "moves": 0, "analysed": 0} for _ in range(n_bands)]
         self.games = [0] * n_bands
         self.held_out = [[] for _ in range(n_bands)]
+        self.speed_games = [dict() for _ in range(n_bands)]      # speed -> counted games
+        self.population = [dict() for _ in range(n_bands)]       # (speed, termination) -> every scanned game with ratings (no other filter, no sampling)
+        self.rating_hist = {}                                    # 50-point bin of the average rating -> every scanned game
         self.scanned = 0
         self.hit_deadline = False
         self.config = None
+        self.window_end = [None] * n_bands                       # scan index at which a band reached its cap (None: still collecting)
+        self.pruned_below = 0                                    # entries with at most this many games may be missing (memory guard)
+
+    def full(self, band, cap):
+        return self.window_end[band] is not None
 
     def size(self):
         return sum(len(t) for t in self.tables)
@@ -223,6 +247,7 @@ class Counts:
                 c[0] += 1
                 c[1] += spent
                 c[2] += spent <= 1.0
+        self.speed_games[band][sp] = self.speed_games[band].get(sp, 0) + 1
         st = self.stats[band]
         st["games"] += 1
         st["white"] += game["result"] == 1.0
@@ -232,6 +257,15 @@ class Counts:
         self.games[band] += 1
         return sans
 
+    def add_population(self, game, edges):
+        """Population statistics from the header of any scanned game (before sampling and filters)."""
+        avg = (game["white"] + game["black"]) / 2
+        self.rating_hist[int(avg // 50) * 50] = self.rating_hist.get(int(avg // 50) * 50, 0) + 1
+        b = rating_band(avg, edges)
+        if b is not None:
+            key = (speed_of(game["base"], game["inc"]), game["termination"] or "?")
+            self.population[b][key] = self.population[b].get(key, 0) + 1
+
     def prune(self, max_entries):
         """Drop the rarest entries until the tables fit: singletons first, then pairs, ..."""
         threshold = 1
@@ -240,6 +274,7 @@ class Counts:
                 for k in [k for k, v in t.items() if (v & MASK24) <= threshold]:
                     del t[k]
                     ev.pop(k, None)
+            self.pruned_below = max(self.pruned_below, threshold)
             threshold += 1
         return threshold - 1
 
@@ -249,7 +284,9 @@ def save_state(path, counts, games_scanned, config=None):
     tmp = Path(str(path) + ".tmp")
     with gzip.open(tmp, "wb", compresslevel=1) as f:
         pickle.dump({"tables": counts.tables, "games": counts.games, "held_out": counts.held_out, "scanned": games_scanned,
-                     "evals": counts.evals, "clock": counts.clock, "stats": counts.stats, "config": config}, f, protocol=4)
+                     "evals": counts.evals, "clock": counts.clock, "stats": counts.stats, "config": config,
+                     "speed_games": counts.speed_games, "population": counts.population, "rating_hist": counts.rating_hist,
+                     "window_end": counts.window_end, "pruned_below": counts.pruned_below}, f, protocol=4)
     tmp.replace(path)
 
 
@@ -260,6 +297,11 @@ def load_state(path):
     c.tables, c.games, c.held_out, c.scanned = st["tables"], st["games"], st["held_out"], st["scanned"]
     c.evals, c.clock, c.stats = st["evals"], st["clock"], st["stats"]
     c.config = st.get("config")
+    c.speed_games = st.get("speed_games", c.speed_games)
+    c.population = st.get("population", c.population)
+    c.rating_hist = st.get("rating_hist", c.rating_hist)
+    c.window_end = st.get("window_end", c.window_end)
+    c.pruned_below = st.get("pruned_below", 0)
     return c
 
 
@@ -276,11 +318,12 @@ def rss_gb():
     return peak / (1e9 if sys.platform == "darwin" else 1e6)
 
 
-def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, sample_every=1, full_from=FULL_FROM, max_scan=None,
-                 holdout=2000, max_entries=30_000_000, max_memory_gb=None, deadline=None, should_stop=None, checkpoint=None,
+def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, max_per_band=DEFAULT_MAX_PER_BAND, min_base=30, max_scan=None,
+                 holdout=1000, max_entries=60_000_000, max_memory_gb=None, deadline=None, should_stop=None, checkpoint=None,
                  checkpoint_every=1_000_000, checkpoint_minutes=15, config=None, progress_every=100_000, log=print):
-    """Read games from `open_stream()` (a callable returning a text stream; called again to reconnect), counting one of every `sample_every`
-    games that qualifies, up to `max_scan` games scanned. `counts.scanned` makes it resumable: already scanned games are skipped."""
+    """Read games from `open_stream()` (a callable returning a text stream; called again to reconnect) and count every qualifying game, band by
+    band, until the band has `max_per_band` games (the first `holdout` of each band are kept aside for the coverage test and folded in afterwards).
+    Stops when `max_scan` games were scanned, or every band is full. `counts.scanned` makes it resumable: already scanned games are skipped."""
     t0 = last_ck = time.time()
     failures = 0
     while True:
@@ -292,23 +335,31 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
                 if max_scan and i >= max_scan:
                     return counts
                 g = header_record(tags)
-                band = band_of(g, edges) if g else None
-                if band is not None and (sample_every <= 1 or edges[band] >= full_from or i % sample_every == 0):
-                    if len(counts.held_out[band]) < holdout:
-                        counts.held_out[band].append(parse_moves(g["line"], max_ply)[0])      # kept aside: never counted, used for coverage
-                    else:
-                        counts.add_game(band, g, max_ply)
+                if g:
+                    counts.add_population(g, edges)                # every scanned game, whatever else happens to it
+                    band = band_of(g, edges, min_base=min_base)
+                    if band is not None and counts.window_end[band] is None:
+                        if len(counts.held_out[band]) < holdout:
+                            counts.held_out[band].append(g)        # kept aside for the coverage test, counted afterwards
+                        else:
+                            counts.add_game(band, g, max_ply)
+                        if counts.games[band] + len(counts.held_out[band]) >= max_per_band:
+                            counts.window_end[band] = i + 1
+                            log(f"  band {edges[band]}-{edges[band + 1]} is full ({max_per_band:,} games) at game {i + 1:,} of the scan")
                 counts.scanned = i + 1                              # only now: a game is 'scanned' once it has been counted
                 if counts.scanned % progress_every == 0:
                     if counts.size() > max_entries:
-                        log(f"  pruning rare entries (limit {max_entries}): threshold {counts.prune(max_entries)}")
+                        log(f"  pruning rare entries (limit {max_entries}): entries with at most {counts.prune(max_entries)} games are now incomplete")
                     if max_memory_gb and rss_gb() > max_memory_gb:
-                        log(f"  memory {rss_gb():.1f} GB is over the {max_memory_gb} GB limit: pruning rare entries (threshold {counts.prune(int(counts.size() * 0.6))})")
+                        log(f"  memory {rss_gb():.1f} GB is over the {max_memory_gb} GB limit: pruning rare entries (entries with at most {counts.prune(int(counts.size() * 0.6))} games are now incomplete)")
                     log(f"  scanned {counts.scanned:,} games, counted {sum(counts.games):,}, {counts.size():,} entries, {rss_gb():.1f} GB, {(time.time() - t0) / 60:.1f} min")
                 if checkpoint and (counts.scanned % checkpoint_every == 0 or (checkpoint_minutes and time.time() - last_ck > checkpoint_minutes * 60)):
                     save_state(checkpoint, counts, counts.scanned, config)
                     last_ck = time.time()
                     log(f"  checkpoint saved at {counts.scanned:,} games")
+                if all(w is not None for w in counts.window_end):
+                    log("every band is full: the scan is complete")
+                    return counts
                 if (deadline and time.time() > deadline) or (should_stop and should_stop()):
                     log("time budget reached or stop requested: finishing with what has been counted")
                     counts.hit_deadline = True
@@ -320,6 +371,13 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
             if failures > 5:
                 raise
             time.sleep(min(60, 5 * failures))
+
+
+def fold_held_out(counts, max_ply):
+    """Add the held-out games to the counts (after the coverage test): the final numbers then include every qualifying game."""
+    for band, games in enumerate(counts.held_out):
+        for g in games:
+            counts.add_game(band, g, max_ply)
 
 
 def check(open_stream, n_games=300, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY):
@@ -356,38 +414,61 @@ def opening_names(tsv_dir):
     return out
 
 
-def to_sqlite(counts, path, edges, *, min_games=20, meta=None, openings=()):
+def scaled_min(floor, frac, band_games):
+    """A per-band threshold: at least `floor`, and `frac` of the band's games (so a dense band ignores more noise than a thin one)."""
+    return max(int(floor), int(round(frac * band_games)))
+
+
+def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, openings=()):
     """Write the explorer database: entries with at least `min_games` games per band, plus the per-band statistics, clock use and opening names."""
     path = Path(path)
     if path.exists():
         path.unlink()
     db = sqlite3.connect(path)
-    db.executescript("""CREATE TABLE bands(id INTEGER PRIMARY KEY, lo INTEGER, hi INTEGER, games INTEGER);
+    db.executescript("""CREATE TABLE bands(id INTEGER PRIMARY KEY, lo INTEGER, hi INTEGER, games INTEGER, window_end INTEGER);
         CREATE TABLE moves(band INTEGER, pos INTEGER, move INTEGER, uci TEXT, games INTEGER, white INTEGER, draws INTEGER, black INTEGER,
                            rating_sum INTEGER, eval_n INTEGER, eval_sum INTEGER);
         CREATE TABLE band_stats(band INTEGER PRIMARY KEY, games INTEGER, white INTEGER, draws INTEGER, moves_sum INTEGER, analysed INTEGER);
         CREATE TABLE clock(band INTEGER, speed TEXT, ply INTEGER, n INTEGER, spent_sum REAL, instant INTEGER);
         CREATE TABLE openings(pos INTEGER, eco TEXT, name TEXT);
+        CREATE TABLE positions(band INTEGER, pos INTEGER, games INTEGER);
+        CREATE TABLE speed_mix(band INTEGER, speed TEXT, games INTEGER);
+        CREATE TABLE population(band INTEGER, speed TEXT, termination TEXT, games INTEGER);
+        CREATE TABLE rating_hist(bin INTEGER PRIMARY KEY, games INTEGER);
         CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT);""")
     rows = 0
     for b, table in enumerate(counts.tables):
-        db.execute("INSERT INTO bands VALUES (?,?,?,?)", (b, edges[b], edges[b + 1], counts.games[b]))
+        floor = scaled_min(min_games, min_frac, counts.games[b])
+        db.execute("INSERT INTO bands VALUES (?,?,?,?,?)", (b, edges[b], edges[b + 1], counts.games[b], counts.window_end[b]))
         st = counts.stats[b]
         db.execute("INSERT INTO band_stats VALUES (?,?,?,?,?,?)", (b, st["games"], st["white"], st["draws"], st["moves"], st["analysed"]))
         db.executemany("INSERT INTO clock VALUES (?,?,?,?,?,?)", [(b, sp, ply, n, s, i) for (sp, ply), (n, s, i) in counts.clock[b].items()])
+        db.executemany("INSERT INTO speed_mix VALUES (?,?,?)", [(b, sp, n) for sp, n in counts.speed_games[b].items()])
+        db.executemany("INSERT INTO population VALUES (?,?,?,?)", [(b, sp, tm, n) for (sp, tm), n in counts.population[b].items()])
         batch = []
         for k, v in table.items():
             g, w, d, bl = unpack(v)
-            if g >= min_games:
+            if g >= floor:
                 m = k & 0xFFFF
                 en, es = counts.evals[b].get(k, (0, 0))
                 batch.append((b, signed64(k >> 16), m, unmove16(m).uci(), g, w, d, bl, v >> 72, en, es))
         db.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?,?)", batch)
         rows += len(batch)
+        # the true number of games at each stored position, counting the moves that were below the threshold too (shown as "other moves")
+        stored = {r[1] for r in batch}
+        totals = {}
+        for k, v in table.items():
+            pk = k >> 16
+            if signed64(pk) in stored:
+                totals[pk] = totals.get(pk, 0) + (v & MASK24)
+        db.executemany("INSERT INTO positions VALUES (?,?,?)", [(b, signed64(pk), n) for pk, n in totals.items()])
+        del totals, stored
     db.executemany("INSERT INTO openings VALUES (?,?,?)", list(openings))
+    db.executemany("INSERT INTO rating_hist VALUES (?,?)", sorted(counts.rating_hist.items()))
     db.execute("CREATE INDEX moves_by_position ON moves(band, pos)")
+    db.execute("CREATE INDEX positions_by_position ON positions(band, pos)")
     db.execute("CREATE INDEX openings_by_position ON openings(pos)")
-    for k, v in {**(meta or {}), "min_games": min_games, "rows": rows}.items():
+    for k, v in {**(meta or {}), "min_games": min_games, "min_frac": min_frac, "rows": rows, "pruned_below": counts.pruned_below}.items():
         db.execute("INSERT INTO meta VALUES (?,?)", (str(k), str(v)))
     db.commit()
     db.close()
@@ -401,29 +482,41 @@ def bar(white, draw, black, width=30):
     return "░" * w + "▒" * d + "█" * max(0, width - w - d)
 
 
-def query(db_path, fen, rating=None, band=None):
-    """Explorer rows for a position: [{"san", "uci", "games", "share", "white", "draw", "black", "avg_rating", "eval", "eval_n"}] most played
-    first, for the band that contains `rating` (or `band` id); `eval` is the average evaluation after the move in pawns from White's point
-    of view (None when no annotated game reached it)."""
+def _band_of_rating(db, rating, band):
+    if band is not None:
+        return band
+    r = db.execute("SELECT id FROM bands WHERE lo <= ? AND ? < hi", (rating, rating)).fetchone()
+    if r is None:
+        r = db.execute("SELECT id FROM bands ORDER BY ABS((lo + hi) / 2 - ?) LIMIT 1", (rating or 1500,)).fetchone()
+    return r[0]
+
+
+def query_position(db_path, fen, rating=None, band=None):
+    """The explorer answer for a position: {"total": games that reached it, "other": games whose move is not listed (below the database's
+    minimum), "moves": [{"san", "uci", "games", "share", "white", "draw", "black", "avg_rating", "eval", "eval_n"}]} most played first, for the band
+    that contains `rating` (or `band` id). Shares are of the true total; `eval` is the average evaluation after the move in pawns from White's
+    point of view (None when no annotated game reached it)."""
     db = sqlite3.connect(db_path)
-    if band is None:
-        r = db.execute("SELECT id FROM bands WHERE lo <= ? AND ? < hi", (rating, rating)).fetchone()
-        if r is None:
-            r = db.execute("SELECT id FROM bands ORDER BY ABS((lo + hi) / 2 - ?) LIMIT 1", (rating or 1500,)).fetchone()
-        band = r[0]
+    band = _band_of_rating(db, rating, band)
     board = chess.Board(fen)
     key = signed64(pos_key(board))
     rows = db.execute("SELECT uci, games, white, draws, black, rating_sum, eval_n, eval_sum FROM moves WHERE band=? AND pos=? ORDER BY games DESC",
                       (band, key)).fetchall()
+    t = db.execute("SELECT games FROM positions WHERE band=? AND pos=?", (band, key)).fetchone()
     db.close()
-    total = sum(r[1] for r in rows) or 1
-    out = []
+    total = t[0] if t else sum(r[1] for r in rows)
+    moves = []
     for uci, g, w, d, b, rs, en, es in rows:
         mv = chess.Move.from_uci(uci)
         if mv in board.legal_moves:
-            out.append({"san": board.san(mv), "uci": uci, "games": g, "share": g / total, "white": w / g, "draw": d / g, "black": b / g,
-                        "avg_rating": rs / g, "eval": (es / en / 100.0) if en else None, "eval_n": en})
-    return out
+            moves.append({"san": board.san(mv), "uci": uci, "games": g, "share": g / (total or 1), "white": w / g, "draw": d / g, "black": b / g,
+                          "avg_rating": rs / g, "eval": (es / en / 100.0) if en else None, "eval_n": en})
+    return {"total": total, "other": total - sum(m["games"] for m in moves), "moves": moves}
+
+
+def query(db_path, fen, rating=None, band=None):
+    """Just the move rows of `query_position` (most played first)."""
+    return query_position(db_path, fen, rating, band)["moves"]
 
 
 def opening_at(db_path, fen):
@@ -434,17 +527,20 @@ def opening_at(db_path, fen):
     return r
 
 
-def format_rows(rows, top=10):
-    """The explorer as text, one line per move: games, share, average rating, evaluation and the result bar."""
+def format_rows(rows, top=10, other=None):
+    """The explorer as text, one line per move: games, share, average rating, evaluation and the result bar; `other` adds the games in moves
+    that are not listed."""
     lines = []
     for r in rows[:top]:
         ev = f"{r['eval']:+.2f}" if r["eval"] is not None else "  n/a"
         lines.append(f"{r['san']:7s} {r['games']:>10,d} {100 * r['share']:5.1f}%  avg {r['avg_rating']:4.0f}  eval {ev} (n={r['eval_n']:<5d}) "
                      f"{bar(r['white'], r['draw'], r['black'])}  {100 * r['white']:.0f}/{100 * r['draw']:.0f}/{100 * r['black']:.0f}")
+    if other:
+        lines.append(f"{'other':7s} {other:>10,d} (moves played in fewer games than the database keeps)")
     return "\n".join(lines)
 
 
-def build_books(counts, edges, out_dir, *, max_ply=DEFAULT_MAX_PLY, min_games=50, min_share=0.03, eval_margin_cp=None, min_eval_n=30):
+def build_books(counts, edges, out_dir, *, max_ply=DEFAULT_MAX_PLY, min_games=20, min_frac=0.0, min_share=0.03, eval_margin_cp=None, min_eval_n=30):
     """Walk each band's counts from the start position and write `theory_LO_HI.bin`: a move joins the book when at least `min_games` games
     play it and it is at least `min_share` of the games at that position. With `eval_margin_cp`, a move is also dropped when its average
     evaluation (over at least `min_eval_n` annotated games) is worse for the mover than the best sibling's by more than the margin.
@@ -454,6 +550,7 @@ def build_books(counts, edges, out_dir, *, max_ply=DEFAULT_MAX_PLY, min_games=50
     result = {}
     for b, table in enumerate(counts.tables):
         ev = counts.evals[b]
+        floor = scaled_min(min_games, min_frac, counts.games[b])
         entries, seen, dropped_eval = [], set(), 0
         stack = [(chess.Board(), 0)]
         while stack:
@@ -473,7 +570,7 @@ def build_books(counts, edges, out_dir, *, max_ply=DEFAULT_MAX_PLY, min_games=50
             scored = [sign * e[1] / e[0] for _, _, e in found if e and e[0] >= min_eval_n]
             best = max(scored) if scored else None
             for mv, (g, w, d, bl), e in found:
-                if g < min_games or g / total < min_share:
+                if g < floor or g / total < min_share:
                     continue
                 if eval_margin_cp is not None and best is not None and e and e[0] >= min_eval_n and best - sign * e[1] / e[0] > eval_margin_cp:
                     dropped_eval += 1
@@ -499,7 +596,8 @@ def coverage(counts, edges, book_dir, plies=(4, 8, 12, 16, 20, 24)):
             continue
         reader = BookReader(f)
         depth = []
-        for moves in counts.held_out[b]:
+        for g in counts.held_out[b]:
+            moves = parse_moves(g["line"], max(plies))[0]
             board, d = chess.Board(), 0
             for san in moves[: max(plies)]:
                 try:
@@ -517,20 +615,33 @@ def coverage(counts, edges, book_dir, plies=(4, 8, 12, 16, 20, 24)):
 
 def render_report(counts, edges, books, cov, meta):
     L = ["# Opening explorer built from the Lichess database", "",
-         f"- Source: {meta.get('source', '?')}; {counts.scanned:,} games scanned, every {meta.get('sample_every', 1)}th looked at, kept when it qualifies "
-         "(no bullet, normal ending, both players within 300 points of each other).",
+         f"- Source: {meta.get('source', '?')}; {counts.scanned:,} games scanned; a game is counted when it qualifies "
+         "(normal ending, not ultra-bullet, both players within 300 points of each other; all speeds are included, as in the Lichess explorer).",
          f"- First {meta.get('max_ply', '?')} plies; a book move needs at least {meta.get('book_min_games', '?')} games and {100 * meta.get('book_min_share', 0):.0f}% of the games at its position.", "",
-         "## Books and coverage (held-out games, never counted)", "",
-         "| band | games counted | book positions | book moves | share of games still in book after N plies |", "|---|---|---|---|---|"]
+         "- Counts are exact: every qualifying game was counted, none sampled. A band stops collecting when it is full; a rare band collects over the whole scan, so **each band has its own window** (below).",
+         f"- Memory guard: {'nothing was dropped' if not counts.pruned_below else f'entries with at most {counts.pruned_below} games may be missing'}.", "",
+         "## Books and coverage (held-out games: excluded from the book, added to the counts afterwards)", "",
+         "| band | games counted | window | book positions | book moves | share of games still in book after N plies |", "|---|---|---|---|---|---|"]
     for b in range(len(counts.tables)):
         n, pos, _ = books.get(b, (0, 0, 0))
         c = cov.get(b, {})
-        L.append(f"| {edges[b]}-{edges[b + 1]} | {counts.games[b]:,} | {pos} | {n} | " + ", ".join(f"{p}: {100 * c[p]:.0f}%" for p in sorted(c)) + " |")
+        w = f"first {counts.window_end[b]:,} games of the scan" if counts.window_end[b] else f"whole scan ({counts.scanned:,} games)"
+        thin = " **(thin)**" if counts.games[b] < 100_000 else ""
+        L.append(f"| {edges[b]}-{edges[b + 1]} | {counts.games[b]:,}{thin} | {w} | {pos} | {n} | " + ", ".join(f"{p}: {100 * c[p]:.0f}%" for p in sorted(c)) + " |")
     L += ["", "## Population statistics per band", "", "| band | games | White wins | draws | Black wins | avg game length (moves) | games with engine evaluation |", "|---|---|---|---|---|---|---|"]
     for b, st in enumerate(counts.stats):
         g = st["games"] or 1
         L.append(f"| {edges[b]}-{edges[b + 1]} | {st['games']:,} | {100 * st['white'] / g:.1f}% | {100 * st['draws'] / g:.1f}% | "
                  f"{100 * (g - st['white'] - st['draws']) / g:.1f}% | {st['moves'] / g:.1f} | {100 * st['analysed'] / g:.1f}% |")
+    L += ["", "## Who plays what (every scanned game, before any filter)", "", "| band | games scanned | bullet | blitz | rapid | classical | time forfeits | abnormal endings |", "|---|---|---|---|---|---|---|---|"]
+    for b in range(len(counts.tables)):
+        pop = counts.population[b]
+        tot = sum(pop.values()) or 1
+        sp = lambda name: sum(n for (s_, _), n in pop.items() if s_ == name)
+        tf = sum(n for (_, t), n in pop.items() if t == "Time forfeit")
+        ab = sum(n for (_, t), n in pop.items() if t not in ("Normal", "Time forfeit"))
+        L.append(f"| {edges[b]}-{edges[b + 1]} | {sum(pop.values()):,} | {100 * sp('bullet') / tot:.0f}% | {100 * sp('blitz') / tot:.0f}% | {100 * sp('rapid') / tot:.0f}% | "
+                 f"{100 * sp('classical') / tot:.0f}% | {100 * tf / tot:.0f}% | {100 * ab / tot:.1f}% |")
     L += ["", "## Time per move (mean seconds, blitz games; and how often a move is instant, at most 1 s)", "",
           "| band | ply 1-2 | ply 5-8 | ply 13-24 |", "|---|---|---|---|"]
     for b in range(len(counts.tables)):
@@ -544,8 +655,23 @@ def render_report(counts, edges, books, cov, meta):
     return "\n".join(L) + "\n"
 
 
-def rebuild(state_path, out_dir, *, db_min_games=20, book_min_games=50, book_min_share=0.03, eval_margin_cp=None, max_ply=None,
-            openings_dir=None, log=print):
+def _write_outputs(counts, edges, out, *, meta, db_min_games, db_min_frac, book_min_games, book_min_frac, book_min_share, eval_margin_cp, depth,
+                   openings_dir, log):
+    """Books from the counts, the coverage test on the held-out games, then the held-out games are added to the counts and the database and
+    report are written from the complete numbers."""
+    books = build_books(counts, edges, out, max_ply=depth, min_games=book_min_games, min_frac=book_min_frac, min_share=book_min_share,
+                        eval_margin_cp=eval_margin_cp)
+    cov = coverage(counts, edges, out)
+    fold_held_out(counts, depth)
+    names = opening_names(openings_dir) if openings_dir and list(Path(openings_dir).glob("*.tsv")) else []
+    rows = to_sqlite(counts, out / "explorer.db", edges, min_games=db_min_games, min_frac=db_min_frac, meta=meta, openings=names)
+    (out / "report.md").write_text(render_report(counts, edges, books, cov, meta))
+    log(f"explorer.db: {rows:,} rows; {len(names)} opening names; books: {books}")
+    return rows, books, cov
+
+
+def rebuild(state_path, out_dir, *, db_min_games=5, db_min_frac=1e-5, book_min_games=20, book_min_frac=5e-5, book_min_share=0.03,
+            eval_margin_cp=None, max_ply=None, openings_dir=None, log=print):
     """Rebuild explorer.db, the books and the report from a saved checkpoint with different thresholds, without reading the stream again.
     `max_ply` can only lower the book depth (the counts stop at the depth they were made with)."""
     counts = load_state(state_path)
@@ -554,22 +680,20 @@ def rebuild(state_path, out_dir, *, db_min_games=20, book_min_games=50, book_min
     depth = min(max_ply or cfg.get("max_ply", DEFAULT_MAX_PLY), cfg.get("max_ply", DEFAULT_MAX_PLY))
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    meta = {"source": cfg.get("source", "?"), "scanned": counts.scanned, "sample_every": cfg.get("sample_every", 1), "max_ply": depth,
-            "book_min_games": book_min_games, "book_min_share": book_min_share}
-    names = opening_names(openings_dir) if openings_dir and list(Path(openings_dir).glob("*.tsv")) else []
-    rows = to_sqlite(counts, out / "explorer.db", edges, min_games=db_min_games, meta=meta, openings=names)
-    books = build_books(counts, edges, out, max_ply=depth, min_games=book_min_games, min_share=book_min_share, eval_margin_cp=eval_margin_cp)
-    cov = coverage(counts, edges, out)
-    (out / "report.md").write_text(render_report(counts, edges, books, cov, meta))
-    log(f"rebuilt from {counts.scanned:,} scanned games: explorer.db {rows:,} rows; books {books}")
+    meta = {"source": cfg.get("source", "?"), "scanned": counts.scanned, "max_ply": depth, "book_min_games": book_min_games,
+            "book_min_frac": book_min_frac, "book_min_share": book_min_share}
+    rows, books, cov = _write_outputs(counts, edges, out, meta=meta, db_min_games=db_min_games, db_min_frac=db_min_frac, book_min_games=book_min_games,
+                                      book_min_frac=book_min_frac, book_min_share=book_min_share, eval_margin_cp=eval_margin_cp, depth=depth,
+                                      openings_dir=openings_dir, log=log)
     return {"db_rows": rows, "books": books, "coverage": cov}
 
 
-def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, sample_every=4, max_scan=20_000_000, holdout=2000, db_min_games=20,
-        book_min_games=50, book_min_share=0.03, eval_margin_cp=None, max_entries=30_000_000, max_memory_gb=16.0, max_minutes=None,
-        checkpoint_every=1_000_000, checkpoint_minutes=15, resume=True, resume_glob=None, drop_state_when_finished=False, openings_dir=None,
-        should_stop=None, full_from=FULL_FROM, progress_every=100_000, opener=None, log=print):
-    """The whole flow. `resume_glob` (e.g. an earlier run's output mounted as an input) is searched for a checkpoint when this folder has none.
+def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, max_per_band=DEFAULT_MAX_PER_BAND, max_scan=100_000_000, holdout=1000,
+        db_min_games=5, db_min_frac=1e-5, book_min_games=20, book_min_frac=5e-5, book_min_share=0.03, eval_margin_cp=None, max_entries=60_000_000,
+        max_memory_gb=20.0, max_minutes=None, checkpoint_every=1_000_000, checkpoint_minutes=15, resume=True, resume_glob=None,
+        drop_state_when_finished=False, openings_dir=None, should_stop=None, min_base=30, progress_every=100_000, opener=None, log=print):
+    """The whole flow. Counting is exact (no sampling): every qualifying game is counted until its band holds `max_per_band` games.
+    `resume_glob` (e.g. an earlier run's output mounted as an input) is searched for a checkpoint when this folder has none.
     Returns {"scanned", "counted", "db_rows", "books", "coverage", "finished"}. `opener()` returns the text stream (default: `open_dump(source)`)."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -579,7 +703,7 @@ def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, sample
         if found:
             shutil.copy(found[0], ck)
             log(f"restored the checkpoint of an earlier run: {found[0]}")
-    config = {"edges": list(edges), "max_ply": max_ply, "sample_every": sample_every, "full_from": full_from, "holdout": holdout,
+    config = {"edges": list(edges), "max_ply": max_ply, "max_per_band": max_per_band, "holdout": holdout, "min_base": min_base,
               "source": str(source).rsplit("/", 1)[-1]}
     counts = load_state(ck) if resume and ck.exists() else Counts(len(edges) - 1)
     if counts.scanned:
@@ -587,21 +711,18 @@ def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, sample
             raise ValueError(f"the checkpoint {ck} was made with different settings ({counts.config}); use --fresh or another --out")
         log(f"resuming: {counts.scanned:,} games already scanned")
     deadline = time.time() + max_minutes * 60 if max_minutes else None
-    count_stream(opener or (lambda: open_dump(source)), counts, edges=edges, max_ply=max_ply, sample_every=sample_every, full_from=full_from,
+    count_stream(opener or (lambda: open_dump(source)), counts, edges=edges, max_ply=max_ply, max_per_band=max_per_band, min_base=min_base,
                  max_scan=max_scan, holdout=holdout, max_entries=max_entries, max_memory_gb=max_memory_gb, deadline=deadline, should_stop=should_stop,
                  checkpoint=ck, checkpoint_every=checkpoint_every, checkpoint_minutes=checkpoint_minutes, config=config, progress_every=progress_every, log=log)
-    save_state(ck, counts, counts.scanned, config)
-    meta = {"source": str(source).rsplit("/", 1)[-1], "scanned": counts.scanned, "sample_every": sample_every, "max_ply": max_ply,
-            "book_min_games": book_min_games, "book_min_share": book_min_share}
-    names = opening_names(openings_dir) if openings_dir and list(Path(openings_dir).glob("*.tsv")) else []
-    rows = to_sqlite(counts, out / "explorer.db", edges, min_games=db_min_games, meta=meta, openings=names)
-    books = build_books(counts, edges, out, max_ply=max_ply, min_games=book_min_games, min_share=book_min_share, eval_margin_cp=eval_margin_cp)
-    cov = coverage(counts, edges, out)
-    (out / "report.md").write_text(render_report(counts, edges, books, cov, meta))
+    save_state(ck, counts, counts.scanned, config)                # before the held-out games are folded in: a rebuild folds them itself
+    meta = {"source": str(source).rsplit("/", 1)[-1], "scanned": counts.scanned, "max_ply": max_ply, "max_per_band": max_per_band,
+            "book_min_games": book_min_games, "book_min_frac": book_min_frac, "book_min_share": book_min_share}
+    rows, books, cov = _write_outputs(counts, edges, out, meta=meta, db_min_games=db_min_games, db_min_frac=db_min_frac, book_min_games=book_min_games,
+                                      book_min_frac=book_min_frac, book_min_share=book_min_share, eval_margin_cp=eval_margin_cp, depth=max_ply,
+                                      openings_dir=openings_dir, log=log)
     finished = not counts.hit_deadline
-    if finished and drop_state_when_finished and not counts.hit_deadline:
+    if finished and drop_state_when_finished:
         ck.unlink()                                       # a complete run needs no checkpoint; a stopped one keeps it for resuming
-    log(f"explorer.db: {rows:,} rows; {len(names)} opening names; books: {books}")
     res = {"scanned": counts.scanned, "counted": sum(counts.games), "db_rows": rows, "books": books, "coverage": cov, "finished": finished}
     log(str(res))
     return res
