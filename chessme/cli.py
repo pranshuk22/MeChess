@@ -519,6 +519,35 @@ def cmd_style_summary(args):
     print(f"\nwritten to {args.out}")
 
 
+def cmd_style_rates(args):
+    import json as _json
+
+    from .style import rates as RT
+    ratings = {k: v["rating"] for k, v in _json.loads((Path(args.cohort) / "players.json").read_text()).items()}
+    rates = RT.cohort_rates(args.cohort, log=lambda m: print(m, flush=True))
+    rows, n = RT.reliability(rates, ratings, min_decisions=args.min_decisions)
+    text = RT.render(rows, n)
+    if args.anchors or args.player:
+        import yaml
+
+        cls = profile = None
+        if args.anchors:
+            cfg = yaml.safe_load(Path(args.config).read_text())["anchors"]
+            pole_of = {f"anchor_{k}": v["pole"] for k, v in cfg.items() if "pole" in v}
+            cls = RT.anchor_classification(RT.cohort_rates(args.anchors, log=None), pole_of, rows)
+        if args.player:
+            import numpy as np
+
+            from .style import candidates as SC
+            ps = [p for p in SC.load(Path(args.player) / "train.npz") if p.platform == 0]
+            feats, _ = RT.item_features(ps)
+            profile = RT.player_profile(feats, rows)
+        text += "\n" + (RT.render_who(cls, profile) if cls else "\nThe player's habit rates against the cohort (z in cohort SD units):\n"
+                         + "\n".join(f"  {n:20s} rate {r:.3f}  cohort {m:.3f}  z {z:+.2f}" for n, r, m, z in profile))
+    print(text)
+    (Path(args.cohort) / "rates_reliability.txt").write_text(text)
+
+
 def cmd_style_status(args):
     import time
 
@@ -919,6 +948,11 @@ def main():
     ss.add_argument("--label", default="you"); ss.add_argument("--boot", type=int, default=20); ss.add_argument("--min-usable", type=int, default=60)
     ss.add_argument("--out", default="data/style/summary.md")
     ss.set_defaults(func=cmd_style_summary)
+    sx = sub.add_parser("style-rates", help="reliability across players of plain habit rates (no engine, no move-quality filter)")
+    sx.add_argument("--cohort", default="data/style/cohort"); sx.add_argument("--min-decisions", type=int, default=100)
+    sx.add_argument("--anchors", help="anchors folder: can habit rates tell the anchors apart?")
+    sx.add_argument("--config", default="configs/anchors.yaml"); sx.add_argument("--player", help="dataset folder of a player: their habit profile")
+    sx.set_defaults(func=cmd_style_rates)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
