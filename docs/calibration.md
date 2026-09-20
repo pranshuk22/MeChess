@@ -77,6 +77,39 @@ Measured with `chessme strength --movetime 100` on a laptop (two independent run
 **about 2460 +/- 30 Elo on Stockfish 19's `UCI_Elo` scale** (520 games, no engine faults; the tighter run alone gave 2483 +/- 33).
 The earlier, shorter run gave 2382 +/- 68, consistent within its wider interval. Your numbers depend on your machine and the time control.
 
+### The weak end of the dial
+
+Below the search floor, fewer nodes or a wider candidate window stop weakening the play measurably (the two lowest of the original settings
+played equally). The built-in table now has a smooth path for the weak end (`chessme/mechess/design.py`, `chessme dial-design`): the node
+budget rises geometrically from a very weak row towards the 1800 row while a **blunder rate** (the probability of playing a random legal
+move instead of the chosen one), the candidate window, the temperature and the cp scale ease towards the 1800 values. Measured with
+direct games between adjacent settings (200 games per link, uniform prior), every step is distinguishable:
+
+| Dial setting | 1000 | 1200 | 1300 | 1400 | 1500 | 1600 | 1700 | 1800 |
+|---|---|---|---|---|---|---|---|---|
+| Measured (Stockfish scale) | ~370 | ~430 | ~520 | ~600 | ~720 | ~990 | ~1090 | ~1240 |
+
+The uncertainty grows down the chain (about +/-150 at the bottom, 95%). Two pitfalls this exposed: the UCI `Elo` option used to clamp at 800,
+so labels below it silently played as 800; and steps smaller than about 100 Elo are invisible at 80 games (a 0.06 change in blunder rate is
+about 40 Elo), so use larger steps or more games per link.
+
+### Calibrate with the prior you will play with
+
+The strength of a dial setting depends on the prior. With the same search settings, MeChess using a personalised Maia-3 model and an opening
+book measured about 400 Elo stronger at settings 1800 and 2100 than with the uniform prior (which lets the wide window pick weak moves).
+Calibrate with the exact prior, book and table you will use, for example:
+
+```bash
+python -m chessme calibrate --table my_table.json --prior maia3=CHECKPOINT --maia3-repo PATH --extra-path LIBS \
+       --book book.bin --dial 1000 1200 1300 1400 1500 1600 1700 1800 2100 2400 2600 --concurrency 3 --out dial_mine.json
+python -m chessme calibrate-link --calibration dial_mine.json --table my_table.json --prior maia3=CHECKPOINT ... --link-pairs 100
+python -m chessme mechess --calibration dial_mine.json --prior maia3=CHECKPOINT ... --elo 1500
+```
+
+Neural priors are started with one CPU thread per game (`OMP_NUM_THREADS=1`) so that parallel games do not fight over cores; memory use
+is around 1.8 GB for three parallel games. A calibration file records the dial table it was measured with, and `mechess --calibration`
+uses that table automatically.
+
 ### Example dial calibration
 
 MeChess with the uniform prior, 100 ms per move, against Stockfish 19 (one laptop; 110 to 120 games per measured point, no engine
