@@ -370,6 +370,12 @@ def cmd_style_cohort_report(args):
     sh = RL.split_half(players, min_usable=args.min_usable)
     trait = RL.personal_vs_population(players, min_usable=args.min_usable)
     text = RL.render(sh, trait)
+    shr = RL.shrunk_trait_test(players, min_usable=args.min_usable)
+    m, se = shr["gain"]
+    text += ("\n\nFair test (each preference shrunk towards the population by its own reliability; reliabilities estimated on other players):"
+             f"\n  {shr['n_players']} players scored: gain {m:+.4f} +/- {se:.4f} log-loss per decision over the population style"
+             f" ({'a real, small personal signal' if m > 3 * se else 'no detectable personal signal'})"
+             + "".join(f"\n  fixed alpha {a}: {g:+.4f} +/- {e:.4f}" for a, (g, e) in shr["fixed"].items()))
     print(text)
     (Path(args.out) / "reliability.txt").write_text(text)
 

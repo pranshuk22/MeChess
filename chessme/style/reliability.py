@@ -86,6 +86,42 @@ def personal_vs_population(players, alphas=(0.0, 0.5, 1.0), l2=1.0, min_usable=6
     return {al: (float(np.mean(d)), float(np.std(d, ddof=1) / np.sqrt(len(d)))) for al, d in diffs.items()}, len(halves)
 
 
+def shrunk_trait_test(players, l2=1.0, min_usable=60, seed=0, fixed_alphas=(0.1, 0.25)):
+    """The fair trait test: shrink each preference towards the population by how reliable it is.
+
+    A personal fit from ~100 decisions is mostly noise, so trusting it fully (alpha 1) always loses. The right estimator
+    moves each weight only as far as its reliability r_f says it is real: w = w_pop + r_f * (w_player - w_pop).
+    Reliabilities are estimated on one random half of the PLAYERS and the estimator is scored on the other half's held-out
+    games, so nothing is tuned on the data it is judged on. Returns {"n_players", "gain": (mean, se), "fixed": {alpha:
+    (mean, se)}, "r": reliabilities used}; gains are held-out log-loss improvements over the population style."""
+    halves = usable_players(players, min_usable)
+    ids = sorted(halves)
+    rng = np.random.default_rng(seed)
+    rng.shuffle(ids)
+    g1, g2 = ids[: len(ids) // 2], ids[len(ids) // 2:]
+    sh = split_half({i: players[i] for i in g1}, l2=l2, min_usable=min_usable)
+    r = np.clip(sh["reliability"], 0.0, 1.0)
+    std = M.standardiser([p for i in ids for p in halves[i][0]])
+    pooled = M.fit([p for i in g2 for p in halves[i][0] + halves[i][1]], l2=l2, standardise=std)
+    pooled_vec = _vec(pooled)
+    F = len(FEATURE_NAMES)
+    diffs = {"shrunk": []}
+    diffs.update({a: [] for a in fixed_alphas})
+    for i in g2:
+        a, b = halves[i]
+        for train, test in ((a, b), (b, a)):
+            own = _vec(M.fit(train, l2=l2, standardise=std))
+
+            def score(vec):
+                return M.evaluate(M.StyleModel(std[0], std[1], vec[:F].astype(np.float32), float(vec[F])), test)["style"]["nll"]
+            base = score(pooled_vec)
+            diffs["shrunk"].append(base - score(pooled_vec + r * (own - pooled_vec)))
+            for al in fixed_alphas:
+                diffs[al].append(base - score(pooled_vec + al * (own - pooled_vec)))
+    stat = {k: (float(np.mean(v)), float(np.std(v, ddof=1) / np.sqrt(len(v)))) for k, v in diffs.items()}
+    return {"n_players": len(g2), "gain": stat.pop("shrunk"), "fixed": stat, "r": r, "names": sh["names"]}
+
+
 def render(sh, trait):
     """Plain-text summary of the two tests."""
     res, n = trait

@@ -254,3 +254,27 @@ class TestCleanTermination:
         with CO.terminate_cleanly():
             assert signal.getsignal(signal.SIGTERM) != before
         assert signal.getsignal(signal.SIGTERM) == before
+
+
+class TestShrunkTraitTest:
+    def test_real_personal_taste_gives_a_positive_gain_where_full_trust_would_lose_or_barely_win(self):
+        rng = np.random.default_rng(10)
+        c = cohort(60, 1.2, rng, n=300)
+        res = RL.shrunk_trait_test(c, min_usable=40)
+        m, se = res["gain"]
+        assert res["n_players"] == 30 and m > 3 * se and m > 0
+        assert res["r"][res["names"].index("sacrifice")] > res["r"][res["names"].index("capture")]
+
+    def test_no_personal_taste_gives_no_gain_and_shrinkage_does_far_less_harm_than_full_trust(self):
+        rng = np.random.default_rng(11)
+        c = cohort(60, 0.0, rng, n=300)
+        shrunk = RL.shrunk_trait_test(c, min_usable=40)
+        full, _ = RL.personal_vs_population(c, min_usable=40)
+        assert shrunk["gain"][0] < 0.005
+        assert shrunk["gain"][0] > full[1.0][0]          # shrinking is never worse than trusting a noisy personal fit
+
+    def test_reliabilities_come_from_a_different_group_of_players_than_the_one_scored(self):
+        rng = np.random.default_rng(12)
+        c = cohort(40, 1.0, rng, n=300)
+        a, b = RL.shrunk_trait_test(c, min_usable=40, seed=1), RL.shrunk_trait_test(c, min_usable=40, seed=2)
+        assert a["n_players"] == b["n_players"] == 20 and not np.allclose(a["r"], b["r"])
