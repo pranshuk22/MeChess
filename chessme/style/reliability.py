@@ -61,7 +61,8 @@ def split_half(players, l2=1.0, min_usable=60):
     return {"names": tuple(FEATURE_NAMES) + ("strength_weight",), "sd_true": np.sqrt(np.maximum(cov, 0)),
             "reliability": np.nan_to_num(rel), "n_players": len(halves),
             "usable_per_half": float(np.mean([len(_usable(a)) for a, _ in halves.values()])),
-            "std": std, "mean_w": (WA.mean(0) + WB.mean(0)) / 2}
+            "std": std, "mean_w": (WA.mean(0) + WB.mean(0)) / 2,
+            "WA": WA, "WB": WB, "ids": list(halves)}   # per-player half fits, for axis reliability and yardsticks
 
 
 def personal_vs_population(players, alphas=(0.0, 0.5, 1.0), l2=1.0, min_usable=60):
