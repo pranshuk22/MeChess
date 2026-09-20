@@ -739,7 +739,7 @@ def cmd_books_learn(args):
     log = _file_logger(args.log)
     log(f"=== books-learn {' '.join(sys.argv[2:])}")
     res = BL.run(args.out, steps=tuple(args.steps), limit_per_source=args.limit_per_source, extra_pgn_dir=args.studies_dir,
-                 redo=args.redo, archive=args.archive, no_csv=args.no_csv, no_openings=args.no_openings, no_chessgpt=args.no_chessgpt,
+                 redo=args.redo, archive=args.archive, no_csv=args.no_csv, no_openings=args.no_openings, no_chessgpt=args.no_chessgpt, max_books=args.max_books,
                  control_dir=args.control_dir, log=log)
     log(str(res))
 
@@ -1255,6 +1255,7 @@ def main():
                                                                         choices=["books", "pairs", "annotated", "prose", "report"])
     bl.add_argument("--limit-per-source", type=int, help="at most this many games per annotated source (a trial)")
     bl.add_argument("--studies-dir", help="folder with extra PGN files, e.g. from books-studies"); bl.add_argument("--archive", help="an already downloaded annotated_pgn_free.tar.gz")
+    bl.add_argument("--max-books", type=int, help="only the first N books (a trial)")
     bl.add_argument("--no-chessgpt", action="store_true", help="skip the large ChessGPT annotated-PGN shards (175 MB)")
     bl.add_argument("--no-csv", action="store_true", help="skip the extra CC0 studies dataset"); bl.add_argument("--no-openings", action="store_true", help="skip opening names")
     bl.add_argument("--redo", action="store_true"); bl.add_argument("--control-dir", default="data/control"); bl.add_argument("--log", default="data/books_learn/learn.log")

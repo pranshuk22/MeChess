@@ -86,7 +86,7 @@ def render_report(out):
     return "\n".join(L) + "\n"
 
 
-def run(out_dir, *, steps=STEPS, limit_per_source=None, extra_pgn_dir=None, redo=False, archive=None, no_csv=False, no_openings=False, no_chessgpt=False,
+def run(out_dir, *, steps=STEPS, limit_per_source=None, extra_pgn_dir=None, redo=False, archive=None, no_csv=False, no_openings=False, no_chessgpt=False, max_books=None,
         control_dir="data/control",
         job="books", opener=None, log=print):
     """Run the chosen steps. Returns {"steps": [...], "stopped": bool}."""
@@ -99,7 +99,7 @@ def run(out_dir, *, steps=STEPS, limit_per_source=None, extra_pgn_dir=None, redo
             if "books" in steps:
                 ctl.checkpoint()
                 log("== books")
-                F.run(out / "books", opener=opener, log=log)
+                F.run(out / "books", (F.load_sources()[:max_books] if max_books else None), opener=opener, log=log)
                 done.append("books")
             if "pairs" in steps:
                 ctl.checkpoint()
