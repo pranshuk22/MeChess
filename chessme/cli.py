@@ -751,6 +751,9 @@ def cmd_books_learn(args):
                  redo=args.redo, archive=args.archive, no_csv=args.no_csv, no_openings=args.no_openings, no_chessgpt=args.no_chessgpt, max_books=args.max_books,
                  control_dir=args.control_dir, log=log)
     log(str(res))
+    if args.slim and not res["stopped"]:
+        from . import kaggle as KG
+        log(f"slim: {KG.slim_collect(args.out):.0f} MB of raw downloads removed")
 
 
 def cmd_books_studies(args):
@@ -784,6 +787,9 @@ def cmd_books_nlp_train(args):
     log = _file_logger(args.log)
     data = Path(args.data)
     log(f"=== books-nlp-train {' '.join(sys.argv[2:])}")
+    if args.input_root:
+        from . import kaggle as KG
+        KG.prepare_nlp(data, args.input_root, log=log)
     ex = NLP.build_examples(annotated=data / "annotated" / "annotated_moves.jsonl.gz", prose_dir=data, books_dir=data / "books",
                             max_per_kind=args.max_per_source)
     by = {}
@@ -805,6 +811,21 @@ def cmd_books_nlp_train(args):
             sys.exit("dry-run failed: the loss did not go down on 64 memorisable examples; do not start the long run")
     log(f"{'DRY RUN ' if args.dry_run else ''}{'stopped' if res['stopped'] else 'finished'} at step {res['step']}; test: "
         + json.dumps({k: round(v, 3) for k, v in t.items() if isinstance(v, float)}))
+    if args.slim and not args.dry_run:
+        from . import kaggle as KG
+        KG.slim_nlp(data)
+
+
+
+def cmd_books_nlp_report(args):
+    m = json.loads((Path(args.model_dir) / "metrics.json").read_text())
+    t = m["test"]
+    print(f"steps {m['steps']}/{m['total_steps']}  stopped early: {m['stopped']}  device {m['device']}  {m['minutes']} min")
+    for k in ("concept_ap_macro", "concept_ap_baseline", "concept_f1_micro_tuned", "concept_f1_micro_prior", "judgement_f1_macro", "judgement_acc",
+              "judgement_acc_majority", "eval_acc", "eval_acc_majority"):
+        if k in t:
+            print(f"  {k:26s} {t[k]:.3f}")
+    print("test set with the keywords visible: concept micro-F1", round(m["test_unmasked"].get("concept_f1_micro_tuned", float("nan")), 3))
 
 
 def cmd_books_nlp_predict(args):
@@ -1371,6 +1392,7 @@ def main():
     bl.add_argument("--max-books", type=int, help="only the first N books (a trial)")
     bl.add_argument("--no-chessgpt", action="store_true", help="skip the large ChessGPT annotated-PGN shards (175 MB)")
     bl.add_argument("--no-csv", action="store_true", help="skip the extra CC0 studies dataset"); bl.add_argument("--no-openings", action="store_true", help="skip opening names")
+    bl.add_argument("--slim", action="store_true", help="after a complete run, delete the raw downloads and keep only the results")
     bl.add_argument("--redo", action="store_true"); bl.add_argument("--control-dir", default="data/control"); bl.add_argument("--log", default="data/books_learn/learn.log")
     bl.set_defaults(func=cmd_books_learn)
     nt = sub.add_parser("books-nlp-train", help="train the chess-text language model (concepts, move judgement, evaluation) on the books-learn output")
@@ -1380,9 +1402,13 @@ def main():
     nt.add_argument("--max-per-source", type=int, help="cap examples per source (a trial)")
     nt.add_argument("--dry-run", action="store_true", help="a few seconds on a few hundred examples: checks the whole path, writes nothing")
     nt.add_argument("--deadline-minutes", type=float, help="stop cleanly with a checkpoint after this many minutes (Kaggle: below 12 h)")
+    nt.add_argument("--input-root", help="Kaggle: link the data and restore an earlier checkpoint from the inputs under this folder (e.g. /kaggle/input)")
+    nt.add_argument("--slim", action="store_true", help="after training, remove the linked data and the dry-run folder")
     nt.add_argument("--ckpt-every", type=int, default=500); nt.add_argument("--job", default="nlp"); nt.add_argument("--control-dir", default="data/control")
     nt.add_argument("--log", default="data/books_learn/nlp.log")
     nt.set_defaults(func=cmd_books_nlp_train)
+    nr = sub.add_parser("books-nlp-report", help="print the held-out metrics of a trained chess-text model")
+    nr.add_argument("model_dir"); nr.set_defaults(func=cmd_books_nlp_report)
     npd = sub.add_parser("books-nlp-predict", help="read comments with a trained chess-text model")
     npd.add_argument("model_dir"); npd.add_argument("texts", nargs="+")
     npd.set_defaults(func=cmd_books_nlp_predict)
