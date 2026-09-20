@@ -679,6 +679,22 @@ def cmd_analyse(args):
     log(f"finished: {done} done, {failed} failed; report {out / 'report.md'}")
 
 
+def cmd_style_embed_train(args):
+    from .jobs import JobControl
+    from .style import embed as EM
+    from .style import games_fetch as GF
+    log = _file_logger(args.log)
+    players = GF.load_players(args.data, min_games=args.min_games)
+    if len(players) < args.min_players:
+        sys.exit(f"only {len(players)} players in {args.data} (need {args.min_players}); fetch more first")
+    log(f"=== style-embed-train {' '.join(sys.argv[2:])}: {len(players)} players")
+    ctl = JobControl(args.job, args.control_dir, log=log)
+    with ctl.signals():
+        res = EM.train(players, args.out, steps=args.steps, batch=args.batch, bag=args.bag, dim=args.dim, hidden=args.hidden,
+                       lr=args.lr, seed=args.seed, ckpt_every=args.ckpt_every, eval_every=args.eval_every, ctl=ctl, log=log)
+    log(f"{'stopped' if res['stopped'] else 'finished'} at step {res['step']}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1118,6 +1134,14 @@ def main():
     gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
     gf.add_argument("--log", default="data/style/logs/games_fetch.log")
     gf.set_defaults(func=cmd_style_games_fetch)
+    et = sub.add_parser("style-embed-train", help="train the contrastive player embedding on the game-level features (resumable, pausable)")
+    et.add_argument("--data", default="data/style/cohort2"); et.add_argument("--out", default="data/style/embed")
+    et.add_argument("--min-games", type=int, default=30); et.add_argument("--min-players", type=int, default=60)
+    et.add_argument("--steps", type=int, default=2000); et.add_argument("--batch", type=int, default=64); et.add_argument("--bag", type=int, default=20)
+    et.add_argument("--dim", type=int, default=32); et.add_argument("--hidden", type=int, default=128); et.add_argument("--lr", type=float, default=2e-3)
+    et.add_argument("--seed", type=int, default=0); et.add_argument("--ckpt-every", type=int, default=100); et.add_argument("--eval-every", type=int, default=500)
+    et.add_argument("--job", default="embed"); et.add_argument("--control-dir", default="data/control"); et.add_argument("--log", default="data/style/logs/embed.log")
+    et.set_defaults(func=cmd_style_embed_train)
     an = sub.add_parser("analyse", help="analyse the games of a PGN file with Stockfish: move classes, accuracy, report (resumable, pausable)")
     an.add_argument("pgn"); an.add_argument("--out", default="data/analysis"); an.add_argument("--player", help="report on this player's side (PGN name)")
     an.add_argument("--engine", default="stockfish"); an.add_argument("--nodes", type=int, default=200000, help="nodes per position (fixed, machine independent)")
