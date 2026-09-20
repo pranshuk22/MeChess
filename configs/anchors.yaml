@@ -1,0 +1,52 @@
+# Anchor players: famous players whose styles give the report its vocabulary (plan 8f-3 / 8f-5 / 8f-9).
+# `selected: true` = built by default (all listed players are selected); `pole` = the style group they were chosen to represent.
+# `aliases` are matched against the PGN White/Black tags after normalising (case, punctuation, accents); an alias with only
+# an initial ("Tal, M") matches exactly that spelling, so list the full-name and initial forms you expect.
+# `years` = the peak window used for sampling (APPROXIMATE, from general knowledge of each career: the years the player was
+# at or near their best rating; task R6 checks them against rating histories). If fewer than the requested number of
+# serious games exist inside it, the window is widened by 2 years at a time (up to 6) and the widening is logged.
+# The `hypothesis` labels are HYPOTHESES from general chess knowledge (plan task R6 verifies them); the numbers decide.
+# Game files are supplied by the user (see plan 8f-5 for sources and terms); nothing is downloaded automatically.
+anchors:
+  # --- attack, sacrifice, initiative
+  tal:            {selected: true, pole: attack, years: [1957, 1962], aliases: ["Tal, Mikhail", "Tal, Mihail", "Tal, M"], hypothesis: "attack, sacrifice, complexity"}
+  alekhine:       {selected: true, pole: attack, years: [1927, 1934], aliases: ["Alekhine, Alexander", "Alekhine, Alexandre", "Alekhine, A"], hypothesis: "combinational attack"}
+  shirov:         {selected: true, pole: attack, years: [1994, 2004], aliases: ["Shirov, Alexei", "Shirov, Alexey", "Shirov, A"], hypothesis: "extreme attack, risk"}
+  topalov:        {selected: true, pole: attack, years: [2005, 2010], aliases: ["Topalov, Veselin", "Topalov, V"], hypothesis: "sharp, aggressive fighter"}
+  nepomniachtchi: {selected: true, pole: attack, years: [2019, 2023], aliases: ["Nepomniachtchi, Ian", "Nepomniachtchi, I"], hypothesis: "sharp, dynamic"}
+  polgar:         {selected: true, pole: attack, file: PolgarJ, years: [1999, 2005], aliases: ["Polgar, Judit", "Polgar, Ju", "Polgar, J"], hypothesis: "sharp, tactical, aggressive attacker"}
+  bronstein:      {selected: true, pole: attack, years: [1949, 1956], aliases: ["Bronstein, David", "Bronstein, D"], hypothesis: "creative, unpredictable"}
+  firouzja:       {selected: true, pole: attack, years: [2020, 2023], aliases: ["Firouzja, Alireza", "Firouzja, A"], hypothesis: "aggressive, dynamic"}
+  mamedyarov:     {selected: true, pole: attack, years: [2016, 2019], aliases: ["Mamedyarov, Shakhriyar", "Mamedyarov, Shahriar", "Mamedyarov, S"], hypothesis: "aggressive, dynamic"}
+  # --- creative, unorthodox
+  rapport:        {selected: true, pole: creative, years: [2018, 2024], aliases: ["Rapport, Richard", "Rapport, R"], hypothesis: "unorthodox openings, imbalance"}
+  larsen:         {selected: true, pole: creative, years: [1966, 1971], aliases: ["Larsen, Bent", "Larsen, Be", "Larsen, B"], hypothesis: "flank openings, risk taking"}
+  ivanchuk:       {selected: true, pole: creative, years: [1989, 1996], aliases: ["Ivanchuk, Vassily", "Ivanchuk, V"], hypothesis: "intuitive, inventive, universal"}
+  dubov:          {selected: false,  # no PGN Mentor file; supply dubov.pgn with --files to enable
+                   pole: creative, years: [2018, 2022], aliases: ["Dubov, Daniil", "Dubov, D"], hypothesis: "creative, dynamic"}
+  morozevich:     {selected: true, pole: creative, years: [2001, 2008], aliases: ["Morozevich, Alexander", "Morozevich, A"], hypothesis: "unorthodox, attacking"}
+  jobava:         {selected: true, pole: creative, years: [2013, 2019], aliases: ["Jobava, Baadur", "Jobava, Ba", "Jobava, B"], hypothesis: "unorthodox, attacking"}
+  # --- solid, prophylactic, defensive
+  petrosian:      {selected: true, pole: solid, years: [1959, 1968], aliases: ["Petrosian, Tigran", "Petrosian, T"], hypothesis: "prophylaxis, defence, exchange sacrifices"}
+  giri:           {selected: true, pole: solid, years: [2015, 2023], aliases: ["Giri, Anish", "Giri, A"], hypothesis: "very solid, deep preparation"}
+  ding:           {selected: true, pole: solid, years: [2017, 2023], aliases: ["Ding, Liren", "Ding Liren"], hypothesis: "solid, resilient"}
+  korchnoi:       {selected: true, pole: solid, years: [1970, 1982], aliases: ["Korchnoi, Viktor", "Kortschnoj, Viktor", "Kortschnoj, V", "Korchnoi, V"], hypothesis: "fighter, counter-attacker"}
+  leko:           {selected: true, pole: solid, years: [2002, 2008], aliases: ["Leko, Peter", "Leko, P"], hypothesis: "very safe"}
+  adams:          {selected: true, pole: solid, years: [1995, 2005], aliases: ["Adams, Michael", "Adams, Mi", "Adams, M"], hypothesis: "solid"}
+  # --- positional, technical
+  karpov:         {selected: true, pole: positional, years: [1975, 1985], aliases: ["Karpov, Anatoly", "Karpov, Ana", "Karpov, An", "Karpov, A"], hypothesis: "positional squeeze"}
+  kramnik:        {selected: true, pole: positional, years: [1999, 2008], aliases: ["Kramnik, Vladimir", "Kramnik, V"], hypothesis: "technical, precise"}
+  capablanca:     {selected: true, pole: positional, years: [1919, 1927], aliases: ["Capablanca, Jose Raul", "Capablanca, Jose", "Capablanca, J", "Capablanca, Jose R"], hypothesis: "clarity, simplification, endgames"}
+  smyslov:        {selected: true, pole: positional, years: [1953, 1958], aliases: ["Smyslov, Vassily", "Smyslov, V"], hypothesis: "harmony, endgames"}
+  rubinstein:     {selected: true, pole: positional, years: [1909, 1922], aliases: ["Rubinstein, Akiba", "Rubinstein, A"], hypothesis: "endgame technique"}
+  botvinnik:      {selected: true, pole: positional, years: [1945, 1958], aliases: ["Botvinnik, Mikhail", "Botvinnik, M"], hypothesis: "systematic, strategic"}
+  # --- universal, dynamic
+  kasparov:       {selected: true, pole: universal, years: [1990, 1999], aliases: ["Kasparov, Garry", "Kasparov, Gary", "Kasparov, G"], hypothesis: "dynamic initiative"}
+  fischer:        {selected: true, pole: universal, years: [1966, 1972], aliases: ["Fischer, Robert James", "Fischer, Robert", "Fischer, R"], hypothesis: "clarity, principled"}
+  carlsen:        {selected: true, pole: universal, years: [2013, 2019], aliases: ["Carlsen, Magnus", "Carlsen, M"], hypothesis: "universal, endgame grind"}
+  nakamura:       {selected: true, pole: universal, years: [2015, 2022], aliases: ["Nakamura, Hikaru", "Nakamura, Hi", "Nakamura, H"], hypothesis: "practical, blitz-driven"}
+  anand:          {selected: true, pole: universal, years: [2007, 2013], aliases: ["Anand, Viswanathan", "Anand, V"], hypothesis: "fast, universal"}
+  caruana:        {selected: true, pole: universal, years: [2014, 2019], aliases: ["Caruana, Fabiano", "Caruana, F"], hypothesis: "precise, opening preparation"}
+  aronian:        {selected: true, pole: universal, years: [2011, 2016], aliases: ["Aronian, Levon", "Aronian, L"], hypothesis: "creative, combinational"}
+  spassky:        {selected: true, pole: universal, years: [1966, 1972], aliases: ["Spassky, Boris", "Spassky, B"], hypothesis: "universal"}
+  gukesh:         {selected: true, pole: universal, years: [2023, 2026], aliases: ["Gukesh, D", "Gukesh D", "Dommaraju, Gukesh"], hypothesis: "solid and ambitious"}
