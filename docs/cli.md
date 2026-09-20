@@ -81,6 +81,7 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-anchors-build` | Same, from game files you supply |
 | `style-anchors-verify` | Check every anchor's name aliases against the archives, so spelling variants do not lose games |
 | `style-summary --player DIR` | One player against everything: the cohort (what is reliably personal, in between-player SD units), the five axes (with their own reliability), the anchors at the level of style poles, the rating-matched population, and the shrunk personal-signal test. Writes a markdown summary |
+| `style-rates` | Reliability across the cohort of plain habit rates (no engine); with `--anchors` whether they separate the anchors, with `--player` a player's habit profile |
 | `style-status` | One-screen status of the long jobs: running processes, progress, ETA, latest log lines (`--watch N` to refresh) |
 | `style-anchors-report` | Can the features tell the anchors apart? Which anchor is closest to you? |
 

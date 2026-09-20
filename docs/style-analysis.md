@@ -39,7 +39,9 @@ Style is measured *at the choice level*, so it is not confounded by the opening,
    (only preferences with reliability of at least 0.1 are reported; the player's distance is in between-player SD units), section 2 gives
    each hypothesis axis its own reliability across players, section 4 tests the anchors grouped by style pole (a 5-way question
    that needs far less data than 35 individuals).
-8. **Judge comparison** (`style-judge-compare`): how much the choice of judge changes candidate sets and results.
+8. **Habit rates** (`style-rates`): plain per-player rates of each feature over all decisions, their split-half reliability across the
+   cohort (raw and net of rating), whether they separate the anchors, and a player's profile in cohort SD units.
+9. **Judge comparison** (`style-judge-compare`): how much the choice of judge changes candidate sets and results.
 
 ## Findings so far
 
@@ -60,6 +62,15 @@ depend on the feature set and the amount of data and will change with either.
 - **Consequence.** Do not describe a player as "aggressive" or "positional" from these features alone. The parts of "plays like
   me" that are clearly personal are the opening repertoire, the move-prediction model fine-tuned on the player's games, time use, and
   how much the player cares about strength.
+
+- **Plain habit rates are far more reliable than choice-level preferences.** Counting how often a player's move has each feature
+  (no engine, no filtering by move quality) gives split-half reliabilities across the 1,000 cohort players of 0.3 to 0.47
+  (0.45 to 0.64 with all the data) for castling side, king moves, checks, king-zone pressure, pawn storms, captures, retreats and pawn
+  pushes, and they barely change after removing the linear effect of rating. Players do differ stably; habit rates simply mix taste with
+  the positions a player reaches (openings, time control), whereas choice-level preferences are clean but thin.
+- **Even habit rates do not recover style poles.** Anchors assigned by habit rates: 6% at the anchor level (chance 2.9%) and 25% at the pole
+  level (majority baseline 26%). The anchors span eras and formats (classical over-the-board against an online blitz / rapid cohort), and
+  the pole labels are hypotheses, so this is not evidence that styles do not exist, only that these features do not show them.
 
 Ideas that could raise the signal: many more decisions per player, features that see plans and structure over several moves,
 clock-based features (time use is likely a strong personal trait), and game-level statistics (opening choice, castling ply,
