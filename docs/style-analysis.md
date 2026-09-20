@@ -76,6 +76,31 @@ Ideas that could raise the signal: many more decisions per player, features that
 clock-based features (time use is likely a strong personal trait), and game-level statistics (opening choice, castling ply,
 length of games) in addition to move-level choices.
 
+## Research directions (what the literature suggests)
+
+A review of published work on identifying and modelling individual chess players points to the following, which the roadmap adopts. Sources
+are given so they can be checked; claims marked (abstract) were not verified beyond the abstract.
+
+- **Identification is feasible with learned features and many games.** Behavioral stylometry (McIlroy-Young et al., NeurIPS 2021,
+  [arXiv 2208.01366](https://arxiv.org/abs/2208.01366)) identifies players from thousands of candidates with 98% accuracy given 100 games,
+  using a Maia-style move encoder, a transformer over a game and a contrastive loss. **Opening choice is the most revealing part.**
+- **Personalisation needs few games with the right design.** Maia4All ([arXiv 2507.21488](https://arxiv.org/abs/2507.21488)) models an individual
+  from 20 games instead of 5,000 (abstract).
+- **Style on top of a strong policy is a small residual.** MATILDA ([arXiv 2606.25176](https://arxiv.org/abs/2606.25176)) finds that player-style
+  embeddings add about 1.8% NLL beyond a rating-conditioned policy plus engine search.
+- **Time use is a behaviour worth modelling.** ChessMimic ([arXiv 2606.04473](https://arxiv.org/abs/2606.04473), abstract) predicts thinking time;
+  a small unreviewed project reports that clock habits alone can identify players (unverified).
+- **Hand-built textbook features help in the opening.** [arXiv 2504.05425](https://arxiv.org/abs/2504.05425): piece-type move counts, early queen moves,
+  castling, central control, development speed.
+- **Complexity and sharpness have published engine-based measures:** variation entropy ([arXiv 2505.03251](https://arxiv.org/abs/2505.03251), abstract) and
+  win / draw / loss based sharpness.
+- **Industry tools report performance dimensions, not styles:** Aimchess uses openings, tactics, endings, advantage capitalization, resourcefulness
+  and time management, compared with players of the same rating. Advantage capitalization and resourcefulness are the style-like ones.
+
+Planned feature families: opening repertoire, clock use, game shape, engine-derived conversion and sharpness, deviation from rating-typical play,
+and (later) a learned embedding; with pre-fixed reliability gates on a held-out half of the players. Named "types" come only after reliable,
+rating-independent dimensions exist.
+
 ## Order of a full run
 
 ```
