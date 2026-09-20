@@ -489,6 +489,36 @@ def cmd_calibrate(args):
     print(f"\ncalibration written to {args.out}; use it with:  chessme mechess --calibration {args.out} --elo <target>")
 
 
+def cmd_style_summary(args):
+    import yaml
+
+    from .style import anchors as SA, candidates as SC, model as SM, reliability as RL, summary as SU
+    cohort = RL.load_cohort(args.cohort)
+    sh = RL.split_half(cohort, min_usable=args.min_usable)
+    train, test = SC.load(Path(args.player) / "train.npz"), SC.load(Path(args.player) / "test.npz")
+    mine = [p for p in train if p.platform == 0]          # the reference data are Lichess
+    rows, w = SU.me_vs_cohort(mine, sh, n_boot=args.boot)
+    axes = SU.axis_table(sh, w)
+    shrunk = RL.shrunk_trait_test(cohort, min_usable=args.min_usable)
+    population = None
+    if args.population:
+        base = SC.load(Path(args.population) / "train.npz")
+        cmp = SM.compare_to_rating_baseline(mine, base, n_boot=args.boot)
+        population = sorted(zip(cmp["names"], cmp["z"]), key=lambda t: -abs(t[1]))
+    poles = user_poles = None
+    if args.anchors:
+        cfg = yaml.safe_load(Path(args.config).read_text())["anchors"]
+        pole_of = {f"anchor_{k}": v["pole"] for k, v in cfg.items() if "pole" in v}
+        anchors = RL.load_cohort(args.anchors)
+        poles = SU.pole_confusion(anchors, pole_of)
+        user_poles = SU.user_vs_poles(anchors, pole_of, mine, [p for p in test if p.platform == 0])
+    text = SU.render(label=args.label, n_user=len(mine), n_cohort=len(sh["ids"]), me_rows=rows, axes=axes, poles=poles,
+                     user_poles=user_poles, population=population, shrunk=shrunk)
+    Path(args.out).write_text(text)
+    print(text)
+    print(f"\nwritten to {args.out}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -882,6 +912,13 @@ def main():
         lp.add_argument("--concurrency", type=int, default=1)
     stg.set_defaults(func=cmd_strength)
     cal.set_defaults(func=cmd_calibrate)
+    ss = sub.add_parser("style-summary", help="one player against the cohort, axes, anchors (poles) and population: what is reliably personal")
+    ss.add_argument("--cohort", default="data/style/cohort"); ss.add_argument("--anchors", default="data/style/anchors")
+    ss.add_argument("--config", default="configs/anchors.yaml"); ss.add_argument("--player", required=True, help="dataset folder of the player (train.npz, test.npz)")
+    ss.add_argument("--population", help="population folder from style-pop-data (adds the population comparison)")
+    ss.add_argument("--label", default="you"); ss.add_argument("--boot", type=int, default=20); ss.add_argument("--min-usable", type=int, default=60)
+    ss.add_argument("--out", default="data/style/summary.md")
+    ss.set_defaults(func=cmd_style_summary)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
