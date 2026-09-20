@@ -1,13 +1,14 @@
 # Running on Kaggle
 
-Two notebooks, on purpose. Collecting text is CPU work and does **not** use the weekly GPU quota; only training does.
+Three notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training does.
 
 | Notebook | Accelerator | What it does | Typical cost |
 |---|---|---|---|
 | `notebooks/1_collect_data_cpu.ipynb` | **None** | preflight, then `chessme books-learn`: 100+ books, all annotated-game sources, Stack Exchange, Wikipedia, opening names | CPU only; expect roughly 1 to 2 hours for the full run (the archive downloads are about 300 MB) |
+| `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds an opening explorer (`explorer.db`) plus a playable theory book per rating band (`theory_LO_HI.bin`) and a coverage report | CPU only; roughly 1 to 2 hours with the defaults (12 M games scanned, 1 in 4 counted); has a time budget |
 | `notebooks/2_train_language_model_gpu.ipynb` | **GPU** | preflight (GPU, dependencies, model download), a dry-run of the whole training path, then the real run with a time budget | GPU; the budget (`BUDGET_MIN`, default 600 min) caps it |
 
-## How to run (both notebooks)
+## How to run (all notebooks)
 1. Settings: *Internet -> On* (phone verification once). Notebook 1: accelerator *None*. Notebook 2: *GPU*.
 2. Put your repository URL in `REPO_URL` (first code cell).
 3. **Save Version -> Save & Run All (Commit)**. A committed run does not depend on your browser, may run up to 12 hours, and keeps its output. An interactive session can be lost.
@@ -21,6 +22,7 @@ Two notebooks, on purpose. Collecting text is CPU work and does **not** use the 
 - Everything in notebook 1 is resumable and skips finished work.
 
 ## After the run
+- Notebook 3 output: `explorer.db` (query with `python -m chessme explorer-query explorer.db --rating 1500 --fen "..."`), `theory_*.bin` (put them in `data/book/`; `mechess --book data/book --elo 1500` picks the band), `report.md`.
 - Notebook 1 output: `report.md` (what was extracted), `annotated/annotated_moves.jsonl.gz`, `prose/`, `books/`, `concept_line_pairs.jsonl`.
 - Notebook 2 output: `nlp/` (the trained model, `metrics.json`, `thresholds.json`), `nlp.log`.
 - The same commands run on a laptop: `python -m chessme books-learn --out data/books_learn`, then `python -m chessme books-nlp-train --data data/books_learn --backend bow` (or `--backend transformer` with a GPU).

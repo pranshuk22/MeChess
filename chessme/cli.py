@@ -850,6 +850,32 @@ def cmd_theory_book(args):
     print(report)
 
 
+def cmd_explorer_build(args):
+    from .book import explorer as EX
+    log = _file_logger(args.log)
+    edges = tuple(args.bands)
+    if args.check:
+        r = EX.check(lambda: EX.open_dump(args.source), edges=edges, max_ply=args.max_ply)
+        print(f"check OK: read {r['games']} games, {r['usable']} usable, {r['avg_plies']:.1f} plies each on average")
+        return
+    log(f"=== explorer-build {' '.join(sys.argv[2:])}")
+    res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, sample_every=args.sample_every, max_scan=args.max_scan,
+                 holdout=args.holdout, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
+                 max_entries=args.max_entries, max_minutes=args.max_minutes, checkpoint_every=args.checkpoint_every, resume=not args.fresh, log=log)
+    log(str(res))
+    print((Path(args.out) / "report.md").read_text())
+
+
+def cmd_explorer_query(args):
+    from .book import explorer as EX
+    start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
+    rows = EX.query(args.db, args.fen or start, rating=args.rating)
+    if not rows:
+        print("no games in the explorer for this position at this rating")
+    for r in rows[:args.top]:
+        print(f"{r['san']:8s} {r['games']:9,d} games {100 * r['share']:5.1f}%   white {100 * r['white']:4.1f}%  draw {100 * r['draw']:4.1f}%  black {100 * r['black']:4.1f}%")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1298,6 +1324,20 @@ def main():
     bk.add_argument("--out", default="data/books"); bk.add_argument("--only", nargs="*", help="book ids"); bk.add_argument("--pause", type=float, default=3.0)
     bk.add_argument("--log", default="data/books/books.log")
     bk.set_defaults(func=cmd_books_fetch)
+    eb = sub.add_parser("explorer-build", help="build an opening explorer (SQLite) and per-band theory books from the Lichess database (streamed, CC0)")
+    eb.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst", help="a .pgn.zst URL or path (or plain .pgn)")
+    eb.add_argument("--out", default="data/explorer"); eb.add_argument("--bands", nargs="+", type=int, default=[600, 1000, 1400, 1800, 2200, 2600, 3300], help="rating band edges")
+    eb.add_argument("--max-ply", type=int, default=16); eb.add_argument("--sample-every", type=int, default=4, help="keep every Nth game (spreads the sample over the file)")
+    eb.add_argument("--max-scan", type=int, default=12_000_000, help="games to scan at most"); eb.add_argument("--holdout", type=int, default=2000, help="held-out games per band for coverage")
+    eb.add_argument("--db-min-games", type=int, default=20); eb.add_argument("--book-min-games", type=int, default=50); eb.add_argument("--book-min-share", type=float, default=0.03)
+    eb.add_argument("--max-entries", type=int, default=30_000_000); eb.add_argument("--max-minutes", type=float, help="stop counting after this long and still write the outputs")
+    eb.add_argument("--checkpoint-every", type=int, default=1_000_000); eb.add_argument("--fresh", action="store_true", help="ignore an earlier checkpoint")
+    eb.add_argument("--check", action="store_true", help="read a few hundred games and exit: tests the URL, decompression and parsing in seconds")
+    eb.add_argument("--log", default="data/explorer/explorer.log")
+    eb.set_defaults(func=cmd_explorer_build)
+    eq = sub.add_parser("explorer-query", help="look a position up in the explorer database")
+    eq.add_argument("db"); eq.add_argument("--fen"); eq.add_argument("--rating", type=int, default=1500); eq.add_argument("--top", type=int, default=10)
+    eq.set_defaults(func=cmd_explorer_query)
     tb = sub.add_parser("theory-book", help="build an opening book of known theory (both colours), weighted by what players at a rating band play")
     tb.add_argument("--out", required=True); tb.add_argument("--openings-dir", default="data/opening_names"); tb.add_argument("--download", action="store_true", help="fetch the CC0 opening list if missing")
     tb.add_argument("--games", help="cohort folder with games/ (style-games-fetch output) for popularity"); tb.add_argument("--pgn", nargs="*", help="extra PGN files for popularity")
