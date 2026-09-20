@@ -852,28 +852,37 @@ def cmd_theory_book(args):
 
 def cmd_explorer_build(args):
     from .book import explorer as EX
+    from .jobs import JobControl
     log = _file_logger(args.log)
     edges = tuple(args.bands)
     if args.check:
         r = EX.check(lambda: EX.open_dump(args.source), edges=edges, max_ply=args.max_ply)
-        print(f"check OK: read {r['games']} games, {r['usable']} usable, {r['avg_plies']:.1f} plies each on average")
+        print(f"check OK: read {r['games']} games, {r['usable']} usable, {r['avg_plies']:.1f} plies each; "
+              f"{r['with_eval']} with engine evaluations, {r['with_clock']} with clocks")
         return
     log(f"=== explorer-build {' '.join(sys.argv[2:])}")
-    res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, sample_every=args.sample_every, max_scan=args.max_scan,
-                 holdout=args.holdout, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
-                 max_entries=args.max_entries, max_minutes=args.max_minutes, checkpoint_every=args.checkpoint_every, resume=not args.fresh, log=log)
-    log(str(res))
+    ctl = JobControl(args.job, args.control_dir, log=log)
+    with ctl.signals():
+        res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, sample_every=args.sample_every, max_scan=args.max_scan,
+                     holdout=args.holdout, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
+                     eval_margin_cp=args.eval_margin, max_entries=args.max_entries, max_memory_gb=args.max_memory_gb, max_minutes=args.max_minutes,
+                     checkpoint_every=args.checkpoint_every, checkpoint_minutes=args.checkpoint_minutes, resume=not args.fresh,
+                     resume_glob=args.resume_glob, drop_state_when_finished=args.drop_state_when_finished, openings_dir=args.openings_dir,
+                     full_from=args.full_from, should_stop=ctl.stop_requested, log=log)
     print((Path(args.out) / "report.md").read_text())
 
 
 def cmd_explorer_query(args):
     from .book import explorer as EX
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
-    rows = EX.query(args.db, args.fen or start, rating=args.rating)
-    if not rows:
-        print("no games in the explorer for this position at this rating")
-    for r in rows[:args.top]:
-        print(f"{r['san']:8s} {r['games']:9,d} games {100 * r['share']:5.1f}%   white {100 * r['white']:4.1f}%  draw {100 * r['draw']:4.1f}%  black {100 * r['black']:4.1f}%")
+    fen = args.fen or start
+    name = EX.opening_at(args.db, fen)
+    if name:
+        print(f"{name[0]} {name[1]}")
+    rows = EX.query(args.db, fen, rating=args.rating)
+    print(EX.format_rows(rows, args.top) if rows else "no games in the explorer for this position at this rating")
+    if rows:
+        print("bar: ░ White wins  ▒ draws  █ Black wins")
 
 
 def cmd_style_status(args):
@@ -1326,12 +1335,19 @@ def main():
     bk.set_defaults(func=cmd_books_fetch)
     eb = sub.add_parser("explorer-build", help="build an opening explorer (SQLite) and per-band theory books from the Lichess database (streamed, CC0)")
     eb.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst", help="a .pgn.zst URL or path (or plain .pgn)")
-    eb.add_argument("--out", default="data/explorer"); eb.add_argument("--bands", nargs="+", type=int, default=[600, 1000, 1400, 1800, 2200, 3300], help="rating band edges")
-    eb.add_argument("--max-ply", type=int, default=16); eb.add_argument("--sample-every", type=int, default=4, help="keep every Nth game (spreads the sample over the file)")
+    eb.add_argument("--out", default="data/explorer"); eb.add_argument("--bands", nargs="+", type=int, default=list(__import__("chessme.book.explorer", fromlist=["x"]).DEFAULT_BANDS), help="rating band edges (default: every range, 0 to 4000)")
+    eb.add_argument("--max-ply", type=int, default=24); eb.add_argument("--sample-every", type=int, default=4, help="keep every Nth game (spreads the sample over the file)")
     eb.add_argument("--max-scan", type=int, default=20_000_000, help="games to scan at most"); eb.add_argument("--holdout", type=int, default=2000, help="held-out games per band for coverage")
     eb.add_argument("--db-min-games", type=int, default=20); eb.add_argument("--book-min-games", type=int, default=50); eb.add_argument("--book-min-share", type=float, default=0.03)
     eb.add_argument("--max-entries", type=int, default=30_000_000); eb.add_argument("--max-minutes", type=float, help="stop counting after this long and still write the outputs")
-    eb.add_argument("--checkpoint-every", type=int, default=1_000_000); eb.add_argument("--fresh", action="store_true", help="ignore an earlier checkpoint")
+    eb.add_argument("--max-memory-gb", type=float, default=16.0, help="prune the rarest entries when the process grows past this")
+    eb.add_argument("--checkpoint-every", type=int, default=1_000_000, help="games between checkpoints"); eb.add_argument("--checkpoint-minutes", type=float, default=15, help="and at least this often")
+    eb.add_argument("--fresh", action="store_true", help="ignore an earlier checkpoint"); eb.add_argument("--resume-glob", help="search this glob (e.g. an earlier run mounted as an input) for a checkpoint when the output folder has none")
+    eb.add_argument("--drop-state-when-finished", action="store_true", help="delete the checkpoint after a complete run (a stopped run keeps it)")
+    eb.add_argument("--full-from", type=int, default=2200, help="bands starting at this rating are rare: count every game there, not one in --sample-every")
+    eb.add_argument("--eval-margin", type=float, help="also drop book moves whose average engine evaluation is worse than the best sibling's by more than this many centipawns")
+    eb.add_argument("--openings-dir", default="data/opening_names", help="Lichess opening names, stored in the explorer database (from `theory-book --download`)")
+    eb.add_argument("--job", default="explorer"); eb.add_argument("--control-dir", default="data/control")
     eb.add_argument("--check", action="store_true", help="read a few hundred games and exit: tests the URL, decompression and parsing in seconds")
     eb.add_argument("--log", default="data/explorer/explorer.log")
     eb.set_defaults(func=cmd_explorer_build)
