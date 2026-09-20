@@ -131,3 +131,8 @@ def test_metrics_helpers():
     Y, P = np.array([[1, 0], [1, 1]], float), np.array([[1, 0], [0, 1]], float)
     micro, macro = N.concept_f1(Y, P)
     assert abs(micro - 2 * 2 / (2 * 2 + 0 + 1)) < 1e-9 and 0 < macro <= 1
+
+
+def test_a_zero_minute_deadline_still_stops(tmp_path):
+    res = N.train(synth(300), tmp_path, backend="bow", epochs=5, dim=32, deadline_minutes=0, log=lambda *_: None)
+    assert res["stopped"] and res["step"] == 0

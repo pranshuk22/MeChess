@@ -318,7 +318,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
             idx = order[i * batch:(i + 1) * batch]
             if ctl:
                 ctl.checkpoint()
-            if deadline_minutes and (time.time() - t0) / 60 >= deadline_minutes:
+            if deadline_minutes is not None and (time.time() - t0) / 60 >= deadline_minutes:
                 stopped = True
                 log(f"time budget of {deadline_minutes} min reached at step {step}/{total}: saving a checkpoint")
                 break
