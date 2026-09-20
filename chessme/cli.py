@@ -559,6 +559,24 @@ def cmd_calibrate_link(args):
     print(f"\n{n} link match(es) played; calibration updated: {args.calibration}")
 
 
+def cmd_dial_design(args):
+    from .mechess import design, dial
+    from .mechess.calibration import censored
+    src = json.loads(Path(args.from_calibration).read_text())
+    anchors = [p for p in src["points"] if not censored(p) and "linked_to" not in p]
+    table = design.weak_end_table(tuple(args.labels))
+    dial.save_table(table, args.out_table)
+    keep = {k: v for k, v in table.items() if k in {p["dial"] for p in anchors} or k < 1800}
+    points = design.skeleton(keep, anchors)
+    Path(args.out_calibration).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out_calibration).write_text(json.dumps({"scale": src.get("scale", "stockfish-UCI_Elo"), "offset": 0.0,
+                                                      "meta": src.get("meta", {}), "points": points}, indent=1))
+    print(f"table -> {args.out_table}")
+    for label, row in sorted(table.items()):
+        print(f"  {label:5d}: nodes {row[0]:6d} multipv {row[1]} window {row[2]:3d} T {row[3]:.2f} scale {row[4]:6.1f} book {row[5]:2d} blunder {row[6] if len(row) > 6 else 0:.2f}")
+    print(f"calibration skeleton -> {args.out_calibration}\nnext: chessme calibrate-link --calibration {args.out_calibration} --table {args.out_table} --concurrency 3")
+
+
 def cmd_style_status(args):
     import time
 
@@ -980,6 +998,11 @@ def main():
         lp.add_argument("--se", type=float, default=35.0); lp.add_argument("--min-games", type=int, default=40)
         lp.add_argument("--max-games", type=int, default=400); lp.add_argument("--concurrency", type=int, default=1)
     lk.set_defaults(func=cmd_calibrate_link)
+    dd = sub.add_parser("dial-design", help="design the weak end of the dial: a table of settings plus a calibration skeleton to link")
+    dd.add_argument("--from-calibration", default="data/calibration/dial.json", help="calibration with the absolute measurements to anchor on")
+    dd.add_argument("--labels", type=int, nargs="+", default=list(range(400, 1601, 200)))
+    dd.add_argument("--out-table", default="data/calibration/weak_table.json"); dd.add_argument("--out-calibration", default="data/calibration/weak_cal.json")
+    dd.set_defaults(func=cmd_dial_design)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
