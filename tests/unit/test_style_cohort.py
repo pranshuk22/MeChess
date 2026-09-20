@@ -233,3 +233,24 @@ class TestNetworkFailures:
         res = CO.fetch_cohort({"bob": 1900}, tmp_path, "s", players=10, lo=1500, hi=2600, n_games=30, per_game=2,
                               min_games=30, pause=0, getter=g, log=lambda *_: None)
         assert res["rejected"] == 1
+
+
+class TestCleanTermination:
+    """Regression: `pkill` (SIGTERM) used to kill the analysis parent instantly, leaving pool workers with a broken
+    pipe (BrokenPipeError tracebacks in the log, leaked semaphores)."""
+
+    def test_sigterm_becomes_keyboard_interrupt_and_the_old_handler_is_restored(self):
+        import os
+        import signal
+        before = signal.getsignal(signal.SIGTERM)
+        with pytest.raises(KeyboardInterrupt):
+            with CO.terminate_cleanly():
+                os.kill(os.getpid(), signal.SIGTERM)
+        assert signal.getsignal(signal.SIGTERM) == before
+
+    def test_handler_is_restored_after_a_normal_exit(self):
+        import signal
+        before = signal.getsignal(signal.SIGTERM)
+        with CO.terminate_cleanly():
+            assert signal.getsignal(signal.SIGTERM) != before
+        assert signal.getsignal(signal.SIGTERM) == before

@@ -10,10 +10,12 @@ Pipeline (each stage is resumable and writes small files under one folder):
 Privacy: only public games; the folder holds hashed ids (salted, salt kept locally); usernames stay in
 `candidates.json` on the local disk only and must not be published. Bots and accounts flagged for ToS violations are
 skipped where the data says so (BOT title in the game headers)."""
+import contextlib
 import io
 import json
 import os
 import random
+import signal
 import time
 from pathlib import Path
 
@@ -247,8 +249,27 @@ def analyse_player(args):
     return Path(items_path).stem, len(items), len(positions)
 
 
+@contextlib.contextmanager
+def terminate_cleanly():
+    """Turn SIGTERM into KeyboardInterrupt while active. Python otherwise dies on SIGTERM without cleanup, which leaves
+    pool workers writing to a pipe nobody reads (BrokenPipeError tracebacks, leaked semaphores); as an exception it lets
+    `with Pool(...)` terminate its workers and their engines properly."""
+    def handler(signum, frame):
+        raise KeyboardInterrupt(f"terminated by signal {signum}")
+    try:
+        previous = signal.signal(signal.SIGTERM, handler)
+    except ValueError:  # not in the main thread: nothing to do
+        yield
+        return
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
 def analyse_cohort(out_dir, engine, *, nodes=20000, multipv=8, window=60, workers=4, log=print):
-    """Run the engine over every fetched player that has no candidate file yet (parallel, resumable)."""
+    """Run the engine over every fetched player that has no candidate file yet (parallel, resumable).
+    Stopping it (Ctrl-C or SIGTERM) shuts the workers down cleanly; finished players are kept, the rest is redone."""
     import multiprocessing
 
     out = Path(out_dir)
@@ -257,8 +278,12 @@ def analyse_cohort(out_dir, engine, *, nodes=20000, multipv=8, window=60, worker
             for p in sorted((out / "items").glob("*.jsonl")) if not (out / "cands" / f"{p.stem}.npz").exists()]
     log(f"{len(todo)} players to analyse with {workers} engines")
     t0, done = time.time(), 0
-    with multiprocessing.get_context("spawn").Pool(workers) as pool:
-        for pid, n, k in pool.imap_unordered(analyse_player, todo):
-            done += 1
-            log(f"  [{time.time() - t0:5.0f}s] {done}/{len(todo)} {pid}: {k} of {n} decisions had a choice")
+    try:
+        with terminate_cleanly(), multiprocessing.get_context("spawn").Pool(workers) as pool:
+            for pid, n, k in pool.imap_unordered(analyse_player, todo):
+                done += 1
+                log(f"  [{time.time() - t0:5.0f}s] {done}/{len(todo)} {pid}: {k} of {n} decisions had a choice")
+    except KeyboardInterrupt as e:
+        log(f"stopped ({e}); {done} of {len(todo)} players finished in this pass, the rest will be redone on the next run")
+        raise SystemExit(130)
     return len(todo)
