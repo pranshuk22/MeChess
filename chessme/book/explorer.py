@@ -41,6 +41,9 @@ DEFAULT_BANDS = (0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4
 DEFAULT_MAX_PLY = 24
 DEFAULT_MAX_PER_BAND = 1_000_000                             # exact counting: a band stops collecting when it has this many games
 MASK24 = (1 << 24) - 1
+TOP_PLY = 12                                                 # "top games" (a link to the highest-rated game) are kept for the first this many plies
+_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_SITE = re.compile(r"lichess\.org/([A-Za-z0-9]{8})(?:$|[/?#])")
 EVAL_CLAMP = 1000                                            # centipawns: mates count as +-10 pawns
 _MOVENUM = re.compile(r"\d+\.+")
 _TAG = re.compile(r'\[(\w+) "([^"]*)"\]')
@@ -85,6 +88,22 @@ def unpack(v):
 def avg_rating_of(v):
     g = v & MASK24
     return (v >> 72) / g if g else 0.0
+
+
+def gid_to_int(game_id):
+    """A Lichess game id (8 letters and digits) as a number below 2**48 (0 when there is none)."""
+    n = 0
+    for ch in game_id or "":
+        n = n * 62 + _ALPHABET.index(ch)
+    return n
+
+
+def int_to_gid(n):
+    out = ""
+    for _ in range(8):
+        n, r = divmod(n, 62)
+        out = _ALPHABET[r] + out
+    return out
 
 
 def signed64(k):
@@ -163,7 +182,9 @@ def header_record(tags):
     res = {"1-0": 1.0, "1/2-1/2": 0.5, "0-1": 0.0}.get(tags.get("Result"))
     if res is None or "_line" not in tags:
         return None
-    return {"white": w, "black": b, "base": base, "inc": inc, "result": res, "termination": tags.get("Termination", ""), "line": tags["_line"]}
+    site = _SITE.search(tags.get("Site", ""))
+    return {"white": w, "black": b, "base": base, "inc": inc, "result": res, "termination": tags.get("Termination", ""), "line": tags["_line"],
+            "gid": gid_to_int(site.group(1)) if site else 0}
 
 
 def speed_of(base, inc):
@@ -196,6 +217,7 @@ class Counts:
     def __init__(self, n_bands):
         self.tables = [dict() for _ in range(n_bands)]
         self.evals = [dict() for _ in range(n_bands)]           # key -> [n, sum of eval cp (White's point of view)]
+        self.top = [dict() for _ in range(n_bands)]             # key -> (average rating << 48) | game id: the highest-rated game with this move (first plies only)
         self.clock = [dict() for _ in range(n_bands)]           # (speed, ply) -> [n, seconds spent, instant moves]
         self.stats = [{"games": 0, "white": 0, "draws": 0, "moves": 0, "analysed": 0} for _ in range(n_bands)]
         self.games = [0] * n_bands
@@ -219,8 +241,10 @@ class Counts:
         """Count one game (a `header_record`): its moves, evaluations, clock use and totals. Returns the SAN moves read."""
         sans, evals, clocks, last_no = parse_moves(game["line"], max_ply)
         board = chess.Board()
-        table, ev = self.tables[band], self.evals[band]
-        inc = pack(game["result"], (game["white"] + game["black"]) / 2)
+        table, ev, top = self.tables[band], self.evals[band], self.top[band]
+        avg = (game["white"] + game["black"]) / 2
+        inc = pack(game["result"], avg)
+        packed_top = (int(avg) << 48) | game.get("gid", 0) if game.get("gid") else 0
         analysed = False
         for ply, san in enumerate(sans):
             try:
@@ -230,6 +254,8 @@ class Counts:
                 break
             k = (pos_key(board) << 16) | move16(mv)
             table[k] = table.get(k, 0) + inc
+            if packed_top and ply < TOP_PLY and packed_top > top.get(k, 0):
+                top[k] = packed_top
             if evals[ply] is not None:
                 analysed = True
                 e = ev.setdefault(k, [0, 0])
@@ -270,10 +296,11 @@ class Counts:
         """Drop the rarest entries until the tables fit: singletons first, then pairs, ..."""
         threshold = 1
         while self.size() > max_entries and threshold < 50:
-            for t, ev in zip(self.tables, self.evals):
+            for t, ev, tp in zip(self.tables, self.evals, self.top):
                 for k in [k for k, v in t.items() if (v & MASK24) <= threshold]:
                     del t[k]
                     ev.pop(k, None)
+                    tp.pop(k, None)
             self.pruned_below = max(self.pruned_below, threshold)
             threshold += 1
         return threshold - 1
@@ -286,7 +313,7 @@ def save_state(path, counts, games_scanned, config=None):
         pickle.dump({"tables": counts.tables, "games": counts.games, "held_out": counts.held_out, "scanned": games_scanned,
                      "evals": counts.evals, "clock": counts.clock, "stats": counts.stats, "config": config,
                      "speed_games": counts.speed_games, "population": counts.population, "rating_hist": counts.rating_hist,
-                     "window_end": counts.window_end, "pruned_below": counts.pruned_below}, f, protocol=4)
+                     "window_end": counts.window_end, "pruned_below": counts.pruned_below, "top": counts.top}, f, protocol=4)
     tmp.replace(path)
 
 
@@ -302,6 +329,7 @@ def load_state(path):
     c.rating_hist = st.get("rating_hist", c.rating_hist)
     c.window_end = st.get("window_end", c.window_end)
     c.pruned_below = st.get("pruned_below", 0)
+    c.top = st.get("top", c.top)
     return c
 
 
@@ -427,7 +455,7 @@ def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, open
     db = sqlite3.connect(path)
     db.executescript("""CREATE TABLE bands(id INTEGER PRIMARY KEY, lo INTEGER, hi INTEGER, games INTEGER, window_end INTEGER);
         CREATE TABLE moves(band INTEGER, pos INTEGER, move INTEGER, uci TEXT, games INTEGER, white INTEGER, draws INTEGER, black INTEGER,
-                           rating_sum INTEGER, eval_n INTEGER, eval_sum INTEGER);
+                           rating_sum INTEGER, eval_n INTEGER, eval_sum INTEGER, top_game TEXT, top_rating INTEGER);
         CREATE TABLE band_stats(band INTEGER PRIMARY KEY, games INTEGER, white INTEGER, draws INTEGER, moves_sum INTEGER, analysed INTEGER);
         CREATE TABLE clock(band INTEGER, speed TEXT, ply INTEGER, n INTEGER, spent_sum REAL, instant INTEGER);
         CREATE TABLE openings(pos INTEGER, eco TEXT, name TEXT);
@@ -451,8 +479,10 @@ def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, open
             if g >= floor:
                 m = k & 0xFFFF
                 en, es = counts.evals[b].get(k, (0, 0))
-                batch.append((b, signed64(k >> 16), m, unmove16(m).uci(), g, w, d, bl, v >> 72, en, es))
-        db.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?,?)", batch)
+                tp = counts.top[b].get(k)
+                batch.append((b, signed64(k >> 16), m, unmove16(m).uci(), g, w, d, bl, v >> 72, en, es,
+                              int_to_gid(tp & ((1 << 48) - 1)) if tp else None, (tp >> 48) if tp else None))
+        db.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
         rows += len(batch)
         # the true number of games at each stored position, counting the moves that were below the threshold too (shown as "other moves")
         stored = {r[1] for r in batch}
@@ -495,22 +525,24 @@ def query_position(db_path, fen, rating=None, band=None):
     """The explorer answer for a position: {"total": games that reached it, "other": games whose move is not listed (below the database's
     minimum), "moves": [{"san", "uci", "games", "share", "white", "draw", "black", "avg_rating", "eval", "eval_n"}]} most played first, for the band
     that contains `rating` (or `band` id). Shares are of the true total; `eval` is the average evaluation after the move in pawns from White's
-    point of view (None when no annotated game reached it)."""
+    point of view (None when no annotated game reached it); `top_game` / `top_url` / `top_rating` are the highest-rated game that played the move
+    (first plies only; a public Lichess game id, never player names)."""
     db = sqlite3.connect(db_path)
     band = _band_of_rating(db, rating, band)
     board = chess.Board(fen)
     key = signed64(pos_key(board))
-    rows = db.execute("SELECT uci, games, white, draws, black, rating_sum, eval_n, eval_sum FROM moves WHERE band=? AND pos=? ORDER BY games DESC",
+    rows = db.execute("SELECT uci, games, white, draws, black, rating_sum, eval_n, eval_sum, top_game, top_rating FROM moves WHERE band=? AND pos=? ORDER BY games DESC",
                       (band, key)).fetchall()
     t = db.execute("SELECT games FROM positions WHERE band=? AND pos=?", (band, key)).fetchone()
     db.close()
     total = t[0] if t else sum(r[1] for r in rows)
     moves = []
-    for uci, g, w, d, b, rs, en, es in rows:
+    for uci, g, w, d, b, rs, en, es, tg, tr in rows:
         mv = chess.Move.from_uci(uci)
         if mv in board.legal_moves:
             moves.append({"san": board.san(mv), "uci": uci, "games": g, "share": g / (total or 1), "white": w / g, "draw": d / g, "black": b / g,
-                          "avg_rating": rs / g, "eval": (es / en / 100.0) if en else None, "eval_n": en})
+                          "avg_rating": rs / g, "eval": (es / en / 100.0) if en else None, "eval_n": en,
+                          "top_game": tg, "top_url": f"https://lichess.org/{tg}" if tg else None, "top_rating": tr})
     return {"total": total, "other": total - sum(m["games"] for m in moves), "moves": moves}
 
 
@@ -527,9 +559,9 @@ def opening_at(db_path, fen):
     return r
 
 
-def format_rows(rows, top=10, other=None):
+def format_rows(rows, top=10, other=None, links=False):
     """The explorer as text, one line per move: games, share, average rating, evaluation and the result bar; `other` adds the games in moves
-    that are not listed."""
+    that are not listed; `links` adds the top game of each move."""
     lines = []
     for r in rows[:top]:
         ev = f"{r['eval']:+.2f}" if r["eval"] is not None else "  n/a"
@@ -537,6 +569,10 @@ def format_rows(rows, top=10, other=None):
                      f"{bar(r['white'], r['draw'], r['black'])}  {100 * r['white']:.0f}/{100 * r['draw']:.0f}/{100 * r['black']:.0f}")
     if other:
         lines.append(f"{'other':7s} {other:>10,d} (moves played in fewer games than the database keeps)")
+    if links:
+        for r in rows[:top]:
+            if r.get("top_url"):
+                lines.append(f"  top game after {r['san']}: {r['top_url']} (average rating {r['top_rating']})")
     return "\n".join(lines)
 
 
@@ -619,6 +655,7 @@ def render_report(counts, edges, books, cov, meta):
          "(normal ending, not ultra-bullet, both players within 300 points of each other; all speeds are included, as in the Lichess explorer).",
          f"- First {meta.get('max_ply', '?')} plies; a book move needs at least {meta.get('book_min_games', '?')} games and {100 * meta.get('book_min_share', 0):.0f}% of the games at its position.", "",
          "- Counts are exact: every qualifying game was counted, none sampled. A band stops collecting when it is full; a rare band collects over the whole scan, so **each band has its own window** (below).",
+         "- Top games: for the first 12 plies each move keeps a link to the highest-rated game that played it (public Lichess game id).",
          f"- Memory guard: {'nothing was dropped' if not counts.pruned_below else f'entries with at most {counts.pruned_below} games may be missing'}.", "",
          "## Books and coverage (held-out games: excluded from the book, added to the counts afterwards)", "",
          "| band | games counted | window | book positions | book moves | share of games still in book after N plies |", "|---|---|---|---|---|---|"]

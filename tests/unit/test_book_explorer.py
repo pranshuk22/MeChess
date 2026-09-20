@@ -10,7 +10,7 @@ from chessme.mechess.controller import BookReader
 EDGES = (600, 1000, 1400, 1800, 2200)
 
 
-def game(w, b, result, moves, tc="300+0", term="Normal", comments=None):
+def game(w, b, result, moves, tc="300+0", term="Normal", comments=None, site=None):
     """comments: optional list of strings placed after each move, e.g. '[%eval 0.3] [%clk 0:04:58]'."""
     r = {1.0: "1-0", 0.5: "1/2-1/2", 0.0: "0-1"}[result]
     parts = []
@@ -18,7 +18,8 @@ def game(w, b, result, moves, tc="300+0", term="Normal", comments=None):
         c = f" {{ {comments[i]} }}" if comments and comments[i] else ""
         parts.append((f"{i // 2 + 1}. " if i % 2 == 0 else "") + m + c)
     body = " ".join(parts) + f" {r}"
-    return (f'[Event "x"]\n[Site "s"]\n[White "a"]\n[Black "b"]\n[Result "{r}"]\n[WhiteElo "{w}"]\n[BlackElo "{b}"]\n[TimeControl "{tc}"]\n'
+    site_tag = f"https://lichess.org/{site}" if site else "s"
+    return (f'[Event "x"]\n[Site "{site_tag}"]\n[White "a"]\n[Black "b"]\n[Result "{r}"]\n[WhiteElo "{w}"]\n[BlackElo "{b}"]\n[TimeControl "{tc}"]\n'
             f'[Termination "{term}"]\n\n{body}\n\n')
 
 
@@ -429,3 +430,63 @@ def test_the_move_counts_of_a_position_add_up_to_the_games_that_reached_it(tmp_p
     e4 = chess.Board(); e4.push_san("e4")
     second = sum(X.unpack(v)[0] for k, v in c.tables[2].items() if k >> 16 == X.pos_key(e4))
     assert second == 30 + 12 + 8                                                        # exactly the games that played 1.e4
+
+
+# ---- top games: a link to the highest-rated game of each move ----------------------------------------------------------------
+
+def test_game_ids_round_trip_and_are_read_from_the_site_tag():
+    assert X.int_to_gid(X.gid_to_int("AbCd1234")) == "AbCd1234" and X.gid_to_int("") == 0 and X.gid_to_int("zzzzzzzz") < 2 ** 48
+    assert rec(game(1500, 1500, 1.0, ITALIAN, site="AbCd1234"))["gid"] == X.gid_to_int("AbCd1234")
+    assert rec(game(1500, 1500, 1.0, ITALIAN))["gid"] == 0                                   # a game without a Lichess id has none
+    assert rec(game(1500, 1500, 1.0, ITALIAN, site="toolong123"))["gid"] == 0
+
+
+def test_each_move_keeps_the_highest_rated_game_that_played_it(tmp_path):
+    text = (game(1500, 1500, 1.0, ITALIAN, site="lowRated") + game(1590, 1590, 1.0, ITALIAN, site="highRate")
+            + game(1550, 1550, 1.0, SCOTCH, site="scotch01"))
+    run(tmp_path, text, max_ply=6)
+    b = chess.Board()
+    for m in ("e4", "e5", "Nf3", "Nc6"):
+        b.push_san(m)
+    moves = {m["san"]: m for m in X.query(tmp_path / "explorer.db", b.fen(), rating=1500)}
+    assert moves["Bc4"]["top_game"] == "highRate" and moves["Bc4"]["top_rating"] == 1590 and moves["Bc4"]["top_url"] == "https://lichess.org/highRate"
+    assert moves["d4"]["top_game"] == "scotch01"
+    first = X.query(tmp_path / "explorer.db", chess.STARTING_FEN, rating=1500)[0]
+    assert first["san"] == "e4" and first["top_game"] == "highRate"                              # the best of all three games that played 1.e4
+
+
+def test_games_without_an_id_leave_no_link_and_deep_plies_keep_none(tmp_path):
+    line = "e4 e5 Nf3 Nc6 Bb5 a6 Ba4 Nf6 O-O Be7 Re1 b5 Bb3 d6 c3 O-O".split()                 # 16 plies
+    run(tmp_path, game(1500, 1500, 1.0, line, site="deepGame") + game(1500, 1500, 1.0, ITALIAN), max_ply=16)
+    b = chess.Board()
+    assert X.query(tmp_path / "explorer.db", b.fen(), rating=1500)[0]["top_game"] == "deepGame"        # ply 1: kept
+    for m in line[:14]:
+        b.push_san(m)
+    late = X.query(tmp_path / "explorer.db", b.fen(), rating=1500)[0]                                 # ply 15: beyond TOP_PLY, no link
+    assert late["san"] == "c3" and late["top_game"] is None and late["top_url"] is None
+    plain = X.Counts(len(EDGES) - 1)
+    plain.add_game(2, rec(game(1500, 1500, 1.0, ITALIAN)), 6)
+    assert not plain.top[2]                                                                        # no id, nothing stored
+
+
+def test_top_games_survive_the_checkpoint_pruning_and_rebuild_and_store_no_names(tmp_path):
+    text = game(1500, 1500, 1.0, ITALIAN, site="keepMe01") * 3 + game(1500, 1500, 1.0, "a3 a6".split(), site="rareOne1")
+    res = run(tmp_path / "a", text, max_ply=6)
+    st = X.load_state(tmp_path / "a" / "state.pkl.gz")
+    assert len(st.top[2]) > 0 and all(v >> 48 == 1500 for v in st.top[2].values())
+    rebuilt = X.rebuild(tmp_path / "a" / "state.pkl.gz", tmp_path / "b", log=lambda *_: None, db_min_games=1, db_min_frac=0)
+    assert X.query(tmp_path / "b" / "explorer.db", chess.STARTING_FEN, rating=1500)[0]["top_game"] == "keepMe01"
+    for g in st.held_out[2]:
+        assert "White" not in g and "Black" not in g                                           # records hold ratings and ids, never names
+    st.prune(0)
+    assert not st.top[2]                                                                       # pruned entries lose their link with them
+    db = sqlite3.connect(tmp_path / "a" / "explorer.db")
+    assert not any(c in ("white_name", "black_name", "player") for _, c, *_ in db.execute("PRAGMA table_info(moves)"))
+
+
+def test_the_text_answer_lists_the_top_game_links():
+    rows = [{"san": "e4", "games": 100, "share": 1.0, "white": 0.5, "draw": 0.1, "black": 0.4, "avg_rating": 1500.0, "eval": None, "eval_n": 0,
+             "top_game": "AbCd1234", "top_url": "https://lichess.org/AbCd1234", "top_rating": 2650}]
+    assert "https://lichess.org/AbCd1234" not in X.format_rows(rows)
+    text = X.format_rows(rows, links=True)
+    assert "top game after e4: https://lichess.org/AbCd1234 (average rating 2650)" in text

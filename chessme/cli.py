@@ -920,7 +920,7 @@ def cmd_explorer_query(args):
     ans = EX.query_position(args.db, fen, rating=args.rating)
     if ans["moves"]:
         print(f"{ans['total']:,} games reached this position")
-        print(EX.format_rows(ans["moves"], args.top, other=ans["other"]))
+        print(EX.format_rows(ans["moves"], args.top, other=ans["other"], links=True))
         print("bar: ░ White wins  ▒ draws  █ Black wins")
     else:
         print("no games in the explorer for this position at this rating")
