@@ -77,6 +77,16 @@ Measured with `chessme strength --movetime 100` on a laptop (two independent run
 **about 2460 +/- 30 Elo on Stockfish 19's `UCI_Elo` scale** (520 games, no engine faults; the tighter run alone gave 2483 +/- 33).
 The earlier, shorter run gave 2382 +/- 68, consistent within its wider interval. Your numbers depend on your machine and the time control.
 
+## Settings that cannot be measured
+
+Stockfish's `UCI_Elo` has a floor (about 1320) and a ceiling (about 3190). A dial setting that loses almost every game even to the
+weakest Stockfish (or wins almost every game against the strongest) is *beyond the measurable range*: the ladder stops with
+"weaker than the weakest opponent available" and the number it prints is an extrapolation from a handful of games, not a
+measurement. Such points are kept in the calibration file (with their stop reason) but **never used to map dial settings**; targets
+outside the measured range are clamped to its edge, and `Calibration.in_range(target)` says whether a target is covered. To extend the
+range downward you need weaker reference opponents, for example measuring a low dial setting against a higher one and linking that
+to an absolute measurement above the floor.
+
 ## Cost and practical advice
 
 - A reliable estimate needs a few hundred games per measured engine. At 100 ms per move a game takes roughly 10 to 30 seconds,
