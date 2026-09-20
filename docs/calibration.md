@@ -71,6 +71,12 @@ Measured points are noisy, so a higher dial could measure lower than a lower one
 curve (isotonic regression weighted by precision) and inverts it: `Calibration.dial_for(target)` returns the dial setting
 whose calibrated strength is closest to the target. Flat stretches map to their middle.
 
+## Example result
+
+Measured with `chessme strength --movetime 100` on a laptop (two independent runs, pooled): the plain alpha-beta engine scored
+**about 2460 +/- 30 Elo on Stockfish 19's `UCI_Elo` scale** (520 games, no engine faults; the tighter run alone gave 2483 +/- 33).
+The earlier, shorter run gave 2382 +/- 68, consistent within its wider interval. Your numbers depend on your machine and the time control.
+
 ## Cost and practical advice
 
 - A reliable estimate needs a few hundred games per measured engine. At 100 ms per move a game takes roughly 10 to 30 seconds,
