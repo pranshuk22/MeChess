@@ -144,3 +144,25 @@ class TestJointFit:
     def test_without_any_anchor_only_differences_are_meaningful(self):
         fit = S.joint_fit([self.match(1400, 1200, 300, "A", "B")], {})
         assert abs((fit["A"][0] - fit["B"][0]) - 200) < 10
+
+
+class TestJointFitLopsided:
+    """Regression: a chain with a 50% link and a 4% link (77 losses in 80 games) made plain Newton diverge to -517195 / +560532."""
+
+    ANCHORS = {1800: (1236.0, 35.0), 2100: (1531.0, 35.0), 2400: (2048.0, 34.0), 2600: (2344.0, 34.0)}
+
+    def test_the_observed_chain_gives_finite_sensible_ratings(self):
+        fit = S.joint_fit([(1200, 1500, 31 + 0.5 * 18, 80), (1500, 1800, 3.0, 80)], self.ANCHORS)
+        assert all(-500 < v[0] < 3000 and 0 < v[1] < 1000 for v in fit.values())
+        assert abs(fit[1500][0] - (1236 - 550)) < 150          # 4% against 1800 is about 550 Elo lower
+        assert abs(fit[1200][0] - fit[1500][0]) < 120          # 1200 and 1500 drew level
+        assert fit[1500][1] > fit[1800][1] and fit[1200][1] >= fit[1500][1] * 0.99   # uncertainty grows along the chain
+
+    def test_extreme_scores_in_either_direction_never_diverge(self):
+        for score in (0.0, 1.0, 0.5):
+            fit = S.joint_fit([("A", "B", score * 60, 60), ("B", "C", (1 - score) * 60, 60)], {"C": (1800.0, 30.0)})
+            assert all(abs(v[0]) < 5000 for v in fit.values()), score
+
+    def test_the_stable_logistic_handles_huge_differences(self):
+        assert S.expected(1e9, 0) == pytest.approx(1.0) and S.expected(0, 1e9) == pytest.approx(0.0)
+        assert S.expected(1500, 1500) == 0.5 and abs(S.expected(1700, 1500) - 0.7597) < 1e-3

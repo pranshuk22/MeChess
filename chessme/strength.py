@@ -20,8 +20,9 @@ _ID_NAME = re.compile(r"^id name (.+)$", re.M)
 
 
 def expected(rating, opp):
-    """Expected score of `rating` against `opp` (logistic Elo model)."""
-    return 1.0 / (1.0 + 10 ** ((opp - rating) / 400.0))
+    """Expected score of `rating` against `opp` (logistic Elo model; numerically stable for huge differences)."""
+    z = max(min((rating - opp) * LN10_400, 700.0), -700.0)
+    return 1.0 / (1.0 + math.exp(-z))
 
 
 @dataclass
@@ -121,12 +122,13 @@ def run_ladder(play, *, start, opp_min, opp_max, pairs_per_round=5, target_se=35
 
 # ---- linking players that cannot be measured directly ----------------------------------------------------------------
 
-def joint_fit(matches, anchors, *, iterations=60, pseudo=0.5, weak_prior_sd=1500.0):
+def joint_fit(matches, anchors, *, iterations=60, pseudo=0.5, weak_prior_sd=1500.0, max_step=200.0):
     """Ratings of several players from games between them plus absolute measurements of some of them.
 
     `matches`: [(a, b, score_a, games)] between named players; `anchors`: {name: (elo, se)} absolute ratings measured
     elsewhere (each acts as a Gaussian prior). Players without an anchor get a very weak prior only, so their rating is
-    fixed by the games linking them to anchored players. Maximum a posteriori by Newton's method; returns
+    fixed by the games linking them to anchored players. Maximum a posteriori by damped Newton (step-limited with a line
+    search, so lopsided results cannot make it diverge); returns
     {name: (elo, se)}. Each match gets `pseudo` games scored as draws so lopsided results stay finite."""
     import numpy as np
 
@@ -136,13 +138,20 @@ def joint_fit(matches, anchors, *, iterations=60, pseudo=0.5, weak_prior_sd=1500
     R = np.array([anchors[n][0] if n in anchors else ref for n in names], dtype=float)
     mu = R.copy()
     inv_var = np.array([1.0 / max(anchors[n][1], 1.0) ** 2 if n in anchors else 1.0 / weak_prior_sd ** 2 for n in names])
-    for _ in range(iterations):
-        g = -(R - mu) * inv_var
+    adj = [(idx[a], idx[b], s + 0.5 * pseudo, n + pseudo) for a, b, s, n in matches]
+
+    def log_posterior(x):
+        lp = -0.5 * float(np.sum((x - mu) ** 2 * inv_var))
+        for i, j, s, n in adj:
+            e = min(max(expected(x[i], x[j]), 1e-12), 1 - 1e-12)
+            lp += s * math.log(e) + (n - s) * math.log(1 - e)
+        return lp
+
+    def derivatives(x):
+        g = -(x - mu) * inv_var
         H = -np.diag(inv_var)
-        for a, b, s, n in matches:
-            i, j = idx[a], idx[b]
-            s, n = s + 0.5 * pseudo, n + pseudo
-            e = expected(R[i], R[j])
+        for i, j, s, n in adj:
+            e = expected(x[i], x[j])
             d = (s - n * e) * LN10_400
             w = n * e * (1 - e) * LN10_400 ** 2
             g[i] += d
@@ -151,10 +160,23 @@ def joint_fit(matches, anchors, *, iterations=60, pseudo=0.5, weak_prior_sd=1500
             H[j, j] -= w
             H[i, j] += w
             H[j, i] += w
+        return g, H
+
+    # Damped Newton: the objective is concave, but on lopsided results a plain Newton step overshoots into the flat tail of
+    # the logistic and diverges. Limit the step and back off until the posterior actually improves.
+    for _ in range(iterations * 4):
+        g, H = derivatives(R)
         step = np.linalg.solve(H - 1e-9 * np.eye(len(names)), -g)
-        R += step
-        if np.max(np.abs(step)) < 1e-6:
+        biggest = float(np.max(np.abs(step)))
+        if biggest > max_step:
+            step *= max_step / biggest
+        base, t = log_posterior(R), 1.0
+        while t > 1e-6 and log_posterior(R + t * step) < base - 1e-12:
+            t /= 2
+        R = R + t * step
+        if biggest * t < 1e-4:
             break
+    _, H = derivatives(R)
     cov = np.linalg.inv(-H + 1e-9 * np.eye(len(names)))
     return {n: (float(R[idx[n]]), float(np.sqrt(max(cov[idx[n], idx[n]], 0.0)))) for n in names}
 
