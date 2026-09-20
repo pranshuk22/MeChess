@@ -28,7 +28,6 @@ def test_rows_from_the_anchor_upwards_are_the_original_ones_so_their_measurement
     t = D.weak_end_table()
     for k in (1800, 2100, 2400, 2600):
         assert t[k] == _row(DEFAULT_TABLE[k])       # same numbers (padded with a zero blunder rate)
-    assert 1200 not in t or t[1200] != DEFAULT_TABLE[1200]                      # the old low rows are replaced
 
 
 def test_the_table_works_with_settings_for_and_gives_a_blunder_rate_at_the_bottom():

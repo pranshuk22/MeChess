@@ -14,8 +14,17 @@ from pathlib import Path
 # The optional 7th value is the probability of playing a random legal move instead of the chosen one: a strength knob that keeps
 # working below the search floor, where fewer nodes or a wider window no longer weaken the play measurably.
 DEFAULT_TABLE = {
-    1200: (300, 8, 250, 1.6, 150, 8),
-    1500: (1000, 8, 180, 1.3, 110, 14),
+    # Weak end: a smooth path (chessme.mechess.design.weak_end_table) from a very weak row towards the 1800 row; the node budget rises
+    # geometrically while the blunder rate, window, temperature and cp scale ease towards it. Measured against Stockfish (linked
+    # chain, 200 games per link): 1000 -> ~370, 1200 -> ~430, 1300 -> ~520, 1400 -> ~600, 1500 -> ~720, 1600 -> ~990, 1700 -> ~1090.
+    1000: (363, 7, 251, 1.61, 177.1, 12, 0.23),
+    1200: (661, 7, 219, 1.49, 152.9, 14, 0.17),
+    1300: (893, 7, 202, 1.42, 140.7, 16, 0.14),
+    1400: (1205, 7, 186, 1.36, 128.6, 17, 0.11),
+    1500: (1626, 6, 169, 1.29, 116.4, 18, 0.09),
+    1600: (2195, 6, 153, 1.23, 104.3, 19, 0.06),
+    1700: (2963, 6, 136, 1.16, 92.1, 21, 0.03),
+    # Upper part (unchanged): measured 1800 -> ~1240, 2100 -> ~1530, 2400 -> ~2050, 2600 -> ~2340 on the same scale.
     1800: (4000, 6, 120, 1.1, 80, 22),
     2100: (15000, 5, 80, 1.0, 55, 30),
     2400: (60000, 4, 50, 0.9, 40, 30),
