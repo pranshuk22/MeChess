@@ -77,6 +77,7 @@ Details in [docs/architecture.md](docs/architecture.md).
 - [Getting started](docs/getting-started.md): install, build, first run, environment variables
 - [Command reference](docs/cli.md): every `chessme` command and the engine's UCI options
 - [Using Stockfish](docs/stockfish.md): why and how we use it, its command line, how our client reads it
+- [Strength and the Elo dial](docs/calibration.md): measuring strength against Stockfish, calibrating the dial
 - [Style analysis](docs/style-analysis.md): the method, the datasets, the tests, the limits
 - [Data sources and privacy](docs/data-sources.md): where games come from, terms, what is stored
 - [Running long jobs](docs/operations.md): memory guard, logs, resuming, laptops that sleep

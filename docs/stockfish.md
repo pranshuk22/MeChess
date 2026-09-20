@@ -12,8 +12,8 @@ running it as a separate process is fine, see [third-party](third-party.md)).
    move. Our own engine is far weaker and disagrees with Stockfish about which move is best in about two out of
    three positions, which distorted the first results; Stockfish is therefore the default judge. Every dataset stores
    the judge that made it (for example `stockfish@20000n`) and results from different judges must not be mixed.
-2. **A reference opponent** for measuring our engine's strength and calibrating the Elo dial (planned; see the
-   [roadmap](roadmap.md)).
+2. **A reference opponent** for measuring our engine's strength and calibrating the Elo dial: limited with `UCI_LimitStrength` and
+   `UCI_Elo` and played in an adaptive ladder ([calibration.md](calibration.md)).
 3. **A labelling tool** (planned): centipawn loss per move in your games, for the mistake model and reports.
 
 Anything that speaks UCI can be the judge: pass it with `--engine /path/to/engine` (the default is our own
