@@ -453,6 +453,18 @@ def cmd_style_anchors_report(args):
     (Path(args.out) / "anchor_report.txt").write_text(text)
 
 
+def cmd_style_status(args):
+    import time
+
+    from .style import status as ST
+    while True:
+        text = ST.render(cohort=args.cohort, anchors=args.anchors, target=args.target, logs=args.logs, jobs=ST.running())
+        print(("\033[2J\033[H" if args.watch else "") + text, flush=True)
+        if not args.watch:
+            return
+        time.sleep(args.watch)
+
+
 def cmd_style_judge_compare(args):
     from .style import judges as J
     a, ja = J.load_dir(args.a)
@@ -813,6 +825,11 @@ def main():
     ar.add_argument("--player", help="dataset folder (train.npz / test.npz) of the player to rank against the anchors")
     ar.add_argument("--chunk", type=int, default=30)
     ar.set_defaults(func=cmd_style_anchors_report)
+    st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
+    st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
+    st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
+    st.add_argument("--logs", default="data/style/logs"); st.add_argument("--watch", type=float, help="refresh every N seconds")
+    st.set_defaults(func=cmd_style_status)
     sj = sub.add_parser("style-judge-compare", help="how much does the judge engine change the style data? (two dataset folders)")
     sj.add_argument("a"); sj.add_argument("b")
     sj.set_defaults(func=cmd_style_judge_compare)
