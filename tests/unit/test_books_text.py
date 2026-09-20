@@ -69,3 +69,18 @@ def test_analyse_book_links_concepts_to_paragraphs_with_a_line():
     assert res["paragraphs"] == 3 and res["notation"]["algebraic"] == 1
     assert res["concepts"]["outpost"] == 1 and res["concept_with_moves"] == {"outpost": 1}
     assert "blockade" in res["concepts"] and "blockade" not in res["concept_with_moves"]
+
+
+def test_tidy_brings_the_verbose_older_style_to_the_compact_one():
+    assert T.tidy("1. P. to K.'s 4th. 1. P. to K's 4th.").split() == ["1.", "P-K", "4.", "1.", "P-K", "4."]
+    assert "Kt-K B 3" in T.tidy("Kt. to K. B. 3rd")
+    assert T.tidy("P. takes P.").split() == ["P", "x", "P"]
+
+
+def test_parse_the_verbose_style_of_morphys_and_steinitzs_time():
+    moves, _ = T.parse_line("1. P. to K.'s 4th. 1. P. to K's 4th. 2. K. Kt. to B. 3rd. Q. Kt. to B. 3rd. 3. B. to Q. Kt. 5th. K. Kt. to B. 3rd.")
+    assert moves == ["e4", "e5", "Nf3", "Nc6", "Bb5", "Nf6"]
+    m2, _ = T.parse_line("1. P. to Q.'s 4th 1. P. to Q.'s 4th 2. P. to Q. B.'s 4th 2. P. takes P.")
+    assert m2 == ["d4", "d5", "c4", "dxc4"]
+    m3, _ = T.parse_line("1. P— K  4 P— K  4 2. Kt— K B 3 Kt— Q B 3")           # OCR: em dashes and double spaces
+    assert m3 == ["e4", "e5", "Nf3", "Nc6"]

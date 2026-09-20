@@ -734,6 +734,40 @@ def cmd_books_fetch(args):
     log(str(BF.run(args.out, books, pause=args.pause, log=log)))
 
 
+def cmd_books_learn(args):
+    from .books import learn as BL
+    log = _file_logger(args.log)
+    log(f"=== books-learn {' '.join(sys.argv[2:])}")
+    res = BL.run(args.out, steps=tuple(args.steps), limit_per_source=args.limit_per_source, extra_pgn_dir=args.studies_dir,
+                 redo=args.redo, archive=args.archive, control_dir=args.control_dir, log=log)
+    log(str(res))
+
+
+def cmd_books_studies(args):
+    from .books import studies as BS
+    log = _file_logger(args.log)
+    users = list(args.users or []) + (Path(args.users_file).read_text().split() if args.users_file else [])
+    log(f"=== books-studies: {len(users)} users, {len(args.study_ids or [])} studies")
+    log(str(BS.run(args.out, users, args.study_ids or [], pause=args.pause, log=log)))
+
+
+def cmd_books_pdf(args):
+    from .books import pdf as BP
+    log = _file_logger(args.log)
+    log(str(BP.run(args.inp, args.out, log=log)))
+
+
+def cmd_books_topics(args):
+    from .books import text as BT
+    from .books import topics as TP
+    paras = []
+    for f in sorted(Path(args.texts).glob("*.txt")):
+        paras += [p for p in BT.paragraphs(BT.strip_gutenberg(f.read_text(errors="replace"))) if 200 <= len(p) <= 1500]
+    print(f"{len(paras)} paragraphs")
+    for r in TP.cluster(paras, k=args.k):
+        print(f"cluster {r['cluster']:2d} ({r['size']:5d}): {', '.join(r['words'])}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1177,6 +1211,23 @@ def main():
     bk.add_argument("--out", default="data/books"); bk.add_argument("--only", nargs="*", help="book ids"); bk.add_argument("--pause", type=float, default=3.0)
     bk.add_argument("--log", default="data/books/books.log")
     bk.set_defaults(func=cmd_books_fetch)
+    bl = sub.add_parser("books-learn", help="everything from books and annotated games in one command: books, concept-line pairs, annotated archive, report (resumable)")
+    bl.add_argument("--out", default="data/books_learn"); bl.add_argument("--steps", nargs="+", default=["books", "pairs", "annotated", "report"],
+                                                                        choices=["books", "pairs", "annotated", "report"])
+    bl.add_argument("--limit-per-source", type=int, help="at most this many games per annotated source (a trial)")
+    bl.add_argument("--studies-dir", help="folder with extra PGN files, e.g. from books-studies"); bl.add_argument("--archive", help="an already downloaded annotated_pgn_free.tar.gz")
+    bl.add_argument("--redo", action="store_true"); bl.add_argument("--control-dir", default="data/control"); bl.add_argument("--log", default="data/books_learn/learn.log")
+    bl.set_defaults(func=cmd_books_learn)
+    bs = sub.add_parser("books-studies", help="export public Lichess studies of users or by study id (one request at a time)")
+    bs.add_argument("--out", default="data/books_learn/studies"); bs.add_argument("--users", nargs="*"); bs.add_argument("--users-file")
+    bs.add_argument("--study-ids", nargs="*"); bs.add_argument("--pause", type=float, default=2.0); bs.add_argument("--log", default="data/books_learn/studies.log")
+    bs.set_defaults(func=cmd_books_studies)
+    bp = sub.add_parser("books-pdf", help="read PDFs you own (text layer) with the book reader")
+    bp.add_argument("inp"); bp.add_argument("--out", default="data/books_learn/private"); bp.add_argument("--log", default="data/books_learn/pdf.log")
+    bp.set_defaults(func=cmd_books_pdf)
+    bt = sub.add_parser("books-topics", help="cluster book paragraphs into topics (needs sentence-transformers)")
+    bt.add_argument("texts", help="folder with .txt books"); bt.add_argument("--k", type=int, default=25)
+    bt.set_defaults(func=cmd_books_topics)
     sq = sub.add_parser("style-games-quality", help="engine move-quality features (accuracy, class rates, conversion...) for a sample of the cohort (resumable, pausable)")
     sq.add_argument("--data", default="data/style/cohort2"); sq.add_argument("--engine", default="stockfish")
     sq.add_argument("--nodes", type=int, default=25000); sq.add_argument("--games", type=int, default=10); sq.add_argument("--players", type=int, default=400)
