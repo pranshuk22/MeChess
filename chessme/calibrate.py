@@ -64,10 +64,26 @@ def measure(spec, opponent_command, openings, limit, *, start=None, opponent_opt
             "rounds": ladder.rounds, "faults": play.state["faults"], "seconds": round(time.time() - t0)}
 
 
-def mechess_command(engine, prior="uniform", book=None):
-    """Command line that starts MeChess as a UCI engine (used as the measured player)."""
+def mechess_command(engine, prior="uniform", book=None, *, table=None, maia3_repo=None, maia3_size=None, extra_path=None,
+                    threads=1):
+    """Command line that starts MeChess as a UCI engine (used as the measured player).
+
+    Neural priors (`ours=...`, `maia3=...`) are started with `threads` CPU threads (env OMP_NUM_THREADS), because several games
+    run at once and every game process would otherwise take all cores and distort the timing of the whole measurement."""
     cmd = [sys.executable, "-m", "chessme", "mechess", "--engine", str(engine), "--prior", prior]
-    return tuple(cmd + (["--book", str(book)] if book else []))
+    if book:
+        cmd += ["--book", str(book)]
+    if table:
+        cmd += ["--table", str(table)]
+    if maia3_repo:
+        cmd += ["--maia3-repo", str(maia3_repo)]
+    if maia3_size:
+        cmd += ["--maia3-size", str(maia3_size)]
+    if extra_path:
+        cmd += ["--extra-path", str(extra_path)]
+    if prior != "uniform":
+        cmd = ["env", f"OMP_NUM_THREADS={threads}", f"MKL_NUM_THREADS={threads}"] + cmd
+    return tuple(cmd)
 
 
 def calibrate_dial(dials, command, opponent_command, openings, limit, out_path, *, redo=False, offset=0.0,

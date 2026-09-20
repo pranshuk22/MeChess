@@ -205,3 +205,20 @@ class TestLinkCalibration:
         logs = []
         C.link_calibration(path, ("m",), FENS, SearchLimit(movetime=5), pairs_per_link=4, log=logs.append)
         assert any("lopsided" in l for l in logs)
+
+
+class TestMechessCommand:
+    def test_options_are_passed_through(self):
+        cmd = C.mechess_command("eng", "uniform", "b.bin", table="t.json")
+        assert cmd[:3] == (sys.executable, "-m", "chessme") and cmd[cmd.index("--table") + 1] == "t.json"
+        assert cmd[cmd.index("--book") + 1] == "b.bin" and cmd[0] != "env"                # uniform prior: no thread limits needed
+
+    def test_neural_priors_are_started_with_limited_threads_and_get_their_paths(self):
+        cmd = C.mechess_command("eng", "maia3=w.pt", None, maia3_repo="/m3", maia3_size="5m", extra_path="/libs", threads=2)
+        assert cmd[:3] == ("env", "OMP_NUM_THREADS=2", "MKL_NUM_THREADS=2")
+        assert cmd[cmd.index("--maia3-repo") + 1] == "/m3" and cmd[cmd.index("--maia3-size") + 1] == "5m"
+        assert cmd[cmd.index("--extra-path") + 1] == "/libs" and cmd[cmd.index("--prior") + 1] == "maia3=w.pt"
+
+    def test_absent_options_are_absent(self):
+        cmd = C.mechess_command("eng", "ours=m.pt")
+        assert "--table" not in cmd and "--book" not in cmd and "--maia3-repo" not in cmd

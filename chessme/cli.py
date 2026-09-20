@@ -483,7 +483,8 @@ def cmd_strength(args):
 def cmd_calibrate(args):
     from . import calibrate
     fens, limit, kw = _ladder_args(args)
-    command = calibrate.mechess_command(args.engine, args.prior, args.book)
+    command = calibrate.mechess_command(args.engine, args.prior, args.book, table=args.table, maia3_repo=args.maia3_repo,
+                                        maia3_size=args.maia3_size, extra_path=args.extra_path)
     calibrate.calibrate_dial(args.dial, command, args.opponent, fens, limit, args.out, redo=args.redo, offset=args.offset,
                              log=lambda m: print(m, flush=True), **kw)
     print(f"\ncalibration written to {args.out}; use it with:  chessme mechess --calibration {args.out} --elo <target>")
@@ -551,7 +552,8 @@ def cmd_style_rates(args):
 def cmd_calibrate_link(args):
     from . import calibrate
     fens, limit, kw = _ladder_args(args)
-    command = calibrate.mechess_command(args.engine, args.prior, args.book)
+    command = calibrate.mechess_command(args.engine, args.prior, args.book, table=args.table, maia3_repo=args.maia3_repo,
+                                        maia3_size=args.maia3_size, extra_path=args.extra_path)
     n = calibrate.link_calibration(args.calibration, command, fens, limit, pairs_per_link=args.link_pairs,
                                    concurrency=args.concurrency, redo=args.redo, log=lambda m: print(m, flush=True))
     print(f"\n{n} link match(es) played; calibration updated: {args.calibration}")
@@ -713,7 +715,9 @@ def cmd_mechess(args):
         book = BookReader(args.book) if args.book else None
         from .mechess.calibration import Calibration
         cal = Calibration.load(args.calibration) if args.calibration else None
-        mc = MeChess(engine, prior, book, seed=args.seed or None, calibration=cal)
+        from .mechess import dial
+        table = dial.load_table(args.table) if args.table else None
+        mc = MeChess(engine, prior, book, table=table, seed=args.seed or None, calibration=cal)
         MechessUci(mc, elo=args.elo).run()
     finally:
         engine.close()
@@ -936,6 +940,8 @@ def main():
     stg.add_argument("--start", type=int, help="first guess of the engine's Elo"); stg.add_argument("--out", default="data/calibration/engine_strength.json")
     cal = sub.add_parser("calibrate", help="measure MeChess at several dial settings against Stockfish and write a calibration file")
     cal.add_argument("--engine", default=str(ENGINE_BIN)); cal.add_argument("--book"); cal.add_argument("--prior", default="uniform")
+    cal.add_argument("--table", help="dial table file to calibrate (default: the built-in table)")
+    cal.add_argument("--maia3-repo"); cal.add_argument("--maia3-size", default="5m"); cal.add_argument("--extra-path")
     cal.add_argument("--dial", type=int, nargs="+", default=[1200, 1500, 1800, 2100, 2400])
     cal.add_argument("--out", default="data/calibration/dial.json"); cal.add_argument("--redo", action="store_true")
     cal.add_argument("--offset", type=float, default=0.0, help="shift measured Elo to another scale (only after validating it)")
@@ -965,6 +971,8 @@ def main():
     lk = sub.add_parser("calibrate-link", help="measure dial settings below/above Stockfish's UCI_Elo range by playing them against the next dial setting")
     lk.add_argument("--calibration", default="data/calibration/dial.json"); lk.add_argument("--engine", default=str(ENGINE_BIN))
     lk.add_argument("--book"); lk.add_argument("--prior", default="uniform")
+    lk.add_argument("--table", help="dial table file to calibrate (default: the built-in table)")
+    lk.add_argument("--maia3-repo"); lk.add_argument("--maia3-size", default="5m"); lk.add_argument("--extra-path")
     lk.add_argument("--link-pairs", type=int, default=40, help="opening pairs (2 games each) per link"); lk.add_argument("--redo", action="store_true")
     for lp in (lk,):
         lp.add_argument("--openings"); lp.add_argument("--random-openings", type=int, default=200); lp.add_argument("--seed", type=int, default=1)
@@ -987,6 +995,7 @@ def main():
     sr.add_argument("--label", default="you"); sr.add_argument("--out", default="data/style/style_report.md")
     sr.set_defaults(func=cmd_style_report)
     mch = sub.add_parser("mechess", help="run MeChess as a UCI engine (book + engine candidates + prior + rating dial)")
+    mch.add_argument("--table", help="dial table file (JSON {elo: [nodes, multipv, window, temperature, cp_scale, book_plies, blunder_rate]})")
     mch.add_argument("--calibration", help="calibration file from `chessme calibrate`: --elo / the Elo option then mean the measured Elo")
     mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book")
     mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT")
