@@ -581,6 +581,35 @@ def cmd_dial_design(args):
     print(f"calibration skeleton -> {args.out_calibration}\nnext: chessme calibrate-link --calibration {args.out_calibration} --table {args.out_table} --concurrency 3")
 
 
+def cmd_control(args):
+    from . import jobs
+    job = args.job
+    if args.action == "status":
+        f = jobs.flags(args.dir)
+        print("control files: " + (", ".join(f) if f else "none (everything runs)"))
+        return
+    kind = {"pause": "PAUSE", "stop": "STOP"}.get(args.action)
+    if kind:
+        p = jobs.set_flag(kind, job, args.dir)
+        print(f"{args.action} requested for {job or 'all jobs'} ({p}); "
+              + ("jobs hold at their next checkpoint and continue when you run `chessme control resume`." if kind == "PAUSE"
+                 else "jobs exit at their next checkpoint; rerun the same command to resume, after `chessme control clear`."))
+    elif args.action == "resume":
+        print("resumed" if jobs.clear_flag("PAUSE", job, args.dir) else "nothing was paused")
+    elif args.action == "clear":
+        n = sum(jobs.clear_flag(k, job, args.dir) for k in ("PAUSE", "STOP"))
+        print(f"cleared {n} control file(s)")
+
+
+def cmd_style_games_fetch(args):
+    from .style import games_fetch as GF
+    log = _file_logger(args.log)
+    log(f"=== style-games-fetch {' '.join(sys.argv[2:])}")
+    stats = GF.run(args.cohort, args.out, n_games=args.games, min_games=args.min_games, pause=args.pause,
+                   control_dir=args.control_dir, log=log, limit=args.limit)
+    log(f"finished: {stats}")
+
+
 def cmd_style_status(args):
     import time
 
@@ -1008,6 +1037,18 @@ def main():
     dd.add_argument("--weak-label", type=int, default=400, help="label of the weakest row of the path (rows for other labels follow from it)")
     dd.add_argument("--out-table", default="data/calibration/weak_table.json"); dd.add_argument("--out-calibration", default="data/calibration/weak_cal.json")
     dd.set_defaults(func=cmd_dial_design)
+    ctl = sub.add_parser("control", help="pause, resume or stop long jobs (they check a control folder between units of work)")
+    ctl.add_argument("action", choices=["pause", "resume", "stop", "clear", "status"])
+    ctl.add_argument("job", nargs="?", help="job name (e.g. fetch, features, train); default: all jobs")
+    ctl.add_argument("--dir", default="data/control")
+    ctl.set_defaults(func=cmd_control)
+    gf = sub.add_parser("style-games-fetch", help="refetch the cohort's games with clocks and openings; compute game-level style features (resumable, pausable)")
+    gf.add_argument("--cohort", default="data/style/cohort", help="the v1 cohort folder (players.json, candidates.json, salt)")
+    gf.add_argument("--out", default="data/style/cohort2"); gf.add_argument("--games", type=int, default=50)
+    gf.add_argument("--min-games", type=int, default=30); gf.add_argument("--pause", type=float, default=1.0, help="seconds between requests")
+    gf.add_argument("--limit", type=int, help="only this many players (for a trial)"); gf.add_argument("--control-dir", default="data/control")
+    gf.add_argument("--log", default="data/style/logs/games_fetch.log")
+    gf.set_defaults(func=cmd_style_games_fetch)
     st = sub.add_parser("style-status", help="one-screen status of the long style jobs (progress, ETA, latest log lines)")
     st.add_argument("--cohort", default="data/style/cohort"); st.add_argument("--anchors", default="data/style/anchors")
     st.add_argument("--target", type=int, default=1000, help="players wanted in the cohort")
