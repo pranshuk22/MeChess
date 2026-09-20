@@ -106,8 +106,8 @@ def test_deadline_saves_a_checkpoint_and_reports_stopped(tmp_path):
 
 
 def test_dry_run_is_small_writes_nothing_and_still_evaluates(tmp_path):
-    res = N.train(synth(), tmp_path / "d", backend="bow", dim=32, dry_run=True, log=lambda *_: None)
-    assert res["step"] == 20 and not (tmp_path / "d" / "ckpt.pt").exists() and not (tmp_path / "d" / "metrics.json").exists()
+    res = N.train(synth(), tmp_path / "d", backend="bow", dim=32, lr=3e-3, dry_run=True, log=lambda *_: None)
+    assert res["step"] == 40 and res["metrics"]["dry_run"]["learned"] and not (tmp_path / "d" / "ckpt.pt").exists() and not (tmp_path / "d" / "metrics.json").exists()
     assert res["metrics"]["test"]["n"] > 0
 
 
@@ -136,3 +136,33 @@ def test_metrics_helpers():
 def test_a_zero_minute_deadline_still_stops(tmp_path):
     res = N.train(synth(300), tmp_path, backend="bow", epochs=5, dim=32, deadline_minutes=0, log=lambda *_: None)
     assert res["stopped"] and res["step"] == 0
+
+
+def test_average_precision_and_threshold_tuning():
+    y = np.array([1, 0, 1, 0, 0], float)
+    assert N.average_precision(y, np.array([0.9, 0.1, 0.8, 0.2, 0.3])) == 1.0
+    assert abs(N.average_precision(y, np.array([0.1, 0.9, 0.2, 0.8, 0.7])) - 0.325) < 1e-9      # hits at ranks 4 and 5: (1/4 + 2/5) / 2
+    assert np.isnan(N.average_precision(np.zeros(3), np.array([0.1, 0.2, 0.3])))
+    Y = np.array([[1, 0], [1, 0], [0, 0], [0, 0]], float)
+    S = np.array([[0.30, 0.9], [0.35, 0.8], [0.10, 0.7], [0.05, 0.6]])
+    th = N.tune_thresholds(Y, S)
+    assert 0.1 <= th[0] < 0.35 and th[1] == 0.5                       # concept 0 needs a low cut-off; concept 1 never occurs
+
+
+def test_training_reports_average_precision_above_the_base_rate_and_saves_thresholds(tmp_path):
+    res = N.train(synth(), tmp_path, backend="bow", epochs=10, batch=32, dim=64, lr=3e-3, log=lambda *_: None)
+    t = res["metrics"]["test"]
+    assert t["concept_ap_macro"] > 2 * t["concept_ap_baseline"] and abs(t["concept_f1_micro_tuned"] - t["concept_f1_micro"]) < 0.15
+    model, cfg = N.load(tmp_path, device="cpu")
+    assert len(cfg["thresholds"]) == len(N.CONCEPTS)
+
+
+def test_dry_run_flags_a_model_that_cannot_learn(tmp_path):
+    res = N.train(synth(), tmp_path / "d", backend="bow", dim=32, lr=1e-12, dry_run=True, log=lambda *_: None)     # a learning rate of ~0
+    assert res["metrics"]["dry_run"]["learned"] is False
+
+
+def test_each_epoch_logs_validation_and_warns_when_concepts_are_not_learned(tmp_path):
+    logs = []
+    N.train(synth(300), tmp_path, backend="bow", epochs=2, batch=64, dim=32, lr=1e-12, log=logs.append)
+    assert sum("validation:" in l for l in logs) == 2 and any("WARNING" in l for l in logs)

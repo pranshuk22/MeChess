@@ -79,7 +79,8 @@ def render_report(out):
         t = m["test"]
         L += ["## Language model (held-out games and documents)", "",
               f"- Backend `{m['config']['backend']}` on {m['device']}, {m['steps']} steps, {m['minutes']} min.",
-              f"- Concepts (keywords masked): micro-F1 {t['concept_f1_micro']:.3f} vs {t['concept_f1_micro_prior']:.3f} for always predicting the common concepts.",
+              f"- Concepts (keywords masked): average precision {t.get('concept_ap_macro', float('nan')):.3f} vs {t.get('concept_ap_baseline', float('nan')):.3f} for a random ranking; "
+              f"micro-F1 {t.get('concept_f1_micro_tuned', t['concept_f1_micro']):.3f} vs {t['concept_f1_micro_prior']:.3f} for always predicting the common concepts.",
               f"- Move judgement from the comment: macro-F1 {t.get('judgement_f1_macro', float('nan')):.3f}, accuracy {t.get('judgement_acc', float('nan')):.3f} "
               f"(always the most common: {t.get('judgement_acc_majority', float('nan')):.3f}).",
               f"- Evaluation glyph from the comment: accuracy {t.get('eval_acc', float('nan')):.3f} (most common: {t.get('eval_acc_majority', float('nan')):.3f}).", ""]

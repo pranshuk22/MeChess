@@ -216,6 +216,27 @@ def concept_f1(Y, P):
     return float(micro), float(np.mean(per)) if per else float("nan")
 
 
+def average_precision(y, score):
+    """Area under the precision-recall curve for one concept (NaN when it never occurs). Threshold-free: needs no cut-off to be right."""
+    if y.sum() == 0:
+        return float("nan")
+    order = np.argsort(-score, kind="stable")
+    hit = y[order]
+    precision = np.cumsum(hit) / (np.arange(len(hit)) + 1)
+    return float((precision * hit).sum() / hit.sum())
+
+
+def tune_thresholds(Y, S, grid=np.linspace(0.05, 0.95, 19)):
+    """Per concept, the cut-off in `grid` that gives the best F1 on (validation) data; 0.5 when the concept never occurs."""
+    out = np.full(Y.shape[1], 0.5)
+    for c in range(Y.shape[1]):
+        if Y[:, c].sum() == 0:
+            continue
+        f = [2 * ((S[:, c] > t) * Y[:, c]).sum() / (Y[:, c].sum() + (S[:, c] > t).sum() + 1e-9) for t in grid]
+        out[c] = grid[int(np.argmax(f))]
+    return out
+
+
 @torch.no_grad()
 def predict_batches(model, texts, batch=64):
     model.eval()
@@ -229,8 +250,9 @@ def predict_batches(model, texts, batch=64):
     return np.vstack(C), np.vstack(J), np.vstack(E)
 
 
-def evaluate(model, examples, mask=True, batch=64):
-    """Concept F1 (micro / macro), judgement macro-F1 and accuracy, evaluation macro-F1 and accuracy, each next to the trivial baseline."""
+def evaluate(model, examples, mask=True, batch=64, thresholds=None):
+    """Concept F1 (micro / macro, at 0.5 and at the tuned per-concept thresholds), concept average precision next to the base rate,
+    judgement macro-F1 and accuracy, evaluation macro-F1 and accuracy, each next to the trivial baseline."""
     if not examples:
         return {}
     texts = [mask_keywords(e["text"]) if mask else e["text"] for e in examples]
@@ -239,6 +261,12 @@ def evaluate(model, examples, mask=True, batch=64):
     micro, macro = concept_f1(Y, (C > 0.5).astype(float))
     prior = (Y.mean(0) > 0.5).astype(float)[None].repeat(len(Y), 0)
     out = {"n": len(examples), "concept_f1_micro": micro, "concept_f1_macro": macro, "concept_f1_micro_prior": concept_f1(Y, prior)[0]}
+    aps = [average_precision(Y[:, c], C[:, c]) for c in range(Y.shape[1])]
+    base = [Y[:, c].mean() for c in range(Y.shape[1]) if Y[:, c].sum() > 0]                # AP of a random ranking = the concept's base rate
+    out["concept_ap_macro"] = float(np.nanmean(aps)) if base else float("nan")
+    out["concept_ap_baseline"] = float(np.mean(base)) if base else float("nan")
+    if thresholds is not None:
+        out["concept_f1_micro_tuned"], out["concept_f1_macro_tuned"] = concept_f1(Y, (C > thresholds[None]).astype(float))
     for key, logits, n_cls in (("judgement", J, len(JUDGEMENT)), ("eval", E, len(EVAL_CLASSES))):
         y = np.array([e[key] for e in examples])
         ok = y >= 0
@@ -277,17 +305,20 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     device = device or _device()
     lr = lr or (5e-4 if backend == "bow" else 3e-5)
     parts = {k: [e for e in examples if split_of(e["group"]) == k] for k in ("train", "val", "test")}
-    if dry_run:
-        parts["train"] = parts["train"][:400]
+    if dry_run:                                # the model must be able to memorise a handful of examples: proves the loss, heads and step work
+        parts["train"] = parts["train"][:64]
         parts["val"], parts["test"] = parts["val"][:200], parts["test"][:200]
-        epochs = 1
+        epochs, batch = 1, min(batch, 32)
     if not parts["train"]:
         raise ValueError("no training examples")
     cfg = {"backend": backend, "model_name": model_name, "epochs": epochs, "batch": batch, "lr": lr, "seed": seed, "mask": mask, "dim": dim,
            "max_len": max_len, "n_train": len(parts["train"])}
     torch.manual_seed(seed)
     model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len)).to(device)
-    opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
+    heads = [p for n, p in model.named_parameters() if not n.startswith("enc.")]
+    body = [p for n, p in model.named_parameters() if n.startswith("enc.")]
+    # the classification heads start from random weights: they need a much larger step than a pretrained encoder
+    opt = torch.optim.AdamW([{"params": body, "lr": lr}, {"params": heads, "lr": max(lr, 1e-3 if backend == "transformer" else lr)}], weight_decay=0.01)
     scaler = torch.amp.GradScaler("cuda") if device == "cuda" else None
     step, history = 0, []
     if ckpt.exists() and not dry_run:
@@ -300,7 +331,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         log(f"resuming from step {step}")
     train_ex = parts["train"]
     per_epoch = (len(train_ex) + batch - 1) // batch
-    total = 20 if dry_run else epochs * per_epoch
+    total = 40 if dry_run else epochs * per_epoch
     wj = _class_weights([e["judgement"] for e in train_ex], len(JUDGEMENT)).to(device)
     we = _class_weights([e["eval"] for e in train_ex], len(EVAL_CLASSES)).to(device)
     stopped = False
@@ -314,6 +345,8 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     try:
         while step < total:
             epoch, i = divmod(step, per_epoch)
+            if dry_run:
+                epoch, i = 0, step % per_epoch                            # the same 64 examples again and again
             order = np.random.default_rng(seed * 1000 + epoch).permutation(len(train_ex))     # deterministic per epoch: resume-safe
             idx = order[i * batch:(i + 1) * batch]
             if ctl:
@@ -349,16 +382,32 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
                 log(f"step {step}/{total} loss {np.mean(history[-50:]):.4f} ({(time.time() - t0) / 60:.1f} min)")
             if step % ckpt_every == 0:
                 save()
+            if not dry_run and step % per_epoch == 0 and parts["val"]:            # a learning curve in the log, once per epoch
+                v = evaluate(model, parts["val"][:2000], mask=mask, batch=batch)
+                log(f"epoch {step // per_epoch} validation: concept AP {v.get('concept_ap_macro', float('nan')):.3f} (random {v.get('concept_ap_baseline', float('nan')):.3f}), "
+                    f"judgement acc {v.get('judgement_acc', float('nan')):.3f} (majority {v.get('judgement_acc_majority', float('nan')):.3f}), "
+                    f"evaluation acc {v.get('eval_acc', float('nan')):.3f} (majority {v.get('eval_acc_majority', float('nan')):.3f})")
+                if v.get("concept_ap_macro", 1) < 1.5 * v.get("concept_ap_baseline", 0):
+                    log("WARNING: concept average precision is not clearly above a random ranking yet")
     except Stopped as e:
         stopped = True
         log(f"stopped: {e}")
     save()
     metrics = {"steps": step, "total_steps": total, "stopped": stopped, "device": device, "minutes": round((time.time() - t0) / 60, 2),
                "config": cfg, "sources": {k: sum(1 for e in examples if e["source"] == k) for k in sorted({e["source"] for e in examples})}}
+    if dry_run and len(history) >= 10:
+        first, last = float(np.mean(history[:5])), float(np.mean(history[-5:]))
+        metrics["dry_run"] = {"first_loss": first, "last_loss": last, "learned": last < 0.8 * first}
+    thresholds = None
+    if parts["val"]:
+        texts = [mask_keywords(e["text"]) if mask else e["text"] for e in parts["val"]]
+        thresholds = tune_thresholds(np.array([e["concepts"] for e in parts["val"]]), predict_batches(model, texts, batch)[0])
     for name in ("val", "test"):
-        metrics[name] = evaluate(model, parts[name], mask=mask, batch=batch)
+        metrics[name] = evaluate(model, parts[name], mask=mask, batch=batch, thresholds=thresholds)
     if parts["test"]:
-        metrics["test_unmasked"] = evaluate(model, parts["test"], mask=False, batch=batch)     # how much the keywords add when they are visible
+        metrics["test_unmasked"] = evaluate(model, parts["test"], mask=False, batch=batch, thresholds=thresholds)   # how much the keywords add when visible
+    if thresholds is not None and not dry_run:
+        (out / "thresholds.json").write_text(json.dumps([float(t) for t in thresholds]))
     if not dry_run:
         (out / "metrics.json").write_text(json.dumps(metrics, indent=1))
         (out / "config.json").write_text(json.dumps(cfg))
@@ -373,6 +422,8 @@ def load(out_dir, device=None):
     model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"])).to(device)
     model.load_state_dict(torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])
     model.eval()
+    th = out / "thresholds.json"
+    cfg["thresholds"] = json.loads(th.read_text()) if th.exists() else None
     return model, cfg
 
 
@@ -381,7 +432,8 @@ def predict(model, texts, cfg=None, threshold=0.5):
     mask = cfg.get("mask", True) if cfg else True
     C, J, E = predict_batches(model, [mask_keywords(t) if mask else t for t in texts])
     out = []
+    th = np.array(cfg["thresholds"]) if cfg and cfg.get("thresholds") else np.full(len(CONCEPTS), threshold)
     for c, j, e in zip(C, J, E):
-        out.append({"concepts": [CONCEPTS[k] for k in np.where(c > threshold)[0]], "concept_scores": {CONCEPTS[k]: round(float(c[k]), 3) for k in np.argsort(-c)[:3]},
+        out.append({"concepts": [CONCEPTS[k] for k in np.where(c > th)[0]], "concept_scores": {CONCEPTS[k]: round(float(c[k]), 3) for k in np.argsort(-c)[:3]},
                     "judgement": JUDGEMENT[int(j.argmax())], "evaluation": EVAL_CLASSES[int(e.argmax())]})
     return out

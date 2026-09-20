@@ -789,6 +789,11 @@ def cmd_books_nlp_train(args):
                         batch=args.batch, lr=args.lr, dry_run=args.dry_run, deadline_minutes=args.deadline_minutes,
                         ckpt_every=args.ckpt_every, ctl=ctl, log=log)
     t = res["metrics"].get("test", {})
+    if args.dry_run:
+        d = res["metrics"].get("dry_run", {})
+        log(f"dry-run loss {d.get('first_loss', float('nan')):.3f} -> {d.get('last_loss', float('nan')):.3f}: {'the model can learn' if d.get('learned') else 'NOT LEARNING'}")
+        if not d.get("learned"):
+            sys.exit("dry-run failed: the loss did not go down on 64 memorisable examples; do not start the long run")
     log(f"{'DRY RUN ' if args.dry_run else ''}{'stopped' if res['stopped'] else 'finished'} at step {res['step']}; test: "
         + json.dumps({k: round(v, 3) for k, v in t.items() if isinstance(v, float)}))
 
