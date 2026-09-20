@@ -1,0 +1,18 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dependencies (pinned)
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
+      - name: Build engine and run C++ unit tests + perft
+        run: make -C engine CXX=g++ test test-verify
+      - name: Python unit + integration tests
+        run: .venv/bin/python -m pytest -q
