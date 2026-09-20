@@ -116,3 +116,31 @@ class TestEngineInfo:
                   f"print('{self.LINE}');print('uciok',flush=True)\n if l.strip()=='quit': break\n")
         info = S.engine_info([sys.executable, "-c", script])
         assert info == {"name": "Fake 1.0", "uci_elo": (1320, 1320, 3190)}
+
+
+class TestJointFit:
+    def match(self, ra, rb, n, a, b):
+        return (a, b, n * S.expected(ra, rb), n)
+
+    def test_players_linked_to_an_anchor_by_games_get_their_true_ratings(self):
+        matches = [self.match(1300, 1800, 200, "B", "C"), self.match(1000, 1300, 200, "A", "B")]
+        fit = S.joint_fit(matches, {"C": (1800.0, 30.0)})
+        assert abs(fit["B"][0] - 1300) < 10 and abs(fit["A"][0] - 1000) < 15
+        assert fit["A"][1] > fit["B"][1] > fit["C"][1] * 0.9   # uncertainty grows along the chain
+        assert abs(fit["C"][0] - 1800) < 5
+
+    def test_an_anchor_with_a_tiny_error_holds_and_a_vague_one_gives_way_to_the_games(self):
+        matches = [self.match(1500, 1800, 400, "B", "C")]
+        firm = S.joint_fit(matches + [self.match(1700, 1800, 400, "D", "C")], {"C": (1800.0, 1.0)})
+        assert abs(firm["C"][0] - 1800) < 1
+        # an anchor claiming 2100 +/- 400 conflicts with games that say C is 300 above B (1500 anchored firmly)
+        vague = S.joint_fit(matches, {"B": (1500.0, 5.0), "C": (2100.0, 400.0)})
+        assert abs(vague["C"][0] - 1800) < 40
+
+    def test_lopsided_results_stay_finite(self):
+        fit = S.joint_fit([("A", "B", 0.0, 40), ("B", "C", 1.0, 40)], {"C": (1800.0, 30.0)})
+        assert all(abs(v[0]) < 1e5 and v[1] == v[1] for v in fit.values()) and fit["A"][0] < fit["B"][0] < 3000
+
+    def test_without_any_anchor_only_differences_are_meaningful(self):
+        fit = S.joint_fit([self.match(1400, 1200, 300, "A", "B")], {})
+        assert abs((fit["A"][0] - fit["B"][0]) - 200) < 10

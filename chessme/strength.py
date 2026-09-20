@@ -119,6 +119,46 @@ def run_ladder(play, *, start, opp_min, opp_max, pairs_per_round=5, target_se=35
     return Ladder(e, sorted(levels.values(), key=lambda x: x.opp), rounds, stop)
 
 
+# ---- linking players that cannot be measured directly ----------------------------------------------------------------
+
+def joint_fit(matches, anchors, *, iterations=60, pseudo=0.5, weak_prior_sd=1500.0):
+    """Ratings of several players from games between them plus absolute measurements of some of them.
+
+    `matches`: [(a, b, score_a, games)] between named players; `anchors`: {name: (elo, se)} absolute ratings measured
+    elsewhere (each acts as a Gaussian prior). Players without an anchor get a very weak prior only, so their rating is
+    fixed by the games linking them to anchored players. Maximum a posteriori by Newton's method; returns
+    {name: (elo, se)}. Each match gets `pseudo` games scored as draws so lopsided results stay finite."""
+    import numpy as np
+
+    names = sorted({a for a, _, _, _ in matches} | {b for _, b, _, _ in matches} | set(anchors))
+    idx = {n: i for i, n in enumerate(names)}
+    ref = float(np.mean([v[0] for v in anchors.values()])) if anchors else 1500.0
+    R = np.array([anchors[n][0] if n in anchors else ref for n in names], dtype=float)
+    mu = R.copy()
+    inv_var = np.array([1.0 / max(anchors[n][1], 1.0) ** 2 if n in anchors else 1.0 / weak_prior_sd ** 2 for n in names])
+    for _ in range(iterations):
+        g = -(R - mu) * inv_var
+        H = -np.diag(inv_var)
+        for a, b, s, n in matches:
+            i, j = idx[a], idx[b]
+            s, n = s + 0.5 * pseudo, n + pseudo
+            e = expected(R[i], R[j])
+            d = (s - n * e) * LN10_400
+            w = n * e * (1 - e) * LN10_400 ** 2
+            g[i] += d
+            g[j] -= d
+            H[i, i] -= w
+            H[j, j] -= w
+            H[i, j] += w
+            H[j, i] += w
+        step = np.linalg.solve(H - 1e-9 * np.eye(len(names)), -g)
+        R += step
+        if np.max(np.abs(step)) < 1e-6:
+            break
+    cov = np.linalg.inv(-H + 1e-9 * np.eye(len(names)))
+    return {n: (float(R[idx[n]]), float(np.sqrt(max(cov[idx[n], idx[n]], 0.0)))) for n in names}
+
+
 # ---- asking an engine about itself ---------------------------------------------------------------------------
 
 def parse_uci_elo_range(text):
