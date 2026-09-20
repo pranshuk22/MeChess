@@ -87,6 +87,21 @@ outside the measured range are clamped to its edge, and `Calibration.in_range(ta
 range downward you need weaker reference opponents, for example measuring a low dial setting against a higher one and linking that
 to an absolute measurement above the floor.
 
+### Linking them (`calibrate-link`)
+
+```bash
+python -m chessme calibrate-link --calibration data/calibration/dial.json --prior uniform --link-pairs 40 --concurrency 3
+```
+
+For every dial setting that could not be measured, MeChess plays that setting against the next dial setting up (direct games, same
+openings scheme) and all settings are then fitted jointly (`strength.joint_fit`): the settings measured against Stockfish are
+*anchors* (each acts as a Gaussian prior with its own standard error) and the linked ones get the rating their games imply. Chains
+work (1200 linked to 1500, 1500 linked to 1800); the standard error grows along the chain and is stored with each point. The
+extrapolated number is kept as `raw_measured`, and the file records the games under `links`, so a rerun replays nothing (`--redo` plays
+them again). Lopsided links (under 10% or over 90%) are flagged in the log: play more games. A linked rating is only as good as the
+absolute measurement it hangs on, so run it after `calibrate` has measured the higher settings, and never at the same time (both are
+wall-clock measurements).
+
 ## Cost and practical advice
 
 - A reliable estimate needs a few hundred games per measured engine. At 100 ms per move a game takes roughly 10 to 30 seconds,

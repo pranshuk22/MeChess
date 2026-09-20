@@ -27,6 +27,7 @@ Run any command with `-h` for all options. Commands that take `--profile` defaul
 | Command | What it does |
 |---|---|
 | `strength` | Measure an engine's strength with an adaptive ladder against Stockfish at known `UCI_Elo` (result on that scale) |
+| `calibrate-link` | Measure dial settings beyond Stockfish's UCI_Elo range by playing them against the next dial setting and fitting all settings jointly |
 | `calibrate` | Measure MeChess at several dial settings and write a calibration file (`--dial 1200 1500 ...`, `--out`, `--redo`, `--offset`) |
 
 Details, scale caveats and costs: [calibration.md](calibration.md). `mechess --calibration FILE` makes `--elo` mean the measured Elo.
