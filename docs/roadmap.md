@@ -14,10 +14,12 @@ A short, honest status. MeChess is a research prototype.
 - Strength measurement and dial calibration tooling (adaptive ladder against limited Stockfish, monotone calibration curve); see [calibration.md](calibration.md). The measurements themselves still have to be run.
 - Style analysis: features, candidate datasets, choice model, population baseline, cohort and anchor tooling.
 
-## In progress
+## Findings from the style cohort and anchors
 
-- Running the cohort (hundreds of players, about 50 games each) and the anchors (famous players' peak-year games) with
-  Stockfish as the judge, to find out whether style is a stable, measurable trait and how much players differ.
+Cohort (1,000 players) and anchors (35 famous players) are analysed with Stockfish as the judge. Personal move-choice style is
+small and hard to measure with the current features (see [style-analysis.md](style-analysis.md)); the reliably personal parts are the
+opening repertoire, the fine-tuned move-prediction model, strength focus and castling timing. Next for style: more decisions per
+player, richer features (plans, structure, clocks) and game-level statistics.
 
 ## Next
 
