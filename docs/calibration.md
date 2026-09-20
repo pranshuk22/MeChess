@@ -77,6 +77,25 @@ Measured with `chessme strength --movetime 100` on a laptop (two independent run
 **about 2460 +/- 30 Elo on Stockfish 19's `UCI_Elo` scale** (520 games, no engine faults; the tighter run alone gave 2483 +/- 33).
 The earlier, shorter run gave 2382 +/- 68, consistent within its wider interval. Your numbers depend on your machine and the time control.
 
+### Example dial calibration
+
+MeChess with the uniform prior, 100 ms per move, against Stockfish 19 (one laptop; 110 to 120 games per measured point, no engine
+faults). Your numbers will differ with the machine, the prior, the book and the time control.
+
+| Dial setting | Measured (Stockfish `UCI_Elo` scale) | How |
+|---|---|---|
+| 1200 | about 700 +/- 210 | linked to dial 1500 (below Stockfish's lowest setting) |
+| 1500 | about 700 +/- 200 | linked to dial 1800 (below Stockfish's lowest setting) |
+| 1800 | 1236 +/- 69 | against Stockfish |
+| 2100 | 1531 +/- 68 | against Stockfish |
+| 2400 | 2048 +/- 66 | against Stockfish |
+| 2600 | 2344 +/- 66 | against Stockfish |
+
+What it showed: the starting table's labels were far too high (setting 1800 plays about 1240 on this scale); the two lowest settings play
+equally strongly (they scored 50% against each other), so the dial has no resolution down there; the top setting approaches, but stays
+below, the plain engine (about 2460). With the calibration file, a target of 1500 maps to setting 2069 (about 13,000 search nodes), 2000
+to setting 2372. Relating this scale to the Lichess rating scale still needs an outside check.
+
 ## Settings that cannot be measured
 
 Stockfish's `UCI_Elo` has a floor (about 1320) and a ceiling (about 3190). A dial setting that loses almost every game even to the
