@@ -29,3 +29,6 @@ plan*.md
 *.bin
 *.zst
 *.zip
+
+# lichess-bot checkout, its environment and config (contain local paths; the token is only ever an environment variable)
+/bot/
