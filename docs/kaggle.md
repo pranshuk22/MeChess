@@ -5,8 +5,12 @@ Three notebooks, on purpose. Collecting text and counting openings are CPU work 
 | Notebook | Accelerator | What it does | Typical cost |
 |---|---|---|---|
 | `notebooks/1_collect_data_cpu.ipynb` | **None** | preflight, then `chessme books-learn`: 100+ books, all annotated-game sources, Stack Exchange, Wikipedia, opening names | CPU only; expect roughly 1 to 2 hours for the full run (the archive downloads are about 300 MB) |
-| `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds an opening explorer (`explorer.db`) plus a playable theory book per rating band (`theory_LO_HI.bin`) and a coverage report | CPU only; roughly 1 to 2 hours with the defaults (12 M games scanned, 1 in 4 counted); has a time budget |
+| `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds an opening explorer for **every rating range** (`explorer.db`: games, White/draw/Black, average rating, engine evaluation, opening names, clock use), a playable theory book per band (`theory_LO_HI.bin`) and a report | CPU only; roughly 2 to 5 hours with the defaults (20 M games scanned); checkpointed, with a time budget |
 | `notebooks/2_train_language_model_gpu.ipynb` | **GPU** | preflight (GPU, dependencies, model download), a dry-run of the whole training path, then the real run with a time budget | GPU; the budget (`BUDGET_MIN`, default 600 min) caps it |
+
+## The notebooks are adapters
+
+Each notebook only clones the repository, installs a few packages and runs `chessme` commands; nothing else. All the logic (resuming from earlier output, linking inputs, cleaning up, checkpoints, time budgets) is in the repository, tested, and runs the same on a laptop. The Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--resume-glob` and `--slim` flags.
 
 ## How to run (all notebooks)
 1. Settings: *Internet -> On* (phone verification once). Notebook 1: accelerator *None*. Notebook 2: *GPU*.
@@ -20,6 +24,7 @@ Three notebooks, on purpose. Collecting text and counting openings are CPU work 
 - The real run has `--deadline-minutes`: at the deadline it saves a checkpoint and finishes normally, so nothing is lost when the 12 h limit approaches.
 - Training is resumable: add the notebook's own earlier output as an input and rerun; it resumes from the checkpoint (tested: 0 -> 154 -> 756 steps across three sessions).
 - Everything in notebook 1 is resumable and skips finished work.
+- Notebook 3 checkpoints every million games and every 15 minutes (atomic, refused if the settings changed), guards memory, stops cleanly at its time budget and keeps its counts so `chessme explorer-rebuild` can regenerate the outputs with other thresholds without streaming again. Adding its own earlier output as an input resumes it.
 
 ## After the run
 - Notebook 3 output: `explorer.db` (query with `python -m chessme explorer-query explorer.db --rating 1500 --fen "..."`), `theory_*.bin` (put them in `data/book/`; `mechess --book data/book --elo 1500` picks the band), `report.md`.

@@ -291,3 +291,13 @@ def test_memory_guard_prunes_rare_entries_when_over_the_limit():
     X.count_stream(stream(dump(60, 0) + game(1500, 1500, 1.0, "d4 d5 c4 c5".split())), c, edges=EDGES, max_ply=4, holdout=0, max_memory_gb=1e-6,
                    progress_every=10, log=logs.append)
     assert any("over the" in l for l in logs) and c.games[2] == 61
+
+
+def test_rebuild_from_a_checkpoint_applies_new_thresholds_without_the_stream(tmp_path):
+    X.run("x", tmp_path / "a", edges=EDGES, max_ply=4, sample_every=1, holdout=5, db_min_games=1, book_min_games=1, opener=stream(dump(60, 20, 20)), log=lambda *_: None)
+    strict = X.rebuild(tmp_path / "a" / "state.pkl.gz", tmp_path / "b", db_min_games=50, book_min_games=50, book_min_share=0.05, log=lambda *_: None)
+    loose = X.rebuild(tmp_path / "a" / "state.pkl.gz", tmp_path / "c", db_min_games=1, book_min_games=1, book_min_share=0.0, log=lambda *_: None)
+    assert loose["db_rows"] > strict["db_rows"] and loose["books"][2][0] > strict["books"][2][0]
+    assert (tmp_path / "b" / "report.md").exists() and X.query(tmp_path / "c" / "explorer.db", chess.STARTING_FEN, rating=1500)[0]["san"] == "e4"
+    shallow = X.rebuild(tmp_path / "a" / "state.pkl.gz", tmp_path / "d", db_min_games=1, book_min_games=1, book_min_share=0.0, max_ply=2, log=lambda *_: None)
+    assert shallow["books"][2][0] < loose["books"][2][0]

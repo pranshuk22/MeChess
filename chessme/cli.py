@@ -893,6 +893,14 @@ def cmd_explorer_build(args):
     print((Path(args.out) / "report.md").read_text())
 
 
+def cmd_explorer_rebuild(args):
+    from .book import explorer as EX
+    log = _file_logger(args.log)
+    EX.rebuild(args.state, args.out, db_min_games=args.db_min_games, book_min_games=args.book_min_games, book_min_share=args.book_min_share,
+               eval_margin_cp=args.eval_margin, max_ply=args.max_ply, openings_dir=args.openings_dir, log=log)
+    print((Path(args.out) / "report.md").read_text())
+
+
 def cmd_explorer_query(args):
     from .book import explorer as EX
     start = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -1372,6 +1380,13 @@ def main():
     eb.add_argument("--check", action="store_true", help="read a few hundred games and exit: tests the URL, decompression and parsing in seconds")
     eb.add_argument("--log", default="data/explorer/explorer.log")
     eb.set_defaults(func=cmd_explorer_build)
+    er = sub.add_parser("explorer-rebuild", help="rebuild explorer.db, the books and the report from a saved checkpoint with other thresholds (no streaming)")
+    er.add_argument("state", help="state.pkl.gz written by explorer-build"); er.add_argument("--out", default="data/explorer")
+    er.add_argument("--db-min-games", type=int, default=20); er.add_argument("--book-min-games", type=int, default=50); er.add_argument("--book-min-share", type=float, default=0.03)
+    er.add_argument("--eval-margin", type=float, help="drop book moves whose average engine evaluation is worse than the best sibling's by more than this (centipawns)")
+    er.add_argument("--max-ply", type=int, help="a shallower book than the counts allow"); er.add_argument("--openings-dir", default="data/opening_names")
+    er.add_argument("--log", default="data/explorer/explorer.log")
+    er.set_defaults(func=cmd_explorer_rebuild)
     eq = sub.add_parser("explorer-query", help="look a position up in the explorer database")
     eq.add_argument("db"); eq.add_argument("--fen"); eq.add_argument("--rating", type=int, default=1500); eq.add_argument("--top", type=int, default=10)
     eq.set_defaults(func=cmd_explorer_query)

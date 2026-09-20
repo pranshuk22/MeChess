@@ -544,6 +544,27 @@ def render_report(counts, edges, books, cov, meta):
     return "\n".join(L) + "\n"
 
 
+def rebuild(state_path, out_dir, *, db_min_games=20, book_min_games=50, book_min_share=0.03, eval_margin_cp=None, max_ply=None,
+            openings_dir=None, log=print):
+    """Rebuild explorer.db, the books and the report from a saved checkpoint with different thresholds, without reading the stream again.
+    `max_ply` can only lower the book depth (the counts stop at the depth they were made with)."""
+    counts = load_state(state_path)
+    cfg = counts.config or {}
+    edges = tuple(cfg.get("edges", DEFAULT_BANDS))
+    depth = min(max_ply or cfg.get("max_ply", DEFAULT_MAX_PLY), cfg.get("max_ply", DEFAULT_MAX_PLY))
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    meta = {"source": cfg.get("source", "?"), "scanned": counts.scanned, "sample_every": cfg.get("sample_every", 1), "max_ply": depth,
+            "book_min_games": book_min_games, "book_min_share": book_min_share}
+    names = opening_names(openings_dir) if openings_dir and list(Path(openings_dir).glob("*.tsv")) else []
+    rows = to_sqlite(counts, out / "explorer.db", edges, min_games=db_min_games, meta=meta, openings=names)
+    books = build_books(counts, edges, out, max_ply=depth, min_games=book_min_games, min_share=book_min_share, eval_margin_cp=eval_margin_cp)
+    cov = coverage(counts, edges, out)
+    (out / "report.md").write_text(render_report(counts, edges, books, cov, meta))
+    log(f"rebuilt from {counts.scanned:,} scanned games: explorer.db {rows:,} rows; books {books}")
+    return {"db_rows": rows, "books": books, "coverage": cov}
+
+
 def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, sample_every=4, max_scan=20_000_000, holdout=2000, db_min_games=20,
         book_min_games=50, book_min_share=0.03, eval_margin_cp=None, max_entries=30_000_000, max_memory_gb=16.0, max_minutes=None,
         checkpoint_every=1_000_000, checkpoint_minutes=15, resume=True, resume_glob=None, drop_state_when_finished=False, openings_dir=None,
