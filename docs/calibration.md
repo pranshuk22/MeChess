@@ -106,6 +106,10 @@ python -m chessme calibrate-link --calibration dial_mine.json --table my_table.j
 python -m chessme mechess --calibration dial_mine.json --prior maia3=CHECKPOINT ... --elo 1500
 ```
 
+With a personalised prior and an opening book the measured strengths of the same dial settings were (Stockfish scale): 1000 about 830, 1200 about 940,
+1300 about 960, 1400 about 1030, 1500 about 1140, 1600 about 1390, 1700 about 1430, 1800 about 1630, 2100 about 1960, 2400 about 2340, 2600 about 2500
+(the lowest five linked by direct games, the rest measured against Stockfish; 100 to 200 games each, no engine faults).
+
 Neural priors are started with one CPU thread per game (`OMP_NUM_THREADS=1`) so that parallel games do not fight over cores; memory use
 is around 1.8 GB for three parallel games. A calibration file records the dial table it was measured with, and `mechess --calibration`
 uses that table automatically.
