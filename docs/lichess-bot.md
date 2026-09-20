@@ -67,6 +67,20 @@ In `bot/lichess-bot/config.yml` (copy of `config.yml.default`) the settings that
 | `matchmaking.allow_matchmaking` | `false` at first | no unsolicited challenges until you decide |
 | `greeting.hello` | say that the bot is a research bot with **deliberately limited strength** | Lichess expects bots that do not try to win to say so, especially in rated games |
 
+### Keeping the token out of files but available to a launcher (macOS)
+
+The variable set with `read -s ... ; export ...` exists only in that one terminal. To let a launcher script (or an assistant running it in the
+background) start the bot without you pasting the token again, store it in the macOS Keychain, which is encrypted and not a plain file. Run this
+in your own terminal (it asks for the token without echoing it):
+
+```bash
+security add-generic-password -a "$USER" -s lichess-bot-token -w
+```
+
+The launcher `bot/run-bot.sh` (kept beside the checkout, git-ignored) uses `LICHESS_BOT_TOKEN` if set, otherwise reads that Keychain item with
+`security find-generic-password -w`; the first read may show a system prompt asking you to allow access. Remove it later with
+`security delete-generic-password -a "$USER" -s lichess-bot-token`.
+
 ## 4. Run
 
 ```bash
