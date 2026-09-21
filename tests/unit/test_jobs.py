@@ -139,3 +139,25 @@ def test_a_worker_that_dies_is_detected_by_the_timeout():
     from chessme.jobs import JobControl, TaskTimeout, run_pool
     with pytest.raises(TaskTimeout):
         list(run_pool(_die, [1], 1, JobControl("t", control_dir="/nonexistent-control"), task_timeout=5))
+
+
+def _ignore_sigterm_and_sleep(x):
+    import signal as _s, time as _t
+    _s.signal(_s.SIGTERM, _s.SIG_IGN)     # a worker that cannot be terminated politely: Pool.terminate() alone waits for it forever
+    _t.sleep(3600)
+
+
+def test_a_worker_that_ignores_sigterm_cannot_hang_the_shutdown():
+    from chessme.jobs import JobControl, TaskTimeout, run_pool
+    t0 = time.time()
+    with pytest.raises(TaskTimeout):
+        list(run_pool(_ignore_sigterm_and_sleep, [1], 1, JobControl("t", control_dir="/nonexistent-control"), task_timeout=3))
+    assert time.time() - t0 < 40
+
+
+def test_finished_pools_leave_no_worker_processes_behind():
+    import multiprocessing
+    from chessme.jobs import JobControl, run_pool
+    assert sorted(run_pool(square, [1, 2, 3, 4], 2, JobControl("t", control_dir="/nonexistent-control"))) == [1, 4, 9, 16]
+    time.sleep(0.5)
+    assert not multiprocessing.active_children()
