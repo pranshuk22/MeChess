@@ -456,6 +456,47 @@ def cmd_style_anchors_games_report(args):
     print(text)
 
 
+def cmd_mechess_agreement(args):
+    import random
+
+    from .book import build as BB, evaluate as EV
+    from .book.format import write_book
+    from .mechess import agreement as AGR, dial, priors
+    from .mechess.calibration import Calibration
+    from .mechess.controller import BookReader, BookStack, TheoryBands
+    from .style import candidates as SC, model as SM
+    from .uci_client import UciEngine
+    cfg = config.load_profile(args.profile)
+    rows = audit_mod.load(cfg["_raw_dir"].parent / "processed" / "games.jsonl")
+    train_rows, test_rows = EV.split_by_time(rows, args.holdout)
+    with tempfile.TemporaryDirectory() as tmp:
+        result = BB.build_book(cfg, train_rows)
+        write_book(Path(tmp) / "own.bin", result.entries)
+        own, theory = BookReader(Path(tmp) / "own.bin"), TheoryBands(args.theory)
+        book = AGR.book_agreement({"personal (older games only)": own, "theory of the rating": theory, "personal then theory": BookStack([own, theory])},
+                                  test_rows, max_ply=args.plies)
+    print(f"books: {book['games']} held-out games")
+    train, test = SC.load(Path(args.style_data) / "train.npz"), SC.load(Path(args.style_data) / "test.npz")
+    style = SM.fit(train)                                                  # fitted on the training games only
+    SM.save_model(style, Path(args.out).with_suffix(".style.json"))
+    positions = [p for p in test if p.platform == 0]
+    random.Random(0).shuffle(positions)
+    positions = positions[:args.max_positions]
+    cal = Calibration.load(args.calibration) if args.calibration else None
+    table = cal.table() if cal else None
+    engine = UciEngine([args.engine]).start()
+    try:
+        move = AGR.move_agreement(positions, engine, {"uniform (engine's own ranking)": priors.UniformPrior(),
+                                                      "your style": priors.StylePrior(Path(args.out).with_suffix(".style.json"))},
+                                  table=table, calibration=cal)
+    finally:
+        engine.close()
+    Path(args.out).with_suffix(".style.json").unlink(missing_ok=True)
+    text = AGR.render(book, move)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_style_anchors_verify(args):
     import yaml
 
@@ -1607,6 +1648,12 @@ def main():
     sm.add_argument("--out", required=True)
     sm.add_argument("--l2", type=float, default=1.0)
     sm.set_defaults(func=cmd_style_model_fit)
+    ma = sub.add_parser("mechess-agreement", help="held-out check: how much probability do the books and the style prior give the moves you actually played?")
+    ma.add_argument("--profile", default=DEFAULT_PROFILE); ma.add_argument("--style-data", required=True, help="a style-data folder (train.npz, test.npz)")
+    ma.add_argument("--theory", default="data/explorer", help="folder of theory books (theory_LO_HI.bin)"); ma.add_argument("--calibration")
+    ma.add_argument("--engine", default=str(ENGINE_BIN)); ma.add_argument("--holdout", type=float, default=0.15, help="the newest share of games kept out of the personal book")
+    ma.add_argument("--plies", type=int, default=20); ma.add_argument("--max-positions", type=int, default=800)
+    ma.add_argument("--out", default="data/style/agreement.md"); ma.set_defaults(func=cmd_mechess_agreement)
     ag = sub.add_parser("style-anchors-games", help="game-level features (openings, game shape) of the anchors' peak-year games; resumable, one anchor at a time, archives deleted")
     ag.add_argument("--config", default="configs/anchors.yaml"); ag.add_argument("--out", default="data/style/anchors_games")
     ag.add_argument("--tmp", default="data/anchors_raw"); ag.add_argument("--files", help="folder with your own <key>.pgn / .zip files, used instead of a download")

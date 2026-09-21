@@ -106,6 +106,23 @@ Play a few dozen rated games at a fixed `Elo` setting; the bot's Lichess rating 
 estimates that setting on the Lichess scale. Several settings and enough games (roughly 50 or more per setting) are needed before a constant offset between
 the Stockfish scale and Lichess can be trusted; set it as `offset` in the calibration file only after that.
 
+## How much it plays like you (held-out check)
+
+`chessme mechess-agreement` asks, on games the bot was not built from, how much probability the bot gives the moves you actually played. One run
+(1,142 newest games kept out of the personal book; 800 positions from held-out games for the move check; the bot's dial at the position's rating):
+
+| | Result |
+|---|---|
+| Your own book (from the older games), your first 20 plies | in the book for **50%** of your moves; the probability it gives your move over all of them **42%** (85% where it has the position) |
+| Theory book of your rating | in the book for 39%; probability of your move 17% |
+| Both stacked (yours first) | 51% covered; 43% |
+| Your move among the engine's candidates at your rating | 68% (the other 32% were outside the candidate window: your mistakes or unusual moves) |
+| Probability of your move: engine's own ranking / with your style prior | **20.6% / 24.5%** |
+
+So the opening is clearly yours (42% against 17% for generic theory), while your style prior adds about 4 points over the engine's own ranking in the
+middlegame: real but small, as the style analysis predicted. The error of 800 positions is about a point, and a paired significance test is not
+included. The clock and the blunders you make are not modelled, which is why the bot cannot match the 32% of your moves that lie outside the engine's window.
+
 ## Licences and privacy
 
 lichess-bot is AGPL-3.0: run it as a separate program and keep its checkout out of this repository. Games are public. A bot that plays your own book or a prior

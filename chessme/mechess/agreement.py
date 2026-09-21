@@ -1,0 +1,114 @@
+"""Does the bot choose like the player? Two held-out checks, both on games the bot was not built from.
+
+  books   the player's moves in the opening of held-out games (the newest games; the personal book is built from the older ones only): how many
+          are in the personal book, in the theory book of the player's rating, or in both stacked, and what probability the book gives the move
+          that was played (a sampled book move equals the player's move with that probability)
+  moves   positions from held-out games: the controller is run as it plays (search candidates at the dial of the position's rating, a prior that
+          weighs them) and asked what probability it gives the move that was played. The search is done once per position and shared by all
+          priors, so the priors are compared on exactly the same candidates. With the uniform prior the most likely move is the engine's best
+          one, which is the baseline every "plays like me" claim has to beat.
+
+The probabilities are those of the choice rule (`Choice.candidates`); the small blunder-rate branch of the weak dial settings is not included."""
+import chess
+
+from .controller import BookStack, MeChess
+
+
+def book_agreement(books, rows, *, max_ply=20, min_rating=0):
+    """{name: {moves, coverage, top1, sampled, sampled_when_in_book}} for each book in `books` ({name: object with .moves(board, elo)}) over the
+    player's moves in the first `max_ply` plies of `rows` (normalised games; only Lichess-scale games, since the theory books are on that scale)."""
+    tot = {n: [0, 0, 0, 0.0] for n in books}            # moves, in book, top-1, probability given to the played move
+    games = 0
+    for row in rows:
+        if row.get("platform") != "lichess" or not row.get("usable") or (row.get("my_rating") or 0) < min_rating:
+            continue
+        games += 1
+        white = row["color"] == "white"
+        elo = row.get("my_rating") or 1500
+        board = chess.Board()
+        for san in row["moves"].split()[:max_ply]:
+            try:
+                move = board.parse_san(san)
+            except ValueError:
+                break
+            if (board.turn == chess.WHITE) == white:
+                for name, book in books.items():
+                    t = tot[name]
+                    t[0] += 1
+                    options = book.moves(board, elo)
+                    if options:
+                        z = sum(w for _, w in options)
+                        t[1] += 1
+                        t[2] += max(options, key=lambda o: o[1])[0] == move
+                        t[3] += sum(w for m, w in options if m == move) / z
+            board.push(move)
+    out = {"games": games}
+    for n, (moves, inb, top1, prob) in tot.items():
+        out[n] = {"moves": moves, "coverage": inb / moves if moves else 0.0, "top1": top1 / inb if inb else 0.0,
+                  "sampled": prob / moves if moves else 0.0, "sampled_when_in_book": prob / inb if inb else 0.0}
+    return out
+
+
+class SharedSearch:
+    """Wraps an engine so that the same search is answered from memory the second time: the priors under test see identical candidates."""
+
+    def __init__(self, engine):
+        self.engine, self.cache, self.multipv = engine, {}, None
+
+    def _send(self, cmd):
+        if cmd.startswith("setoption name MultiPV value"):
+            self.multipv = int(cmd.rsplit(" ", 1)[1])
+        self.engine._send(cmd)
+
+    def ready(self):
+        self.engine.ready()
+
+    def go(self, fen, moves=(), **kw):
+        key = (fen, tuple(moves), self.multipv, kw.get("nodes"), kw.get("depth"))
+        if key not in self.cache:
+            self.cache[key] = self.engine.go(fen, moves, **kw)
+        return self.cache[key]
+
+
+def move_agreement(positions, engine, priors, *, table=None, calibration=None, seed=0):
+    """{prior name: {positions, in_candidates, top1, expected_match}} over `positions` (objects with .fen, .played, .rating). `expected_match` is the
+    average probability given to the played move (0 when it was not among the candidates); `top1` how often the most likely candidate was played."""
+    shared = SharedSearch(engine)
+    out = {}
+    for name, prior in priors.items():
+        mc = MeChess(shared, prior, None, table=table, seed=seed, calibration=calibration)
+        n = inc = top1 = 0
+        mass = 0.0
+        for p in positions:
+            board = chess.Board(p.fen)
+            played = chess.Move.from_uci(p.played)
+            if played not in board.legal_moves:
+                continue
+            choice = mc.choose(board, int(p.rating))
+            n += 1
+            hit = [c for c in choice.candidates if c.move == played]
+            inc += bool(hit)
+            mass += hit[0].prob if hit else 0.0
+            if choice.candidates:
+                top1 += max(choice.candidates, key=lambda c: c.prob).move == played
+        out[name] = {"positions": n, "in_candidates": inc / n if n else 0.0, "top1": top1 / n if n else 0.0, "expected_match": mass / n if n else 0.0}
+    return out
+
+
+def render(book, move):
+    lines = ["# Does the bot choose like the player? (held-out games)", ""]
+    if book:
+        lines += [f"## Opening books ({book['games']} newest games, the player's first moves; the personal book was built from the older games)", "",
+                  "| Book | moves | in the book | top-1 when in book | probability of the played move, over all moves | ... when in book |", "|---|---|---|---|---|---|"]
+        for n, s in book.items():
+            if n == "games":
+                continue
+            lines.append(f"| {n} | {s['moves']} | {100 * s['coverage']:.0f}% | {100 * s['top1']:.0f}% | {100 * s['sampled']:.1f}% | {100 * s['sampled_when_in_book']:.0f}% |")
+        lines.append("")
+    if move:
+        lines += ["## Move choice by search and prior (positions from held-out games; candidates from the engine at the dial of the player's rating)", "",
+                  "| Prior | positions | played move among the candidates | most likely candidate is the played move | probability of the played move |", "|---|---|---|---|---|"]
+        for n, s in move.items():
+            lines.append(f"| {n} | {s['positions']} | {100 * s['in_candidates']:.0f}% | {100 * s['top1']:.1f}% | {100 * s['expected_match']:.1f}% |")
+        lines += ["", "With the uniform prior the most likely candidate is the engine's best move: that row is the baseline. A style prior only counts as 'plays like me' where it beats it."]
+    return "\n".join(lines) + "\n"
