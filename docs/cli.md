@@ -68,7 +68,7 @@ python -m chessme mechess --engine engine/build/chessme-engine --book book.bin \
 `--book` takes several books in priority order, separated by commas, and a folder means one theory book per rating band (`theory_LO_HI.bin`; the
 band of the Elo being played is used). `--book my/book.bin,data/explorer` plays your own repertoire where it knows the position and otherwise the
 theory of the level. `--prior style=MODEL.json` (from `style-model-fit`) weighs the engine's good moves by your fitted move-choice taste
-(seeks/avoids captures, trades, king attacks, pawn breaks ...); `--style-strength` scales it (0 = off, 1 = as fitted).
+(seeks/avoids captures, trades, king attacks, pawn breaks ...); `--style-strength` scales it (0 = off, 1 = as fitted). `--clock MODEL.json` (from `mechess-clock-fit`) makes the bot wait the way you would think when the GUI sends its clocks; `--clock-strength` scales it (0 = never wait).
 
 UCI options: `Elo`, `OppElo`, `Platform`, `Seed` (with `--calibration FILE`, `Elo` is the *measured* Elo, see [calibration.md](calibration.md)). The controller plays your book while it lasts, then asks the
 engine for its best lines (MultiPV), keeps those within the dial's centipawn window, lets the prior weigh them and
@@ -83,7 +83,8 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-data` | Build the choice-level dataset from your games: engine candidates + move features (`--engine stockfish`) |
 | `style-pop-data SOURCE` | Sample a rating-matched **population** from a Lichess dump (streamed, nothing stored) |
 | `style-model-fit` | Fit your style model on a `style-data` folder, print how much better than a strength-only model it predicts your held-out choices, and save it for the bot (`--data`, `--out`, `--l2`) |
-| `mechess-agreement` | Held-out check that the bot chooses like you: how much probability the personal book (built from the older games only), the theory book and your style prior give the moves you actually played, against the engine-only baseline (`--style-data`, `--calibration`, `--holdout`, `--max-positions`) |
+| `mechess-clock-fit` | Learn how long you think (per time control, stage and move type) from your games, print a held-out check, save the model for `mechess --clock` (`--out`, `--every`) |
+| `mechess-agreement` | Held-out check that the bot chooses like you: how much probability the personal book (built from the older games only), the theory book and your style prior give the moves you actually played, against the engine-only baseline (`--style-data`, `--calibration`, `--holdout`, `--max-positions`, `--sweep SCALE,LINES ...` to try wider candidate windows) |
 | `style-anchors-games` | Game-level features (openings, game shape) of each anchor's peak-year games from PGN Mentor, one anchor at a time, archives deleted, resumable (`--only`, `--max-games`, `--files`) |
 | `style-anchors-games-report` | Can the game-level features and the trained embedding tell the anchors apart, does the embedding see era rather than style, and how far are the anchors from the online cohort (`--data`, `--embed`, `--cohort`, `--out`) |
 | `style-report` | Fit the style model, evaluate on held-out games, compare with the population, write a readable report (`--baseline`, `--label`, `--out`) |

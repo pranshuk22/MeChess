@@ -127,7 +127,8 @@ class MeChess:
             options = self.book.moves(board, elo)
             if options:
                 move = self._sample([m for m, _ in options], [w for _, w in options], settings.temperature)
-                return Choice(move, "book", [Candidate(m, 0, prior=w) for m, w in options])
+                z = sum(w for _, w in options)
+                return Choice(move, "book", [Candidate(m, 0, prior=w, prob=w / z) for m, w in options])
 
         # 2. engine candidates
         self._set_multipv(settings.multipv)

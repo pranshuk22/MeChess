@@ -78,7 +78,7 @@ def move_agreement(positions, engine, priors, *, table=None, calibration=None, s
     for name, prior in priors.items():
         mc = MeChess(shared, prior, None, table=table, seed=seed, calibration=calibration)
         n = inc = top1 = 0
-        mass = 0.0
+        mass = loss = 0.0
         for p in positions:
             board = chess.Board(p.fen)
             played = chess.Move.from_uci(p.played)
@@ -91,7 +91,9 @@ def move_agreement(positions, engine, priors, *, table=None, calibration=None, s
             mass += hit[0].prob if hit else 0.0
             if choice.candidates:
                 top1 += max(choice.candidates, key=lambda c: c.prob).move == played
-        out[name] = {"positions": n, "in_candidates": inc / n if n else 0.0, "top1": top1 / n if n else 0.0, "expected_match": mass / n if n else 0.0}
+                loss += sum(c.prob * c.loss for c in choice.candidates)
+        out[name] = {"positions": n, "in_candidates": inc / n if n else 0.0, "top1": top1 / n if n else 0.0, "expected_match": mass / n if n else 0.0,
+                     "expected_loss_cp": loss / n if n else 0.0}
     return out
 
 
@@ -172,3 +174,19 @@ def render_clock(res):
     lines.append("\nDistance is the Kolmogorov-Smirnov statistic between the two sets of think times (0 = identical); lower is better. Lichess clocks are whole seconds, so "
                  "many short thoughts are recorded as 0.")
     return "\n".join(lines)
+
+
+def sweep(positions, engine, priors, variants, *, table, calibration=None):
+    """[(window scale, extra lines, results)] for each variant of the dial table: how much of the player's play the candidates reach and match, and
+    what it costs in expected centipawn loss (a cheap proxy for strength; measure the real Elo with a calibration before adopting a variant)."""
+    from .dial import widen
+    return [(w, k, move_agreement(positions, engine, priors, table=widen(table, w, k), calibration=calibration)) for w, k in variants]
+
+
+def render_sweep(rows):
+    lines = ["## Wider candidate windows", "",
+             "| window x | extra lines | prior | played move among candidates | probability of the played move | expected loss per move (cp) |", "|---|---|---|---|---|---|"]
+    for w, k, res in rows:
+        for name, s in res.items():
+            lines.append(f"| {w:g} | +{k} | {name} | {100 * s['in_candidates']:.0f}% | {100 * s['expected_match']:.1f}% | {s['expected_loss_cp']:.0f} |")
+    return "\n".join(lines) + "\n"

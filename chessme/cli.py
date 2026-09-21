@@ -507,8 +507,16 @@ def cmd_mechess_agreement(args):
                                   table=table, calibration=cal)
     finally:
         engine.close()
-    Path(args.out).with_suffix(".style.json").unlink(missing_ok=True)
     text = AGR.render(book, move)
+    if args.sweep:
+        engine = UciEngine([args.engine]).start()
+        try:
+            rows_ = AGR.sweep(positions, engine, {"uniform": priors.UniformPrior(), "your style": priors.StylePrior(Path(args.out).with_suffix(".style.json"))},
+                              [tuple(float(x) for x in v.split(",")) for v in args.sweep], table=table or dial.DEFAULT_TABLE, calibration=cal)
+        finally:
+            engine.close()
+        text += "\n" + AGR.render_sweep([(w, int(k), r) for w, k, r in rows_])
+    Path(args.out).with_suffix(".style.json").unlink(missing_ok=True)
     Path(args.out).write_text(text, encoding="utf-8")
     print(text)
 
@@ -1677,6 +1685,7 @@ def main():
     ma.add_argument("--theory", default="data/explorer", help="folder of theory books (theory_LO_HI.bin)"); ma.add_argument("--calibration")
     ma.add_argument("--engine", default=str(ENGINE_BIN)); ma.add_argument("--holdout", type=float, default=0.15, help="the newest share of games kept out of the personal book")
     ma.add_argument("--plies", type=int, default=20); ma.add_argument("--max-positions", type=int, default=800)
+    ma.add_argument("--sweep", nargs="*", metavar="SCALE,LINES", help="also try wider candidate windows, e.g. 1.5,1 2,2 3,4 (window scale, extra MultiPV lines)")
     ma.add_argument("--out", default="data/style/agreement.md"); ma.set_defaults(func=cmd_mechess_agreement)
     ag = sub.add_parser("style-anchors-games", help="game-level features (openings, game shape) of the anchors' peak-year games; resumable, one anchor at a time, archives deleted")
     ag.add_argument("--config", default="configs/anchors.yaml"); ag.add_argument("--out", default="data/style/anchors_games")

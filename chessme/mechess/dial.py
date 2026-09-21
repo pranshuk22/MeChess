@@ -52,6 +52,18 @@ def _row(r):
     return tuple(r) + (0.0,) * (8 - len(r))
 
 
+def widen(table, window_scale=1.0, extra_lines=0):
+    """A copy of `table` whose candidate window is multiplied by `window_scale` and whose MultiPV is raised by `extra_lines`: more of the moves the
+    player might really play become candidates (the weights still prefer the better ones; measure the strength again with `calibrate`)."""
+    out = {}
+    for elo, row in table.items():
+        r = list(_row(row))
+        r[1] = int(r[1]) + int(extra_lines)
+        r[2] = r[2] * window_scale
+        out[elo] = tuple(r)
+    return out
+
+
 def load_table(path):
     """{elo: row} from a JSON file such as {"800": [100, 8, 300, 2.0, 200, 6, 0.3], ...}."""
     return {int(k): tuple(v) for k, v in json.loads(Path(path).read_text()).items()}

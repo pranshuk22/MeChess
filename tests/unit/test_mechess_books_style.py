@@ -101,3 +101,11 @@ def test_style_prior_steers_the_choice_among_equal_candidates(tmp_path):
     mc = MeChess(engine, StylePrior(tmp_path / "s.json"), None, table=table(temp=1.0, scale=1e9), seed=3)
     picks = [mc.choose(board, 1800).move.uci() for _ in range(60)]
     assert picks.count("e4d5") > 50
+
+
+def test_book_choices_report_their_shares(tmp_path):
+    start = chess.Board()
+    write(tmp_path / "b.bin", start, "e2e4", "d2d4")
+    mc = MeChess(StubEngine([L("a2a3", 0)]), prior_of({}), load_books(str(tmp_path / "b.bin")), table=table(book=10), seed=1)
+    c = mc.choose(start, 1500)
+    assert c.source == "book" and abs(sum(x.prob for x in c.candidates) - 1) < 1e-9 and all(x.prob > 0 for x in c.candidates)

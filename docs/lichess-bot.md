@@ -123,6 +123,33 @@ So the opening is clearly yours (42% against 17% for generic theory), while your
 middlegame: real but small, as the style analysis predicted. The error of 800 positions is about a point, and a paired significance test is not
 included. The clock and the blunders you make are not modelled, which is why the bot cannot match the 32% of your moves that lie outside the engine's window.
 
+### Widening the candidate window did not help
+
+The 32% of your moves that the engine's candidates miss are your mistakes and unusual moves. Widening the window (window x1.5 to x4 with 1 to 6 extra
+lines) reaches more of them (68% up to 85% of your moves) but *lowers* the probability given to the move you played (24.5% down to 20.7%), because the
+probability spreads over more candidates, and it raises the expected loss per move from 13 to 25 centipawns, i.e. a weaker bot. Retuning the
+temperature and the strength scale with the wider window gave 23% to 26%, within the noise of 800 positions, and tuning on the same positions
+would flatter it anyway. So the calibrated dial stays as it is and no recalibration was needed (`mechess-agreement --sweep` reproduces the table).
+
+### Clock habits
+
+The bot searches in a fraction of a second, so it used to answer every move at once. `chessme mechess-clock-fit` learns from your Lichess games how much
+of the time left you use, per time control, stage of the game and kind of move (a recapture or a nearly forced move is fast), and keeps the empirical
+distribution, so the bot's delays have your spread. `mechess --clock data/style/clock_model.json` makes the bot wait accordingly whenever lichess-bot sends
+the clocks with `go` (it does); it never uses more than a quarter of what is left. `--clock-strength 0` turns it off.
+
+Held-out games (every 7th game kept out of the fit), think time per move, yours against the model, and the distance (Kolmogorov-Smirnov, 0 = identical)
+to your real distribution for the model and for a bot that answers at once:
+
+| Time control | your moves | yours (median / mean) | model (median / mean) | distance: model / at once |
+|---|---|---|---|---|
+| bullet | 11,654 | 1.0s / 1.6s | 1.0s / 1.7s | 0.07 / 0.38 |
+| blitz | 5,852 | 2.0s / 3.6s | 2.0s / 4.3s | 0.05 / 0.66 |
+| rapid | 3,172 | 3.0s / 6.6s | 3.0s / 7.3s | 0.03 / 0.79 |
+
+Lichess clocks are whole seconds, so short thoughts are recorded as 0 or 1. The model does not think longer where the position is hard (beyond the
+simple-move flag), and your clock trouble (tilt, flagging) is not modelled.
+
 ## Licences and privacy
 
 lichess-bot is AGPL-3.0: run it as a separate program and keep its checkout out of this repository. Games are public. A bot that plays your own book or a prior

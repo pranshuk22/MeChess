@@ -5,7 +5,7 @@
 #   3. measures the strength of exactly that configuration (dial calibration, memory-guarded)  -> $CAL_OUT
 #   4. writes the bot's engine script (bot/lichess-bot/engines/mechess-bot.sh; the generic one is kept as mechess-bot-generic.sh)
 # Personal names never appear here: pass them in the environment.
-#   PROFILE=<profile name>  STYLE_DATA=<style-data folder>  tools/after_calibration.sh
+#   PROFILE=<profile name>  STYLE_DATA=<style-data folder>  [CLOCK_MODEL=<file from mechess-clock-fit>]  tools/after_calibration.sh
 set -u
 cd "$(dirname "$0")/.."
 PY=.venv/bin/python
@@ -50,7 +50,8 @@ cat > $E/mechess-bot.sh <<EOS
 export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 cd "\$(dirname "\$0")/../../.."          # project root
 exec .venv/bin/python -m chessme mechess --engine engine/build/chessme-engine --book "$BOOKS" \\
-     --prior "style=$STYLE_OUT" --calibration $CAL_OUT
+     --prior "style=$STYLE_OUT" --calibration $CAL_OUT${CLOCK_MODEL:+ \\
+     --clock $CLOCK_MODEL}
 EOS
 chmod +x $E/mechess-bot.sh
 say "all done: bot script $E/mechess-bot.sh, calibration $CAL_OUT"

@@ -4,6 +4,7 @@ import chess
 
 from chessme.mechess import agreement as AG
 from chessme.mechess.priors import UniformPrior
+from chessme.uci_client import GoResult
 from tests.unit.test_mechess import L, StubEngine, prior_of, table
 
 
@@ -73,3 +74,29 @@ def test_render_names_the_baseline():
     text = AG.render({"games": 5, "b": {"moves": 10, "coverage": 0.5, "top1": 0.4, "sampled": 0.2, "sampled_when_in_book": 0.4}},
                      {"u": {"positions": 4, "in_candidates": 0.9, "top1": 0.45, "expected_match": 0.31}})
     assert "baseline" in text and "| u | 4 |" in text and "| b | 10 |" in text
+
+
+def test_widen_scales_the_window_and_adds_lines_without_touching_other_knobs():
+    from chessme.mechess import dial
+    t = {1800: (4000, 6, 120, 1.1, 80, 22), 1000: (363, 7, 251, 1.61, 177.1, 12, 0.23, 4)}
+    w = dial.widen(t, 2.0, 3)
+    assert w[1800][:3] == (4000, 9, 240.0) and w[1800][3:6] == (1.1, 80, 22) and w[1800][6:] == (0.0, 0.0)
+    assert w[1000][1] == 10 and w[1000][2] == 502 and w[1000][6:] == (0.23, 4)
+    assert dial.widen(t) == {k: dial._row(v) for k, v in t.items()}          # scale 1 and no extra lines: the same table
+
+
+def test_expected_loss_and_the_sweep_reach_more_of_the_players_moves():
+    tbl = {1200: (100, 2, 50, 1.0, 1e9, 20), 2600: (100, 2, 50, 1.0, 1e9, 20)}
+
+    class Wide(StubEngine):                                                 # answers with as many lines as MultiPV asks for
+        def go(self, fen, moves=(), *, nodes=None, **kw):
+            k = int(self.sent[-1].rsplit(" ", 1)[1])
+            return GoResult(self.lines[0].move, lines=self.lines[:k])
+
+    wide = Wide([L("e2e4", 0), L("d2d4", -40), L("g1f3", -90), L("a2a3", -300)])
+    pos = positions("g1f3")
+    rows = AG.sweep(pos, wide, {"uniform": UniformPrior()}, [(1.0, 0), (3.0, 2)], table=tbl)
+    (w0, k0, r0), (w1, k1, r1) = rows
+    assert r0["uniform"]["in_candidates"] == 0.0 and r1["uniform"]["in_candidates"] == 1.0     # the played third-best move is reached only by the wider setting
+    assert r1["uniform"]["expected_loss_cp"] > r0["uniform"]["expected_loss_cp"] >= 0
+    assert "Wider candidate windows" in AG.render_sweep(rows)
