@@ -68,9 +68,21 @@ Two Kaggle runs of the transformer model on the full collected data (about 630,0
 | First (constant learning rate), end of epoch 3 | 0.212 | not measured in the log | not measured in the log |
 | Steady version, validation at step 17,000 of 27,141 | 0.431 | 0.724 | 0.460 |
 
-The glyph heads overfit: their training loss falls to almost zero while validation accuracy plateaus, so the number to trust is the held-out
-**test** metric in the run's `metrics.json` (`books-nlp-report` prints it). At the time of writing that final number has not been recorded here, and
-the early-stopping and fewer-repeated-examples changes above have not been run on a GPU yet.
+The run with the early-stopping, labelled-examples-per-batch and dropout changes (105 minutes on one GPU, all 27,141 steps; the last step was the best,
+so early stopping did not trigger) gave, on the **held-out test set**:
+
+| Head | Test | Baseline |
+|---|---|---|
+| Concepts, average precision (macro) | **0.472** (validation 0.565) | 0.008 (random) |
+| Concepts, F1 micro / macro with tuned thresholds | 0.668 / 0.476 | 0.000 (prior only) |
+| Judgement glyph, accuracy / macro F1 | **0.718** / 0.627 | 0.329 (majority) |
+| Evaluation, accuracy / macro F1 | **0.408** / 0.371 | 0.245 (majority) |
+
+How to read it: the concept head improved clearly (0.43 to 0.57 on validation) and is the useful part. The judgement head has stayed at about 0.72
+in every run, so text alone appears to cap it there. The evaluation head fell from 0.46 (earlier run) to 0.41 and its training loss is near zero, so
+it memorises; do not rely on it. The concept and judgement labels are weak (lexicon and glyph based), so these numbers measure agreement with those
+labels, not chess understanding. Test metrics on the concept head with the keywords left visible are near zero (0.004) because the model was never
+trained on unmasked text; that figure is a distribution mismatch, not a quality measure.
 
 ## What it is for, and not for
 
