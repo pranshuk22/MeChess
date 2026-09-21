@@ -456,6 +456,22 @@ def cmd_style_anchors_games_report(args):
     print(text)
 
 
+def cmd_mechess_clock_fit(args):
+    from .book import evaluate as EV
+    from .mechess import clock as CK
+    cfg = config.load_profile(args.profile)
+    rows = audit_mod.load(cfg["_raw_dir"].parent / "processed" / "games.jsonl")
+    usable = [r for r in rows if r.get("usable")]
+    test = [r for i, r in enumerate(usable) if i % args.every == 0]          # every Nth game: all time controls are in the check
+    train = [r for i, r in enumerate(usable) if i % args.every]
+    from .mechess import agreement as AGR
+    model = CK.fit(train)
+    print(f"clock model from {model.meta['moves']} of your moves in {len(train)} games; {model.meta['cells']} cells")
+    print(AGR.render_clock(AGR.clock_agreement(model, test)))
+    CK.fit(rows).save(args.out)                                        # the saved model uses every game
+    print(f"written {args.out}; use it with: chessme mechess --clock {args.out}")
+
+
 def cmd_mechess_agreement(args):
     import random
 
@@ -1218,7 +1234,11 @@ def cmd_mechess(args):
         from .mechess import dial
         table = dial.load_table(args.table) if args.table else (cal.table() if cal else None)   # a calibration brings its own table
         mc = MeChess(engine, prior, book, table=table, seed=args.seed or None, calibration=cal)
-        MechessUci(mc, elo=args.elo).run()
+        clock = None
+        if args.clock:
+            from .mechess.clock import ClockModel
+            clock = ClockModel.load(args.clock)
+        MechessUci(mc, elo=args.elo, clock=clock, clock_strength=args.clock_strength).run()
     finally:
         engine.close()
 
@@ -1648,6 +1668,10 @@ def main():
     sm.add_argument("--out", required=True)
     sm.add_argument("--l2", type=float, default=1.0)
     sm.set_defaults(func=cmd_style_model_fit)
+    mc = sub.add_parser("mechess-clock-fit", help="learn how long you think (per time control, stage and move type) for the bot's waiting; prints a held-out check")
+    mc.add_argument("--profile", default=DEFAULT_PROFILE); mc.add_argument("--out", default="data/style/clock_model.json")
+    mc.add_argument("--every", type=int, default=7, help="every Nth game is kept out of the fit for the check")
+    mc.set_defaults(func=cmd_mechess_clock_fit)
     ma = sub.add_parser("mechess-agreement", help="held-out check: how much probability do the books and the style prior give the moves you actually played?")
     ma.add_argument("--profile", default=DEFAULT_PROFILE); ma.add_argument("--style-data", required=True, help="a style-data folder (train.npz, test.npz)")
     ma.add_argument("--theory", default="data/explorer", help="folder of theory books (theory_LO_HI.bin)"); ma.add_argument("--calibration")
@@ -1677,6 +1701,8 @@ def main():
     mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book", help="opening books in priority order, comma-separated; a folder holds one theory book per rating band "
                                                                  "(e.g. your own book.bin,data/explorer)")
     mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT | style=MODEL.json (from style-model-fit)")
+    mch.add_argument("--clock", help="clock model from mechess-clock-fit: the bot waits the way you would have thought (needs the GUI's clocks in `go`)")
+    mch.add_argument("--clock-strength", type=float, default=1.0, help="scales the waiting: 0 = never wait, 1 = as you do")
     mch.add_argument("--style-strength", type=float, default=1.0, help="how strongly the style prior counts: 0 = none, 1 = as fitted")
     mch.add_argument("--maia3-repo"); mch.add_argument("--maia3-size", default="5m"); mch.add_argument("--extra-path")
     mch.add_argument("--elo", type=int, default=1800); mch.add_argument("--seed", type=int, default=0)

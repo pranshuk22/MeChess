@@ -112,3 +112,63 @@ def render(book, move):
             lines.append(f"| {n} | {s['positions']} | {100 * s['in_candidates']:.0f}% | {100 * s['top1']:.1f}% | {100 * s['expected_match']:.1f}% |")
         lines += ["", "With the uniform prior the most likely candidate is the engine's best move: that row is the baseline. A style prior only counts as 'plays like me' where it beats it."]
     return "\n".join(lines) + "\n"
+
+
+# ---- clock -----------------------------------------------------------------------------------------------------------
+
+def _ks(a, b):
+    """Kolmogorov-Smirnov distance between two samples (0 = the same distribution, 1 = disjoint)."""
+    import numpy as np
+    a, b = np.sort(a), np.sort(b)
+    xs = np.concatenate([a, b])
+    return float(np.max(np.abs(np.searchsorted(a, xs, side="right") / len(a) - np.searchsorted(b, xs, side="right") / len(b))))
+
+
+def clock_agreement(model, rows, *, instant=1.0, seed=0, max_moves=40000):
+    """How the clock model's waiting compares with the player's real thinking on held-out games. For every move of the player, the model draws
+    a delay from the real state (time left, stage, simple move); the two sets of seconds are compared per time class: medians, and the KS distance
+    (0 = the same distribution) against a bot that always answers in `instant` seconds, which is what the bot did without the model."""
+    import chess
+    import numpy as np
+
+    from .clock import simple, think_times, time_class
+    rng = np.random.default_rng(seed)
+    real, sim = {}, {}
+    n = 0
+    for row in rows:
+        if row.get("platform") != "lichess" or not row.get("usable") or not row.get("moves"):
+            continue
+        by_ply, board = {}, chess.Board()
+        try:
+            for i, san in enumerate(row["moves"].split()):
+                by_ply[i] = simple(board)
+                board.push_san(san)
+        except ValueError:
+            pass
+        for ply, prev, think, base, inc in think_times(row):
+            if ply not in by_ply or n >= max_moves:
+                continue
+            tc = time_class(base, inc)
+            f = model.fraction(tc, ply, by_ply[ply], rng)
+            d = max(0.0, min(f * prev, 0.25 * max(prev - 1.0, 0.0)))
+            real.setdefault(tc, []).append(think)
+            sim.setdefault(tc, []).append(float(round(d)))                       # the recorded clocks are whole seconds
+            n += 1
+    out = {}
+    for tc in real:
+        if len(real[tc]) < 200:
+            continue
+        r, s_ = np.array(real[tc]), np.array(sim[tc])
+        out[tc] = {"moves": len(r), "real_median": float(np.median(r)), "model_median": float(np.median(s_)),
+                   "real_mean": float(r.mean()), "model_mean": float(s_.mean()), "ks_model": _ks(r, s_), "ks_instant": _ks(r, np.full(len(r), float(round(instant))))}
+    return out
+
+
+def render_clock(res):
+    lines = ["| Time control | your moves | thinking per move: yours (median / mean) | model (median / mean) | distance to yours: model / answering at once |", "|---|---|---|---|---|"]
+    for tc, s in sorted(res.items()):
+        lines.append(f"| {tc} | {s['moves']} | {s['real_median']:.1f}s / {s['real_mean']:.1f}s | {s['model_median']:.1f}s / {s['model_mean']:.1f}s | "
+                     f"{s['ks_model']:.2f} / {s['ks_instant']:.2f} |")
+    lines.append("\nDistance is the Kolmogorov-Smirnov statistic between the two sets of think times (0 = identical); lower is better. Lichess clocks are whole seconds, so "
+                 "many short thoughts are recorded as 0.")
+    return "\n".join(lines)
