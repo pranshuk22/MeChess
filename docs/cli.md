@@ -62,8 +62,13 @@ Use it in the engine with the UCI options `OwnBook`, `BookFile`, `BookMaxPly`, `
 
 ```
 python -m chessme mechess --engine engine/build/chessme-engine --book book.bin \
-       --prior uniform|ours=CHECKPOINT|maia3=CHECKPOINT --elo 1600 --seed 1
+       --prior uniform|ours=CHECKPOINT|maia3=CHECKPOINT|style=MODEL.json --elo 1600 --seed 1
 ```
+
+`--book` takes several books in priority order, separated by commas, and a folder means one theory book per rating band (`theory_LO_HI.bin`; the
+band of the Elo being played is used). `--book my/book.bin,data/explorer` plays your own repertoire where it knows the position and otherwise the
+theory of the level. `--prior style=MODEL.json` (from `style-model-fit`) weighs the engine's good moves by your fitted move-choice taste
+(seeks/avoids captures, trades, king attacks, pawn breaks ...); `--style-strength` scales it (0 = off, 1 = as fitted).
 
 UCI options: `Elo`, `OppElo`, `Platform`, `Seed` (with `--calibration FILE`, `Elo` is the *measured* Elo, see [calibration.md](calibration.md)). The controller plays your book while it lasts, then asks the
 engine for its best lines (MultiPV), keeps those within the dial's centipawn window, lets the prior weigh them and
@@ -77,6 +82,7 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 |---|---|
 | `style-data` | Build the choice-level dataset from your games: engine candidates + move features (`--engine stockfish`) |
 | `style-pop-data SOURCE` | Sample a rating-matched **population** from a Lichess dump (streamed, nothing stored) |
+| `style-model-fit` | Fit your style model on a `style-data` folder, print how much better than a strength-only model it predicts your held-out choices, and save it for the bot (`--data`, `--out`, `--l2`) |
 | `style-report` | Fit the style model, evaluate on held-out games, compare with the population, write a readable report (`--baseline`, `--label`, `--out`) |
 | `style-judge-compare A B` | How much does the judge engine change the data? (two dataset folders) |
 | `style-cohort-fetch SOURCE` | Fetch ~50 recent games for hundreds of players (the **cohort**) via the Lichess API |

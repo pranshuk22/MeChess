@@ -53,6 +53,17 @@ exec .venv/bin/python -m chessme mechess --engine engine/build/chessme-engine --
      --calibration data/calibration/dial_uniform.json
 ```
 
+For a bot that plays *like you*, use your own book first and the theory book of the level second, your style prior, and a calibration measured for
+exactly that configuration (`tools/after_calibration.sh` fits the style model, smoke-tests, calibrates and writes this script):
+
+```bash
+exec .venv/bin/python -m chessme mechess --engine engine/build/chessme-engine --book profiles/<you>/book.bin,data/explorer \
+     --prior style=data/style/mechess_style.json --calibration data/calibration/dial_mechess.json
+```
+
+`data/explorer` holds the theory books built by the opening explorer; when a longer explorer run finishes, copy its `theory_*.bin` files over
+them and the bot uses them at its next start.
+
 In `bot/lichess-bot/config.yml` (copy of `config.yml.default`) the settings that matter:
 
 | Setting | Suggested | Why |
