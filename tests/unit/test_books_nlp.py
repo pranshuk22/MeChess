@@ -299,3 +299,62 @@ def test_examples_are_grouped_by_game_id_so_a_game_never_spans_train_and_test(tm
 def test_missing_sources_are_reported():
     have = [N._example(f"white plays a careful move number {i} and it is fine", f"g{i}", s) for i, s in enumerate(N.REQUIRED_SOURCES[:-2])]
     assert N.missing_sources(have) == list(N.REQUIRED_SOURCES[-2:]) and N.missing_sources(have, required=("gameknot",)) == []
+
+
+# ---- overfitting controls: early stopping, fewer repeated labelled examples, a separate best concept model ------------------
+
+def _patched_evaluate(monkeypatch, scores):
+    """Make every validation return the next (concept AP, judgement F1) pair of `scores` (the last pair repeats)."""
+    real, calls = N.evaluate, {"n": 0}
+
+    def fake(model, examples, mask=True, batch=64, thresholds=None):
+        v = real(model, examples, mask=mask, batch=batch, thresholds=thresholds)
+        ap, f1 = scores[min(calls["n"], len(scores) - 1)]
+        calls["n"] += 1
+        v["concept_ap_macro"], v["judgement_f1_macro"] = ap, f1
+        return v
+    monkeypatch.setattr(N, "evaluate", fake)
+    return calls
+
+
+def test_training_stops_early_after_patience_validations_without_a_new_best(tmp_path, monkeypatch):
+    _patched_evaluate(monkeypatch, [(0.5, 0.5)] + [(0.1, 0.1)] * 50)              # the first validation is the best; nothing beats it
+    logs = []
+    res = N.train(labelled_pool(), tmp_path, backend="bow", epochs=6, batch=32, dim=16, val_every=4, patience=2, ckpt_every=10 ** 9, log=logs.append)
+    assert res["early_stopped"] and res["metrics"]["early_stopped"] and any("early stopping" in l for l in logs)
+    assert res["step"] < res["metrics"]["total_steps"] and res["metrics"]["selected"].startswith("best") and res["metrics"]["best_step"] == 4
+
+
+def test_patience_zero_never_stops_early(tmp_path, monkeypatch):
+    _patched_evaluate(monkeypatch, [(0.5, 0.5)] + [(0.1, 0.1)] * 50)
+    res = N.train(labelled_pool(), tmp_path, backend="bow", epochs=2, batch=32, dim=16, val_every=4, patience=0, ckpt_every=10 ** 9, log=lambda *_: None)
+    assert not res["early_stopped"] and res["step"] == res["metrics"]["total_steps"]
+
+
+def test_the_best_concept_model_is_kept_separately_when_it_differs_from_the_best_overall(tmp_path, monkeypatch):
+    # concept AP keeps rising while the glyph F1 falls: the composite score peaks first, the concept average precision last
+    _patched_evaluate(monkeypatch, [(0.02 * n, 0.9 - 0.03 * n) for n in range(1, 30)])          # composite falls by 0.01 per validation
+    res = N.train(labelled_pool(), tmp_path, backend="bow", epochs=2, batch=32, dim=16, val_every=4, patience=0, ckpt_every=10 ** 9, log=lambda *_: None)
+    m = res["metrics"]
+    assert m["best_step"] < m["best_concept_step"] and "concepts_model" in m and m["concepts_model"]["step"] == m["best_concept_step"]
+    assert (tmp_path / "model_concepts.pt").exists() and (tmp_path / "thresholds_concepts.json").exists()
+    assert not (tmp_path / "best.pt").exists() and not (tmp_path / "best_concepts.pt").exists()
+    model, cfg = N.load(tmp_path, device="cpu", variant="concepts")
+    assert len(cfg["thresholds"]) == len(N.CONCEPTS) and len(N.predict(model, ["a quiet move"], cfg)) == 1
+    _, cfg2 = N.load(tmp_path, device="cpu")
+    assert len(cfg2["thresholds"]) == len(N.CONCEPTS) and (tmp_path / "thresholds.json").exists()          # the composite model has its own thresholds file
+
+
+def test_no_separate_concept_model_when_the_best_overall_is_also_the_best_on_concepts(tmp_path, monkeypatch):
+    _patched_evaluate(monkeypatch, [(0.9, 0.9)] + [(0.1, 0.1)] * 50)
+    N.train(labelled_pool(), tmp_path, backend="bow", epochs=2, batch=32, dim=16, val_every=4, patience=0, ckpt_every=10 ** 9, log=lambda *_: None)
+    assert not (tmp_path / "model_concepts.pt").exists()
+    model, cfg = N.load(tmp_path, device="cpu", variant="concepts")                       # falls back to the one model
+    assert len(N.predict(model, ["a quiet move"], cfg)) == 1
+
+
+def test_defaults_repeat_fewer_labelled_examples_and_use_more_dropout(tmp_path):
+    assert N.Tagger(N.BowEncoder(8), dropout=0.5).drop.p == 0.5
+    res = N.train(labelled_pool(), tmp_path, backend="bow", epochs=1, batch=32, dim=16, val_every=0, ckpt_every=10 ** 9, log=lambda *_: None)
+    cfg = res["metrics"]["config"]
+    assert cfg["dropout"] == 0.2 and cfg["lab_per_batch"] == 4

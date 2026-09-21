@@ -195,11 +195,11 @@ class TransformerEncoder(nn.Module):
 
 
 class Tagger(nn.Module):
-    def __init__(self, encoder):
+    def __init__(self, encoder, dropout=0.1):
         super().__init__()
         self.enc = encoder
         d = encoder.dim
-        self.drop = nn.Dropout(0.1)
+        self.drop = nn.Dropout(dropout)
         self.concepts = nn.Linear(d, len(CONCEPTS))
         self.judgement = nn.Linear(d, len(JUDGEMENT))
         self.evaluation = nn.Linear(d, len(EVAL_CLASSES))
@@ -337,7 +337,7 @@ def _fmt_val(v):
 
 
 def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", epochs=3, batch=64, lr=None, seed=0, mask=True,
-          dim=256, max_len=128, buckets=None, ckpt_every=500, val_every=1000, warmup=0.06, clip=1.0, lab_per_batch=8, keep_best=True, dry_run=False,
+          dim=256, max_len=128, buckets=None, ckpt_every=500, val_every=1000, warmup=0.06, clip=1.0, lab_per_batch=4, dropout=0.2, patience=4, keep_best=True, dry_run=False,
           deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
     """Train (or resume) the tagger on `examples` (from `build_examples`). Returns {"metrics", "stopped", "step"}.
 
@@ -349,7 +349,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     t0 = time.time()
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    ckpt, best_path = out / "ckpt.pt", out / "best.pt"
+    ckpt, best_path, best_ap_path = out / "ckpt.pt", out / "best.pt", out / "best_concepts.pt"
     device = device or _device()
     lr = lr or (5e-4 if backend == "bow" else 3e-5)
     parts = {k: [e for e in examples if split_of(e["group"]) == k] for k in ("train", "val", "test")}
@@ -364,9 +364,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     k_lab = min(lab_per_batch, batch // 4) if lab_pool else 0
     regular = batch - k_lab
     cfg = {"backend": backend, "model_name": model_name, "epochs": epochs, "batch": batch, "lr": lr, "seed": seed, "mask": mask, "dim": dim,
-           "max_len": max_len, "buckets": buckets or BOW_BUCKETS, "n_train": len(train_ex), "warmup": warmup, "clip": clip, "lab_per_batch": k_lab}
+           "max_len": max_len, "buckets": buckets or BOW_BUCKETS, "n_train": len(train_ex), "warmup": warmup, "clip": clip, "lab_per_batch": k_lab, "dropout": dropout}
     torch.manual_seed(seed)
-    model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len, cfg["buckets"])).to(device)
+    model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len, cfg["buckets"]), dropout).to(device)
     heads = [p for n, p in model.named_parameters() if not n.startswith("enc.")]
     body = [p for n, p in model.named_parameters() if n.startswith("enc.")]
     # the classification heads start from random weights: they need a much larger step than a pretrained encoder
@@ -374,6 +374,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     base_lrs = [g["lr"] for g in opt.param_groups]
     scaler = torch.amp.GradScaler("cuda") if device == "cuda" else None
     step, history, parts_log, ema, skipped, best_score, best_step = 0, [], [], None, 0, float("-inf"), None
+    best_ap, best_ap_step, no_improve, early = float("-inf"), None, 0, False
     if ckpt.exists() and not dry_run:
         st = torch.load(ckpt, weights_only=False, map_location=device)
         if st["cfg"] != cfg:
@@ -382,6 +383,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         opt.load_state_dict(st["opt"])
         step, history = st["step"], st["history"]
         best_score, best_step = st.get("best_score", float("-inf")), st.get("best_step")
+        best_ap, best_ap_step, no_improve = st.get("best_ap", float("-inf")), st.get("best_ap_step"), st.get("no_improve", 0)
         log(f"resuming from step {step}")
     val_small = val_sample(parts["val"], 2000)
     per_epoch = (len(train_ex) + regular - 1) // regular
@@ -395,18 +397,28 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         if not dry_run:
             tmp = ckpt.with_suffix(".tmp")
             torch.save({"model": model.state_dict(), "opt": opt.state_dict(), "step": step, "cfg": cfg, "history": history,
-                        "best_score": best_score, "best_step": best_step}, tmp)
+                        "best_score": best_score, "best_step": best_step, "best_ap": best_ap, "best_ap_step": best_ap_step, "no_improve": no_improve}, tmp)
             tmp.replace(ckpt)
 
     def validate(label):
-        nonlocal best_score, best_step
+        """Validate, keep the best model by the composite score and, separately, the best by concept average precision; count validations
+        without progress on either (early stopping)."""
+        nonlocal best_score, best_step, best_ap, best_ap_step, no_improve, early
         v = evaluate(model, val_small, mask=mask, batch=batch)
-        sc = _score(v)
+        sc, ap = _score(v), v.get("concept_ap_macro")
         log(f"  {label} validation: {_fmt_val(v)}; selection score {sc:.3f}")
+        improved = False
         if keep_best and sc > best_score:
-            best_score, best_step = sc, step
+            best_score, best_step, improved = sc, step, True
             torch.save(model.state_dict(), best_path)
             log(f"  new best model at step {step}")
+        if keep_best and ap is not None and ap == ap and ap > best_ap:
+            best_ap, best_ap_step, improved = ap, step, True
+            torch.save(model.state_dict(), best_ap_path)
+            log(f"  new best concept model at step {step} (average precision {ap:.3f})")
+        no_improve = 0 if improved else no_improve + 1
+        if patience and no_improve >= patience:
+            early = True
         return v
 
     try:
@@ -472,6 +484,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
                 v = validate(f"epoch {step // per_epoch}")
                 if v.get("concept_ap_macro", 1) < 1.5 * v.get("concept_ap_baseline", 0):
                     log("WARNING: concept average precision is not clearly above a random ranking yet")
+            if early:
+                log(f"early stopping: no new best model for {patience} validations (best composite at step {best_step}, best concepts at step {best_ap_step})")
+                break
     except Stopped as e:
         stopped = True
         log(f"stopped: {e}")
@@ -482,7 +497,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         selected = f"best (step {best_step}, score {best_score:.3f}) instead of the last (step {step})"
         log(f"using the best validated model: {selected}")
     metrics = {"steps": step, "total_steps": total, "stopped": stopped, "device": device, "minutes": round((time.time() - t0) / 60, 2),
-               "config": cfg, "selected": selected, "best_step": best_step, "skipped_steps": skipped,
+               "config": cfg, "selected": selected, "best_step": best_step, "best_concept_step": best_ap_step, "early_stopped": early, "skipped_steps": skipped,
                "sources": {k: sum(1 for e in examples if e["source"] == k) for k in sorted({e["source"] for e in examples})}}
     if dry_run and len(history) >= 10:
         first, last = float(np.mean(history[:5])), float(np.mean(history[-5:]))
@@ -499,24 +514,35 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
         (out / "thresholds.json").write_text(json.dumps([float(t) for t in thresholds]))
     if not dry_run:
         torch.save(model.state_dict(), out / "model.pt")                    # the model that was evaluated (best or last); `load` uses this one
-        if best_path.exists():
-            best_path.unlink()
+        if keep_best and best_ap_step is not None and best_ap_step != best_step and best_ap_path.exists() and parts["val"]:
+            model.load_state_dict(torch.load(best_ap_path, map_location=device))       # the best concept model, when it is a different one
+            cth = tune_thresholds(np.array([e["concepts"] for e in parts["val"]]),
+                                  predict_batches(model, [mask_keywords(e["text"]) if mask else e["text"] for e in parts["val"]], batch)[0])
+            metrics["concepts_model"] = {"step": best_ap_step, "test": evaluate(model, parts["test"], mask=mask, batch=batch, thresholds=cth)}
+            torch.save(model.state_dict(), out / "model_concepts.pt")
+            (out / "thresholds_concepts.json").write_text(json.dumps([float(t) for t in cth]))
+            model.load_state_dict(torch.load(out / "model.pt", map_location=device))
+            log(f"best concept model (step {best_ap_step}): test concept AP {metrics['concepts_model']['test'].get('concept_ap_macro', float('nan')):.3f} "
+                f"vs {metrics['test'].get('concept_ap_macro', float('nan')):.3f} for the selected model")
+        for pth in (best_path, best_ap_path):
+            if pth.exists():
+                pth.unlink()
         (out / "metrics.json").write_text(json.dumps(metrics, indent=1))
         (out / "config.json").write_text(json.dumps(cfg))
-    return {"metrics": metrics, "stopped": stopped, "step": step, "model": model}
+    return {"metrics": metrics, "stopped": stopped, "early_stopped": early, "step": step, "model": model}
 
 
-def load(out_dir, device=None):
+def load(out_dir, device=None, variant="composite"):
     """A trained `Tagger` (bow backend, or transformer whose weights are in the checkpoint) ready for `predict`."""
     out = Path(out_dir)
     cfg = json.loads((out / "config.json").read_text())
     device = device or _device()
-    model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"], cfg.get("buckets"))).to(device)
-    final = out / "model.pt"                                                  # the evaluated (best or last) weights; older runs only have ckpt.pt
+    model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"], cfg.get("buckets")), cfg.get("dropout", 0.1)).to(device)
+    final = out / "model_concepts.pt" if variant == "concepts" and (out / "model_concepts.pt").exists() else out / "model.pt"                                                  # the evaluated (best or last) weights; older runs only have ckpt.pt
     model.load_state_dict(torch.load(final, map_location=device, weights_only=False) if final.exists()
                           else torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])
     model.eval()
-    th = out / "thresholds.json"
+    th = out / ("thresholds_concepts.json" if final.name == "model_concepts.pt" else "thresholds.json")
     cfg["thresholds"] = json.loads(th.read_text()) if th.exists() else None
     return model, cfg
 

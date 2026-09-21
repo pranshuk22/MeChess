@@ -807,7 +807,8 @@ def cmd_books_nlp_train(args):
     with ctl.signals():
         res = NLP.train(ex, Path(args.out) if args.out else data / "nlp", backend=args.backend, model_name=args.model, epochs=args.epochs,
                         batch=args.batch, lr=args.lr, dry_run=args.dry_run, deadline_minutes=args.deadline_minutes,
-                        ckpt_every=args.ckpt_every, val_every=args.val_every, ctl=ctl, log=log)
+                        ckpt_every=args.ckpt_every, val_every=args.val_every, patience=args.patience, dropout=args.dropout,
+                        lab_per_batch=args.lab_per_batch, ctl=ctl, log=log)
     t = res["metrics"].get("test", {})
     if args.dry_run:
         d = res["metrics"].get("dry_run", {})
@@ -826,7 +827,10 @@ def cmd_books_nlp_report(args):
     m = json.loads((Path(args.model_dir) / "metrics.json").read_text())
     t = m["test"]
     print(f"steps {m['steps']}/{m['total_steps']}  stopped early: {m['stopped']}  device {m['device']}  {m['minutes']} min")
-    print(f"model kept: {m.get('selected', 'last')};  steps skipped for a non-finite gradient: {m.get('skipped_steps', 0)}")
+    print(f"model kept: {m.get('selected', 'last')};  early stopped: {m.get('early_stopped', False)};  steps skipped for a non-finite gradient: {m.get('skipped_steps', 0)}")
+    if "concepts_model" in m:
+        print(f"best concept-only model (step {m['concepts_model']['step']}): concept AP {m['concepts_model']['test'].get('concept_ap_macro', float('nan')):.3f} "
+              f"(the kept model: {t.get('concept_ap_macro', float('nan')):.3f}); use `books-nlp-predict --variant concepts`")
     print("examples per source: " + ", ".join(f"{k} {v:,}" for k, v in sorted(m.get("sources", {}).items())))
     for k in ("concept_ap_macro", "concept_ap_baseline", "concept_f1_micro_tuned", "concept_f1_micro_prior", "judgement_f1_macro", "judgement_acc",
               "judgement_acc_majority", "eval_acc", "eval_acc_majority"):
@@ -837,7 +841,7 @@ def cmd_books_nlp_report(args):
 
 def cmd_books_nlp_predict(args):
     from .books import nlp as NLP
-    model, cfg = NLP.load(args.model_dir)
+    model, cfg = NLP.load(args.model_dir, variant=args.variant)
     for text, r in zip(args.texts, NLP.predict(model, args.texts, cfg)):
         print(f"{text[:80]!r}\n   concepts {r['concepts']}  judgement {r['judgement']}  evaluation {r['evaluation']}")
 
@@ -1437,6 +1441,9 @@ def main():
     nt.add_argument("--allow-missing-sources", action="store_true", help="train even if some expected source has no examples")
     nt.add_argument("--input-root", help="Kaggle: link the data and restore an earlier checkpoint from the inputs under this folder (e.g. /kaggle/input)")
     nt.add_argument("--slim", action="store_true", help="after training, remove the linked data and the dry-run folder")
+    nt.add_argument("--patience", type=int, default=4, help="stop after this many validations without a new best model (0: never)")
+    nt.add_argument("--dropout", type=float, default=0.2, help="dropout before the heads")
+    nt.add_argument("--lab-per-batch", type=int, default=4, help="glyph-labelled examples in every batch (fewer: less memorising of the rare labelled examples)")
     nt.add_argument("--val-every", type=int, default=1000, help="log a validation check (concept AP, judgement / evaluation accuracy vs the majority guess) every N steps")
     nt.add_argument("--ckpt-every", type=int, default=500); nt.add_argument("--job", default="nlp"); nt.add_argument("--control-dir", default="data/control")
     nt.add_argument("--log", default="data/books_learn/nlp.log")
@@ -1445,6 +1452,7 @@ def main():
     nr.add_argument("model_dir"); nr.set_defaults(func=cmd_books_nlp_report)
     npd = sub.add_parser("books-nlp-predict", help="read comments with a trained chess-text model")
     npd.add_argument("model_dir"); npd.add_argument("texts", nargs="+")
+    npd.add_argument("--variant", choices=["composite", "concepts"], default="composite", help="the model selected on all three heads, or the best on concepts alone")
     npd.set_defaults(func=cmd_books_nlp_predict)
     pf = sub.add_parser("books-preflight", help="check dependencies, disk, network and GPU before a long run (exit code 1 on failure)")
     pf.add_argument("--out", default="data/books_learn"); pf.add_argument("--need-gpu", action="store_true"); pf.add_argument("--backend", choices=["bow", "transformer"], default="bow")
