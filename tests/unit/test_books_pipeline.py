@@ -143,11 +143,11 @@ def test_learn_prose_step_writes_stackexchange_and_wikipedia_and_reports_them(tm
 def test_preflight_reports_each_check_and_fails_when_a_source_is_down(tmp_path):
     from chessme.books import preflight as PF
     lines = []
-    ok = PF.run(tmp_path, network=True, head=lambda u: (True, "HTTP 200"), log=lines.append)
+    ok = PF.run(tmp_path, network=True, min_free_gb=0, head=lambda u: (True, "HTTP 200"), log=lines.append)
     assert ok and any("free disk" in l for l in lines) and any("network: gutenberg" in l for l in lines) and lines[-1].startswith("preflight: all")
     lines = []
-    ok = PF.run(tmp_path, network=True, head=lambda u: (("archive.org" not in u), "HTTP 500"), log=lines.append)
+    ok = PF.run(tmp_path, network=True, min_free_gb=0, head=lambda u: (("archive.org" not in u), "HTTP 500"), log=lines.append)
     assert not ok and any(l.strip().startswith("FAIL") and "internet archive" in l for l in lines)
     assert lines[-1].startswith("preflight FAILED") and "internet archive" in lines[-1]
     import torch
-    assert PF.run(tmp_path, need_gpu=True, network=False, log=lambda *_: None) == torch.cuda.is_available()   # requiring a GPU passes only where there is one
+    assert PF.run(tmp_path, need_gpu=True, network=False, min_free_gb=0, log=lambda *_: None) == torch.cuda.is_available()   # requiring a GPU passes only where there is one

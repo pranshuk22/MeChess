@@ -33,6 +33,7 @@ CONCEPTS = list(T.LEXICON)
 JUDGEMENT = ["!!", "!", "!?", "?!", "?", "??"]
 EVAL_CLASSES = ["equal", "white slightly better", "white clearly better", "white winning", "black slightly better", "black clearly better", "black winning"]
 MASK = "unk"
+BOW_BUCKETS = 1 << 18                # hash buckets of the bag-of-words encoder (tests use a tiny table: the default one makes multi-hundred-MB checkpoints)
 # everything a full training run is expected to contain; a missing source means an incomplete data notebook, found before any GPU time is spent
 REQUIRED_SOURCES = ("gameknot", "pgnlib", "pathtochessmastery", "lichess_studies", "chess_studies_lichess", "chess_studies_others", "chessgpt_annotated",
                     "stackexchange", "wikipedia", "books")
@@ -159,8 +160,9 @@ def tokens(text):
 
 
 class BowEncoder(nn.Module):
-    def __init__(self, dim=256, buckets=1 << 18):
+    def __init__(self, dim=256, buckets=None):
         super().__init__()
+        buckets = buckets or BOW_BUCKETS
         self.buckets, self.dim = buckets, dim
         self.emb = nn.EmbeddingBag(buckets, dim, mode="mean")
         self.norm = nn.LayerNorm(dim)
@@ -207,9 +209,9 @@ class Tagger(nn.Module):
         return self.concepts(h), self.judgement(h), self.evaluation(h)
 
 
-def make_encoder(backend, model_name="distilroberta-base", dim=256, max_len=128):
+def make_encoder(backend, model_name="distilroberta-base", dim=256, max_len=128, buckets=None):
     if backend == "bow":
-        return BowEncoder(dim)
+        return BowEncoder(dim, buckets)
     if backend == "transformer":
         return TransformerEncoder(model_name, max_len)
     raise ValueError(f"unknown backend {backend!r}")
@@ -335,7 +337,7 @@ def _fmt_val(v):
 
 
 def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", epochs=3, batch=64, lr=None, seed=0, mask=True,
-          dim=256, max_len=128, ckpt_every=500, val_every=1000, warmup=0.06, clip=1.0, lab_per_batch=8, keep_best=True, dry_run=False,
+          dim=256, max_len=128, buckets=None, ckpt_every=500, val_every=1000, warmup=0.06, clip=1.0, lab_per_batch=8, keep_best=True, dry_run=False,
           deadline_minutes=None, device=None, ctl=None, log=print, encoder=None):
     """Train (or resume) the tagger on `examples` (from `build_examples`). Returns {"metrics", "stopped", "step"}.
 
@@ -362,9 +364,9 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     k_lab = min(lab_per_batch, batch // 4) if lab_pool else 0
     regular = batch - k_lab
     cfg = {"backend": backend, "model_name": model_name, "epochs": epochs, "batch": batch, "lr": lr, "seed": seed, "mask": mask, "dim": dim,
-           "max_len": max_len, "n_train": len(train_ex), "warmup": warmup, "clip": clip, "lab_per_batch": k_lab}
+           "max_len": max_len, "buckets": buckets or BOW_BUCKETS, "n_train": len(train_ex), "warmup": warmup, "clip": clip, "lab_per_batch": k_lab}
     torch.manual_seed(seed)
-    model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len)).to(device)
+    model = Tagger(encoder or make_encoder(backend, model_name, dim, max_len, cfg["buckets"])).to(device)
     heads = [p for n, p in model.named_parameters() if not n.startswith("enc.")]
     body = [p for n, p in model.named_parameters() if n.startswith("enc.")]
     # the classification heads start from random weights: they need a much larger step than a pretrained encoder
@@ -509,7 +511,7 @@ def load(out_dir, device=None):
     out = Path(out_dir)
     cfg = json.loads((out / "config.json").read_text())
     device = device or _device()
-    model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"])).to(device)
+    model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"], cfg.get("buckets"))).to(device)
     final = out / "model.pt"                                                  # the evaluated (best or last) weights; older runs only have ckpt.pt
     model.load_state_dict(torch.load(final, map_location=device, weights_only=False) if final.exists()
                           else torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])

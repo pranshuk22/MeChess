@@ -19,5 +19,7 @@ packages = ["chessme", "chessme.ingest", "chessme.dataset", "chessme.book", "che
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+tmp_path_retention_policy = "failed"      # keep the temp folders of failed tests only: passing tests' checkpoints must not pile up on the disk
+tmp_path_retention_count = 1
 markers = ["integration: drives the compiled engine binary (built on demand with make)",
            "slow: takes more than ~5 seconds; skipped by `make test`, run by `make test-all`"]

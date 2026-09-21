@@ -7,6 +7,12 @@ import torch
 
 from chessme.books import nlp as N
 
+
+@pytest.fixture(autouse=True)
+def tiny_embedding_table(monkeypatch):
+    """The default table (262,144 buckets) makes each test write a multi-hundred-MB checkpoint: 30 tests filled a laptop disk."""
+    monkeypatch.setattr(N, "BOW_BUCKETS", 1 << 12)
+
 CONTEXT = {  # a concept implied by its context, with the keyword itself absent or masked
     "outpost": "the knight sits on d5 where no enemy pawn can ever attack it and so it stays there for good",
     "zugzwang": "every move he makes now only worsens his position and he would gladly pass if the rules allowed it",
