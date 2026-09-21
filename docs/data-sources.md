@@ -21,6 +21,20 @@ Everything downloaded or derived is under `data/` (git-ignored):
   (position, played move, rating, game number) are kept, **not** their raw games; the list of candidate usernames
   (`candidates.json`) stays on your disk and must not be published.
 
+## Text, annotated games and opening data
+
+| Source | Terms | Used for |
+|---|---|---|
+| Lichess database (`database.lichess.org`) | CC0 | the opening explorer and theory books (streamed, never stored whole) |
+| Lichess chess-openings | CC0 | opening names |
+| Public-domain books (Project Gutenberg, Internet Archive) | public domain (check per country) | game lines and concept counts |
+| Annotated games (GameKnot, PGN Library, Path to Chess Mastery, Lichess studies, `chess_studies`) | each source's own terms | comments and glyphs for the language model; research and learning use, not redistribution |
+| Chess Stack Exchange, chess Wikipedia articles | CC BY-SA | explanations in prose for concept tagging; not redistributed |
+
+What is stored from them: text, positions, glyphs, ratings, opening codes, results and **public game ids**. **Player names, usernames and
+annotator names are never stored** (the code drops them on purpose, and tests check it). The explorer keeps counts, not games. Outputs stay local
+(`data/` is git-ignored). Full list with verification notes: [training-resources.md](training-resources.md).
+
 ## Privacy rules the code follows
 
 - Your account names live only in your profile file, which is git-ignored (`configs/profiles/*` except the example).

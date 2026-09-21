@@ -1,0 +1,85 @@
+# Books, annotated games and the chess-text language model
+
+Chess books and annotated games say *why* moves are good. This part of MeChess collects that text, reads the game lines and glyphs in it, and
+trains a small language model on it. Everything is a `chessme` command (also runnable on Kaggle: see [kaggle.md](kaggle.md)); the code is in
+`chessme/books/`.
+
+## What is collected (`chessme books-learn`)
+
+| Source | What it is | Terms |
+|---|---|---|
+| 103 public-domain books and periodicals | Project Gutenberg and Internet Archive OCR text: instruction, openings, annotated tournament books, chess magazines (`chessme/books/sources.json`, every entry checked to exist) | public domain (check per country; modern books are not used) |
+| Annotated games | GameKnot, PGN Library, Path to Chess Mastery and Lichess studies (from the ChessGPT "free" archive), the larger ChessGPT annotated-PGN shards, the CC0 `chess_studies` dataset | each source keeps its own terms: research and learning use, do not redistribute |
+| Explanations in prose | the chess Stack Exchange (questions and answers) and chess Wikipedia articles (ChessGPT data) | CC BY-SA |
+| Opening names | Lichess chess-openings | CC0 |
+
+Steps (each skips finished work): `books` (download and read), `pairs` (game lines with the concepts mentioned near them), `annotated`, `prose`,
+`report`. The result is `annotated/annotated_moves.jsonl.gz` (one record per annotated move: the position before it, the move, all glyphs, the
+comment, the concepts it mentions, a game id, average rating, opening code and result; **never player or annotator names**), `prose/`, `books/`
+and a `report.md`.
+
+## Reading chess text
+
+- **Notation**: algebraic; descriptive (`P-K4`, `Kt-KB3`, with the spacing and abbreviation variants of Gutenberg and OCR text); the older verbose
+  style (`P. to K.'s 4th`); figurines (`♘f3`). Every candidate move is **checked for legality**, and a line ends at the first token that is not
+  a legal, unambiguous move, so OCR junk simply fails to parse. Only lines from the initial position are read (other examples start from a
+  diagram, which needs diagram recognition first).
+- **Glyphs** (`glyphs.py`): every NAG number with its symbol, meaning and kind (move judgement `! ? !! ?? !? ?! □`, position evaluation
+  `= ∞ ⩲ ⩱ ± ∓ +− −+`, zugzwang, counterplay, time pressure, novelty), the same symbols written inside comments (`Nf3!`, `±`), and marks after
+  book moves.
+- **Concepts**: a lexicon of 32 strategic concepts (outpost, prophylaxis, zugzwang, minority attack, ...) counted in prose and comments.
+
+Measured on the first 12 public-domain books, the reader extracts game lines from 9 of them (about 650 lines in all); the other three (Steinitz,
+Znosko-Borovsky, *Chess and Checkers*) use layouts it does not read yet, and most examples in books start from diagrams. Treat the extracted lines as a small, precise sample, not a corpus of all book moves.
+
+## The model (`chessme books-nlp-train`)
+
+One shared text encoder, three heads, trained together on comments and prose (`chessme/books/nlp.py`):
+
+| Head | Predicts | Labels come from |
+|---|---|---|
+| Concepts | which of the 32 concepts a text discusses (multi-label) | the lexicon, but **the keywords are masked in the input**, so the model must infer the concept from context |
+| Judgement | the annotator's verdict on the move: `!! ! !? ?! ? ??` | the glyph on that move (about 3-10% of annotated moves) |
+| Evaluation | who stands better and by how much (7 classes) | the evaluation glyph on that move |
+
+**Input** is one comment or paragraph (25-1,200 characters, English) and **only the text**: the model does not see the board or the move.
+
+**Encoders**: `bow` (hashed word and bigram embeddings, small, runs anywhere) and `transformer` (any Hugging Face encoder; default
+`distilroberta-base`, mean-pooled, 128 tokens; GPU for real use). Examples are split by game or document, so no game is on both sides.
+
+**Steady training** (each measure was added after watching a real run):
+- the learning rate warms up over the first 6% of the steps and decays linearly; gradients are clipped, and a non-finite gradient never reaches the
+  weights; the heads train at a higher rate (1e-3) than the pretrained encoder (3e-5);
+- every batch contains a fixed number of glyph-labelled examples (default 4), because the glyph heads otherwise see about two labelled examples
+  per batch and the loss swings; dropout 0.2 before the heads;
+- a validation check every 1,000 steps (concept average precision against a random ranking, judgement and evaluation accuracy against the
+  majority guess) and per epoch; the model kept is the **best validated** one (a composite of the three heads), and the best model on concepts
+  alone is kept separately when it is a different step (`--variant concepts`);
+- **early stopping** (`--patience`, default 4 validations without a new best) and a wall-clock budget (`--deadline-minutes`) that saves a checkpoint
+  and ends normally; training resumes from the checkpoint;
+- a **dry-run** (`--dry-run`) that runs the whole path in about a minute and fails unless the loss falls on 64 memorisable examples.
+
+## Results so far
+
+Two Kaggle runs of the transformer model on the full collected data (about 630,000 examples):
+
+| Run | Concept AP (random 0.008-0.010) | Judgement accuracy (majority 0.33) | Evaluation accuracy (majority 0.25) |
+|---|---|---|---|
+| First (constant learning rate), end of epoch 3 | 0.212 | not measured in the log | not measured in the log |
+| Steady version, validation at step 17,000 of 27,141 | 0.431 | 0.724 | 0.460 |
+
+The glyph heads overfit: their training loss falls to almost zero while validation accuracy plateaus, so the number to trust is the held-out
+**test** metric in the run's `metrics.json` (`books-nlp-report` prints it). At the time of writing that final number has not been recorded here, and
+the early-stopping and fewer-repeated-examples changes above have not been run on a GPU yet.
+
+## What it is for, and not for
+
+The model reads text. It helps to (1) tag large amounts of prose with concepts, (2) pick and rank explanations to quote in game reports, and (3)
+provide human move judgements as labels. It does **not** judge a move by itself (it never sees the position), does not make the engine stronger, and
+its concept labels can only be as good as the 32-concept lexicon. The position-to-concept model that would use these labels is planned, not built.
+
+## Other commands
+
+`books-fetch` (books only), `books-studies` (export public Lichess studies by author or id; one request at a time), `books-pdf` (PDFs you own,
+text layer only), `books-topics` (cluster paragraphs into topics; needs `sentence-transformers`), `books-nlp-predict`, `books-nlp-report`,
+`books-preflight` (dependencies, disk, every download URL, GPU: run it before anything long).

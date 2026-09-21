@@ -66,3 +66,24 @@ Heavy analysis on battery drains it quickly.
 - Several Stockfish workers with `Hash 64` use about 250 MB each; four workers plus the parent stay near 1.2 GB.
 - On a memory-tight machine run **one heavy job at a time**, or accept slower progress from contention.
 - Training: use CPU (`OMP_NUM_THREADS=4`) if the accelerator's memory is shared with the rest of the system.
+
+## Disk space
+
+- **Check `df -h` before long runs and after heavy test sessions.** A full disk shows up as odd failures (setup errors, files created empty, a
+  model saving nothing), not as one clear message. The usual culprits: pytest temp folders (see [testing.md](testing.md)), model checkpoints
+  (a training checkpoint holds the weights and two optimiser states, about three times the model), the Hugging Face cache, and scratch copies of
+  datasets in `/tmp`.
+- SQLite creates an **empty database file** if you point it at a path that does not exist; a query on a wrong path then fails with "no such table".
+
+## Stopping and cleaning up
+
+- `chessme control pause|resume|stop|clear|status [job]` works from any terminal; jobs check between units of work. Ctrl-C and SIGTERM also stop a
+  job cleanly at its next checkpoint.
+- After a crash or a killed session, look for stale processes (`pgrep -fl pytest`, `pgrep -fl stockfish`) before starting the next job: they hold
+  memory and CPU, and timing-sensitive jobs (strength measurement, calibration) should not share the machine with anything heavy.
+- In `zsh` a glob that matches nothing aborts the whole command line (`rm -rf /tmp/x*` with no match deletes nothing else either); use `bash -c`
+  for cleanup scripts.
+
+## On Kaggle
+
+See [kaggle.md](kaggle.md): time budgets, checkpoints and resuming, and how to fetch the output.

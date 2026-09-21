@@ -108,3 +108,29 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `MeNetFile`, `MeRating`, `MeOppRating`, `MePlatform` | | use an exported "me" network as the move prior (C++ inference) |
 
 Search limits: `go nodes N`, `go depth D`, `go movetime MS`, plus the usual clock arguments.
+
+
+## Language model, books and annotated games
+
+See [language-model.md](language-model.md). Every step is resumable and can be paused or stopped with `chessme control`.
+
+| Command | What it does |
+|---|---|
+| `books-preflight` | Check dependencies, disk, every download URL and the GPU before a long run (exit code 1 on failure); `--need-gpu`, `--backend transformer --model NAME` |
+| `books-learn` | Everything in one command: the public-domain books, concept-line pairs, the annotated-game sources, Stack Exchange and Wikipedia prose, a report (`--steps`, `--limit-per-source` for a trial, `--slim` to drop the raw downloads) |
+| `books-fetch` | Only the books: download the texts listed in `chessme/books/sources.json` and extract game lines and concept counts |
+| `books-studies` | Export public Lichess studies by author or study id (one request at a time, waits a minute after HTTP 429) |
+| `books-pdf` | Read PDFs you own (text layer) with the book reader; a scan is reported as needing OCR |
+| `books-topics` | Cluster the paragraphs of the books into topics (needs `sentence-transformers`) |
+| `books-nlp-train` | Train the chess-text language model (concepts, move judgement, evaluation): `--backend bow|transformer`, `--dry-run`, `--deadline-minutes`, `--patience`, `--lab-per-batch`, `--dropout`, `--data-dir` / `--input-root` (Kaggle) |
+| `books-nlp-report` | Print the held-out metrics of a trained model, which model was kept and whether it stopped early |
+| `books-nlp-predict` | Read comments with a trained model (`--variant concepts` for the best concept-only model) |
+
+## Move-quality features and jobs
+
+| Command | What it does |
+|---|---|
+| `style-games-quality` | Engine move-quality features (accuracy by phase, class rates, opportunism, luck, conversion, resourcefulness) for a sample of the cohort; resumable, pausable |
+| `style-quality-report` | Reliability and quality gate of those features |
+| `dial-design` | Design the weak end of the dial: a table of settings and a calibration skeleton to link (see [calibration.md](calibration.md)) |
+| `control pause|resume|stop|clear|status [job]` | Pause, resume or stop long jobs; they check a control folder between units of work ([operations.md](operations.md)) |

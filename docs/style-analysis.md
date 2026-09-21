@@ -76,6 +76,31 @@ Ideas that could raise the signal: many more decisions per player, features that
 clock-based features (time use is likely a strong personal trait), and game-level statistics (opening choice, castling ply,
 length of games) in addition to move-level choices.
 
+## Game-level features and the player embedding (second design)
+
+The move-choice features above turned out to be barely reliable, so a second set describes *games* instead of single decisions (`chessme/style/`
+`gamefeatures.py`, `gamestats.py`, `embed.py`, `quality.py`): 26 opening features (first moves, early development, castling), 14 game-shape
+features (length, captures, endgame, how it ended), 14 clock features (think times, instant moves, time trouble) and 5 repertoire statistics.
+They are computed from the game text alone, for the cohort's games refetched with clocks and openings (`style-games-fetch`).
+
+Measured on 999 players with 50 games each (each player's games split into alternating halves, so a feature is reliable when a player's two
+halves agree):
+
+- **Reliable**: 56 of 59 features pass the pre-fixed keep rule (enough coverage, full-data reliability at least 0.5, and either weakly related to
+  rating or still reliable after removing it).
+- **Identification** (is a player's half A closest to their own half B among 999 players; chance 0.1%): all features 64% top-1 and 85% top-5; the
+  kept features 68% / 87%; openings alone 38%; clock features alone 21% (the time control alone identifies 10%, which is a confound: players stay
+  on one time control in 94% of their games); game shape alone 2-3%.
+- **A learned embedding** (a set encoder trained contrastively on a player's games, evaluated on 249 held-out players): 85% top-1 and 98% top-5,
+  against 78% / 94% for the raw features; among players within 100 rating points of each other 93% against 88% for the raw features (chance 3%);
+  a linear map from the embedding to rating explains about half of the variance (R squared 0.51), so much of what it encodes is still strength.
+- An artefact was found and removed: the clock reading after the first move depends on the increment, not on the player.
+- **Move-quality features** (accuracy by phase, class rates, opportunism, conversion; [game-analysis.md](game-analysis.md)) are computed for a
+  sample of 400 players; their reliability report has not been recorded here yet.
+
+What this shows: players are reliably *distinguishable* by what they play and how they use the clock. It does not show that any axis means
+"aggressive" or "positional"; naming axes still needs validation against players whose style is known.
+
 ## Research directions (what the literature suggests)
 
 A review of published work on identifying and modelling individual chess players points to the following, which the roadmap adopts. Sources

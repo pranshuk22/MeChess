@@ -50,8 +50,21 @@ diagram need its FEN.
   text (`*_djvu.txt`), which is what we use for public-domain books, so we do not OCR those ourselves.
 - OCR is noisy (`NiS` for `Nf6`), which is why every move is checked for legality and a line ends at the first token that fails.
 
-## The notebook
+## What is integrated (checked 2026-09-21)
 
-[`notebooks/book_reading.ipynb`](../notebooks/book_reading.ipynb) runs the pipeline on Kaggle: clone the repository, download and read
-the books, list what was extracted, pair game lines with nearby concept mentions (weak supervision), and optionally read your own
-PDFs (private notebook only) and cluster paragraphs with a sentence-embedding model. See the notebook's first cell for the steps.
+| Source | Status |
+|---|---|
+| 103 public-domain books and periodicals (`chessme/books/sources.json`) | every entry verified to have OCR text; of the first 12 all were read and 9 gave game lines (three use layouts the reader does not parse yet) |
+| ChessGPT "free" annotated archive: GameKnot (12,769 games), PGN Library, Path to Chess Mastery, Lichess studies | integrated (`books-learn`) |
+| ChessGPT annotated-PGN shards (2 x 87 MB, includes variations) | integrated; overlapping Lichess studies are dropped by study id |
+| `Icannos/chess_studies` (CC0, about 3,000 annotated chapters) | integrated |
+| ChessGPT Stack Exchange (30 MB) and Wikipedia (40 MB) subsets | integrated as prose (CC BY-SA; attribution list kept for Wikipedia) |
+| Lichess chess-openings (3,815 named lines) | integrated (opening names, Book class, theory books) |
+| Lichess database | integrated (the opening explorer) |
+| Chess-diagram recognition (`fenify`, `Chess_diagram_to_FEN`, both MIT) | **not integrated**; lines that start from a diagram are skipped |
+| `ChessInstruct` (instruction-tuning data, no commentary) | deliberately not used |
+
+## The notebooks
+
+See [kaggle.md](kaggle.md) for the three notebooks that run these steps on Kaggle, and [language-model.md](language-model.md) for what is read and
+learned.

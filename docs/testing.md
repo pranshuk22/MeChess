@@ -35,7 +35,28 @@ CHESSME_MAIA2_REPO=/path/to/maia2 CHESSME_MAIA2_CKPT=/path/to/blitz_model.pt \
 CHESSME_EXTRA_PATH=/path/to/extra/site-packages  pytest tests/integration/test_compare_external.py
 ```
 
-No test needs Stockfish, network access, your games or any personal data; a fresh clone passes `make test`.
+No test needs network access, your games or any personal data; a fresh clone passes `make test`. The few tests that drive Stockfish (`analyse`,
+the move-quality features) are skipped when it is not installed.
+
+## Keeping the suite light and honest
+
+- **Training tests use tiny models.** The default bag-of-words table has 262,144 buckets, which made each test write a multi-hundred-MB checkpoint;
+  30 tests once filled a laptop disk. The NLP tests set a 4,096-bucket table, and `pyproject.toml` keeps pytest's temp folders only for failed
+  tests (`tmp_path_retention_policy = "failed"`).
+- **Run one pytest session at a time.** Sessions share a temp base folder and delete each other's directories, which shows up as setup errors.
+- **Find hangs, do not wait for them**: `pytest -v -o faulthandler_timeout=120` prints every thread's stack when a test runs longer than that.
+  This found a worker pool that waited forever for a process that would not die (`jobs.run_pool` now shuts down without blocking, and a test uses a
+  worker that ignores SIGTERM).
+- **Isolation**: `tests/unit/test_cli_isolation.py` blocks each feature module from importing and requires the CLI (and the engine command the
+  bot uses) to still start.
+- **Tests state what they mean**: a test that cannot fail (`or True`) or that ignores a whole class of cases is a bug; the explorer has an
+  independent-tally test that recounts games with separate code and compares.
+
+## Smoke-testing the notebooks
+
+Before spending Kaggle hours: create a fresh virtualenv with only what the notebook installs, clone the *committed* repository, run the notebook's own
+code cells with small limits (a few thousand games, a tiny model) against the real downloads, then run it twice (stopped at its deadline, then
+resumed from its own output). This caught missing dependencies, a wrong file name, a time-budget bug and an unsuitable test model.
 
 ## CI
 

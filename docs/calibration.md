@@ -175,3 +175,16 @@ wall-clock measurements).
 - `chessme/calibrate.py`: plays the matches (`measure`, `calibrate_dial`), builds the MeChess command.
 - `chessme/mechess/calibration.py`: the monotone curve, inversion, save / load.
 - `chessme/mechess/dial.py`: `settings_for(elo, table, calibration)`.
+
+
+## Search depth as a knob (redesign of the weak end)
+
+Measuring the first dial showed that node budgets with MultiPV 5 reach only depth 2 to 3, so at the weak end fewer nodes or a wider window no
+longer weakened the play measurably, and the bot gave games away. The dial table therefore has an eighth column, `depth` (0 = none), sent to the
+engine as `go depth D nodes N` (whichever limit is reached first). A depth-limited search is cheap (MultiPV 5: depth 3 about 38k nodes and 36 ms,
+depth 6 about 219k nodes and 196 ms) and already sees a simple fork at depth 3.
+
+A new table (`data/calibration/table_v3.json`, weak levels depth 2 to 3 with a small random-move rate, mid levels depth 4 to 5, top levels
+node-capped) is defined **but has not been measured yet**: a first 10-game probe put the depth-4 row near 1,620 on the Stockfish scale against
+about 1,240 for the old 1,800 row, which only shows that the knob changes strength a lot. The full calibration (uniform prior first, for the public
+bot; then the personalised prior) is the next measurement.
