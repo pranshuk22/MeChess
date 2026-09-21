@@ -150,7 +150,10 @@ def game_key(game, index):
 
 
 def side_of(game, player):
-    """'white' / 'black' for the named player in a game, else None."""
+    """'white' / 'black' for the named player in a game, else None. A `MeChessSide` header (set when the games were chosen for a personal report) wins."""
+    marked = game.headers.get("MeChessSide", "").lower()
+    if marked in ("white", "black"):
+        return marked
     p = (player or "").lower()
     for color, tag in (("white", "White"), ("black", "Black")):
         if p and game.headers.get(tag, "").lower() == p:

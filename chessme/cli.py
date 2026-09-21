@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from . import audit as audit_mod
@@ -719,6 +720,28 @@ def cmd_style_games_report(args):
         Path(args.out).write_text(text + "\n")
 
 
+def cmd_report_select(args):
+    """Write the newest usable games of a profile (with the player's side) as a PGN for `analyse`."""
+    from .analysis import select as SEL
+    cfg = config.load_profile(args.profile)
+    rows = audit_mod.load(cfg["_raw_dir"].parent / "processed" / "games.jsonl")
+    chosen = SEL.choose(rows, n=args.n, platform=args.platform, per_class=args.per_class, time_classes=args.time_classes, since=args.since)
+    raw = SEL.raw_games(sorted((cfg["_raw_dir"] / args.platform).glob("*/*.pgn")), args.platform)
+    written, missing = SEL.write_pgn(chosen, raw, args.out)
+    by = {}
+    for r in chosen:
+        by[r["time_class"]] = by.get(r["time_class"], 0) + 1
+    print(f"{written} games written to {args.out} ({by}); newest {chosen[0]['played_at'][:10] if chosen else '-'}, oldest {chosen[-1]['played_at'][:10] if chosen else '-'}"
+          + (f"; {len(missing)} not found in the raw files" if missing else ""))
+
+
+def _stoppable(items, ctl):
+    """Yield the items, checking the pause / stop controls before each (raises Stopped)."""
+    for it in items:
+        ctl.checkpoint()
+        yield it
+
+
 def cmd_analyse(args):
     """Analyse the games of a PGN file with Stockfish: one JSON file per game (resumable and pausable), then a Markdown report."""
     import io as _io
@@ -728,7 +751,6 @@ def cmd_analyse(args):
 
     from .analysis import runner as AR
     from .jobs import JobControl, Stopped
-    from .uci_client import UciEngine
     log = _file_logger(args.log)
     out = Path(args.out)
     (out / "games").mkdir(parents=True, exist_ok=True)
@@ -739,41 +761,43 @@ def cmd_analyse(args):
             games.append(g)
     games = games[: args.limit] if args.limit else games
     ctl = JobControl(args.job, args.control_dir, log=log)
-    book = None
-    tsvs = sorted(Path(args.openings_dir).glob("*.tsv")) if args.openings_dir else []
-    if tsvs:
-        from .book import theory as _TH
-        positions = _TH.theory_positions(_TH.load_lines(tsvs))
-        book = lambda board, move: _TH.is_theory(board, move, positions)
-        log(f"Book class from {len(positions)} theory moves in {args.openings_dir}")
+    if sorted(Path(args.openings_dir).glob("*.tsv")) if args.openings_dir else []:
+        log(f"Book class from the opening names in {args.openings_dir}")
     else:
         log(f"no opening names in {args.openings_dir} (run `chessme theory-book --download` once): moves in theory are classed by loss like any other")
-    log(f"=== analyse {args.pgn}: {len(games)} games, {args.nodes} nodes/position, output {out}")
+    log(f"=== analyse {args.pgn}: {len(games)} games, {args.nodes} nodes/position, {args.workers} worker(s), output {out}")
     done = failed = 0
-    with UciEngine([args.engine], options={"Threads": 1, "Hash": 64}) as eng, ctl.signals():
-        search = AR.engine_search(eng, nodes=args.nodes, multipv=2)
-        try:
-            for i, g in enumerate(games):
-                ctl.checkpoint()
-                key = AR.game_key(g, i)
-                path = out / "games" / f"{key}.json"
-                if path.exists():
-                    done += 1
-                    continue
-                try:
-                    res = AR.analyse_game(g, search, book=book)
-                except Exception as e:      # a game the engine cannot finish must not stop the batch
+    todo = []
+    for i, g in enumerate(games):
+        key = AR.game_key(g, i)
+        path = out / "games" / f"{key}.json"
+        if path.exists():
+            done += 1
+        else:
+            exp = _io.StringIO()
+            print(g, file=exp, end="\n\n")
+            todo.append((key, exp.getvalue(), str(path), args.engine, args.nodes, args.openings_dir, args.player))
+    log(f"{done} already done, {len(todo)} to analyse")
+    from .analysis import pool as AP
+    from .jobs import run_pool
+    t0 = time.time()
+    try:
+        with ctl.signals():
+            if args.workers <= 1:
+                results = (AP.analyse_task(t) for t in _stoppable(todo, ctl))
+            else:
+                results = run_pool(AP.analyse_task, todo, args.workers, ctl)
+            for key, plies, err in results:
+                if err:
                     failed += 1
-                    log(f"  {key}: FAILED {e!r}")
+                    log(f"  {key}: FAILED {err}")
                     continue
-                res["player_color"] = AR.side_of(g, args.player)
-                res["headers"] = {k: g.headers.get(k, "") for k in ("White", "Black", "Result", "Date", "Site", "Opening")}
-                path.with_suffix(".tmp").write_text(_json.dumps(res))
-                path.with_suffix(".tmp").replace(path)
                 done += 1
-                log(f"  [{done}/{len(games)}] {key}: {len(res['moves'])} plies")
-        except Stopped as e:
-            log(f"stopped: {e} (rerun the same command to resume)")
+                log(f"  [{done}/{len(games)}] {key}: {plies} plies ({(time.time() - t0) / max(done - (len(games) - len(todo)), 1):.1f} s per game so far)")
+    except Stopped as e:
+        log(f"stopped: {e} (rerun the same command to resume)")
+    finally:
+        AP.close()
     results = [(p.stem, _json.loads(p.read_text())) for p in sorted((out / "games").glob("*.json"))]
     (out / "report.md").write_text(AR.render_report(results, args.player))
     log(f"finished: {done} done, {failed} failed; report {out / 'report.md'}")
@@ -1655,9 +1679,15 @@ def main():
     an.add_argument("pgn"); an.add_argument("--out", default="data/analysis"); an.add_argument("--player", help="report on this player's side (PGN name)")
     an.add_argument("--engine", default="stockfish"); an.add_argument("--nodes", type=int, default=200000, help="nodes per position (fixed, machine independent)")
     an.add_argument("--openings-dir", default="data/opening_names", help="Lichess opening names (from `theory-book --download`): moves in named theory are classed Book")
+    an.add_argument("--workers", type=int, default=1, help="games analysed at the same time (one Stockfish each)")
     an.add_argument("--limit", type=int); an.add_argument("--job", default="analyse"); an.add_argument("--control-dir", default="data/control")
     an.add_argument("--log", default="data/analysis/analyse.log")
     an.set_defaults(func=cmd_analyse)
+    rs = sub.add_parser("report-select", help="choose the newest usable games of your profile for a personal report and write them as a PGN (with your side)")
+    rs.add_argument("--profile", default=DEFAULT_PROFILE); rs.add_argument("--platform", default="lichess"); rs.add_argument("--n", type=int, default=20)
+    rs.add_argument("--per-class", type=int, help="this many newest games of each time class instead of --n overall")
+    rs.add_argument("--time-classes", nargs="+"); rs.add_argument("--since", help="only games from this ISO date on"); rs.add_argument("--out", default="data/analysis/games.pgn")
+    rs.set_defaults(func=cmd_report_select)
     gr = sub.add_parser("style-games-report", help="reliability, quality gate, identification and factors of the game-level features")
     gr.add_argument("--data", default="data/style/cohort2"); gr.add_argument("--min-games", type=int, default=30)
     gr.add_argument("--min-players", type=int, default=40); gr.add_argument("--seed", type=int, default=0)
