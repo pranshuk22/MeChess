@@ -68,19 +68,22 @@ Two Kaggle runs of the transformer model on the full collected data (about 630,0
 | First (constant learning rate), end of epoch 3 | 0.212 | not measured in the log | not measured in the log |
 | Steady version, validation at step 17,000 of 27,141 | 0.431 | 0.724 | 0.460 |
 
-The run with the early-stopping, labelled-examples-per-batch and dropout changes (105 minutes on one GPU, all 27,141 steps; the last step was the best,
-so early stopping did not trigger) gave, on the **held-out test set**:
+Two full runs on one GPU (3 epochs, the same data and split; test set of 63,256 examples):
 
-| Head | Test | Baseline |
-|---|---|---|
-| Concepts, average precision (macro) | **0.472** (validation 0.565) | 0.008 (random) |
-| Concepts, F1 micro / macro with tuned thresholds | 0.668 / 0.476 | 0.000 (prior only) |
-| Judgement glyph, accuracy / macro F1 | **0.718** / 0.627 | 0.329 (majority) |
-| Evaluation, accuracy / macro F1 | **0.408** / 0.371 | 0.245 (majority) |
+| Test | Run A: 8 labelled examples per batch, no dropout, last step kept (105 min) | Run B: 4 labelled per batch, dropout 0.2, best step kept (97 min) | Baseline |
+|---|---|---|---|
+| Concepts, average precision (macro) | **0.472** | 0.388 | 0.008 (random) |
+| Concepts, F1 micro / macro, tuned thresholds | **0.668 / 0.476** | 0.612 / 0.402 | 0.000 (prior only) |
+| Judgement glyph, accuracy / macro F1 | 0.718 / 0.627 | 0.724 / 0.640 | 0.329 (majority) |
+| Evaluation, accuracy / macro F1 | 0.408 / 0.371 | 0.418 / 0.392 | 0.245 (majority) |
 
-How to read it: the concept head improved clearly (0.43 to 0.57 on validation) and is the useful part. The judgement head has stayed at about 0.72
-in every run, so text alone appears to cap it there. The evaluation head fell from 0.46 (earlier run) to 0.41 and its training loss is near zero, so
-it memorises; do not rely on it. The concept and judgement labels are weak (lexicon and glyph based), so these numbers measure agreement with those
+Run B's changes reduce memorisation in the glyph heads (their training loss stays near 0.2 instead of near 0), but that did **not** buy better held-out
+glyph accuracy: the differences (+0.006 judgement, +0.010 evaluation) are inside the noise (the evaluation set has only 181 validation examples), while the
+concept head, the useful one, is clearly worse (average precision 0.388 against 0.472; it was still rising when the learning rate ran out). The
+model kept is **Run A**, in `data/books_learn/run/nlp` locally. Early stopping did not trigger in either run.
+
+How to read it: the concept head is the useful part. The judgement head has stayed at about 0.72
+in every run, so text alone appears to cap it there. The evaluation head is at 0.41 to 0.42 and cannot be told apart from run to run; do not rely on it. The concept and judgement labels are weak (lexicon and glyph based), so these numbers measure agreement with those
 labels, not chess understanding. Test metrics on the concept head with the keywords left visible are near zero (0.004) because the model was never
 trained on unmasked text; that figure is a distribution mismatch, not a quality measure.
 
