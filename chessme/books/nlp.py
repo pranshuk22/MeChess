@@ -180,7 +180,10 @@ class BowEncoder(nn.Module):
 class TransformerEncoder(nn.Module):
     def __init__(self, name, max_len=128, tokenizer=None, model=None):
         super().__init__()
-        from transformers import AutoModel, AutoTokenizer
+        try:
+            from transformers import AutoModel, AutoTokenizer
+        except ImportError as e:
+            raise ImportError("the transformer backend needs the `transformers` package (pip install transformers)") from e
         self.tok = tokenizer or AutoTokenizer.from_pretrained(name)
         self.model = model or AutoModel.from_pretrained(name)
         self.max_len, self.dim = max_len, self.model.config.hidden_size

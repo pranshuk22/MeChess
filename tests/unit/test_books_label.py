@@ -177,3 +177,9 @@ def test_cli_end_to_end_and_pause_exit_code(model_dir, tmp_path):
     assert done.returncode == 0, done.stderr[-800:]
     assert (tmp_path / "lab" / "l.jsonl.gz").exists() and (tmp_path / "lab" / "label_report.md").exists()
     assert json.loads((tmp_path / "lab" / "label_stats.json").read_text())["records"] > 0
+
+
+def test_a_missing_transformers_package_gives_a_clear_message(monkeypatch):
+    monkeypatch.setitem(sys.modules, "transformers", None)                          # makes `import transformers` fail
+    with pytest.raises(ImportError, match="pip install transformers"):
+        N.TransformerEncoder("any-model")
