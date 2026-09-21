@@ -882,6 +882,19 @@ def cmd_theory_book(args):
     print(report)
 
 
+def _ensure_opening_names(directory, log):
+    """The explorer database stores opening names: fetch the five small CC0 files when they are missing (a Kaggle run has none)."""
+    d = Path(directory)
+    if list(d.glob("*.tsv")):
+        return
+    try:
+        from .books import openings as OP
+        OP.download(d)
+        log(f"downloaded the opening names into {d}")
+    except Exception as e:                                   # the explorer works without names: say so instead of failing
+        log(f"WARNING: no opening names ({e!r}); the database will have none")
+
+
 def cmd_explorer_build(args):
     from .book import explorer as EX
     from .jobs import JobControl
@@ -893,6 +906,7 @@ def cmd_explorer_build(args):
               f"{r['with_eval']} with engine evaluations, {r['with_clock']} with clocks")
         return
     log(f"=== explorer-build {' '.join(sys.argv[2:])}")
+    _ensure_opening_names(args.openings_dir, log)
     ctl = JobControl(args.job, args.control_dir, log=log)
     with ctl.signals():
         res = EX.run(args.source, args.out, edges=edges, max_ply=args.max_ply, max_per_band=args.max_per_band, max_scan=args.max_scan,
@@ -908,6 +922,7 @@ def cmd_explorer_build(args):
 def cmd_explorer_rebuild(args):
     from .book import explorer as EX
     log = _file_logger(args.log)
+    _ensure_opening_names(args.openings_dir, log)
     EX.rebuild(args.state, args.out, db_min_games=args.db_min_games, db_min_frac=args.db_min_frac, book_min_games=args.book_min_games,
                book_min_frac=args.book_min_frac, book_min_share=args.book_min_share,
                eval_margin_cp=args.eval_margin, max_ply=args.max_ply, openings_dir=args.openings_dir, log=log)

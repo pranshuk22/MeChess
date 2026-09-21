@@ -490,3 +490,96 @@ def test_the_text_answer_lists_the_top_game_links():
     assert "https://lichess.org/AbCd1234" not in X.format_rows(rows)
     text = X.format_rows(rows, links=True)
     assert "top game after e4: https://lichess.org/AbCd1234 (average rating 2650)" in text
+
+
+# ---- a compressed file with several frames, and a stream that ends early ------------------------------------------------------
+
+def test_a_zst_file_with_several_frames_is_read_to_the_end(tmp_path):
+    zstandard = pytest.importorskip("zstandard")
+    c = zstandard.ZstdCompressor()
+    p = tmp_path / "multi.pgn.zst"
+    p.write_bytes(c.compress(dump(5, 0).encode()) + c.compress(dump(0, 7).encode()) + c.compress(dump(0, 0, 4).encode()))   # three separate frames
+    games = [X.header_record(t) for t in X.iter_games(X.open_dump(str(p)))]
+    assert len(games) == 5 + 7 + 4                                                                 # the default reader would stop after the first frame (5 games)
+    assert X.parse_moves(games[-1]["line"], 4)[0] == FRENCH
+
+
+def test_a_stream_that_ends_before_the_scan_limit_is_reported_loudly(tmp_path):
+    logs = []
+    res = run(tmp_path, dump(20, 0), max_scan=1000, log=logs.append)
+    assert res["ended_early"] and any("WARNING: the stream ended after 20 games" in l for l in logs)
+    assert "WARNING: the stream ended after 20 games" in (tmp_path / "report.md").read_text()
+    quiet = run(tmp_path / "b", dump(20, 0), max_scan=20, log=lambda *_: None)            # the limit was reached: nothing to warn about
+    assert not quiet["ended_early"] and "WARNING" not in (tmp_path / "b" / "report.md").read_text()
+
+
+def test_opening_names_are_fetched_when_the_folder_is_empty(tmp_path, monkeypatch):
+    from chessme import cli
+    from chessme.books import openings as OP
+    calls = []
+    monkeypatch.setattr(OP, "download", lambda d, opener=None: calls.append(str(d)) or [])
+    logs = []
+    cli._ensure_opening_names(tmp_path / "names", logs.append)
+    assert calls == [str(tmp_path / "names")] and any("downloaded the opening names" in l for l in logs)
+    (tmp_path / "have").mkdir()
+    (tmp_path / "have" / "a.tsv").write_text("eco\tname\tpgn\n")
+    cli._ensure_opening_names(tmp_path / "have", logs.append)
+    assert len(calls) == 1                                                                       # already there: no download
+    monkeypatch.setattr(OP, "download", lambda d, opener=None: (_ for _ in ()).throw(OSError("offline")))
+    cli._ensure_opening_names(tmp_path / "other", logs.append)
+    assert any("WARNING: no opening names" in l for l in logs)                                   # offline: a warning, not a crash
+
+
+# ---- a connection that closes early must not look like the end of the file ------------------------------------------------------
+
+def test_the_checked_reader_raises_when_the_download_ends_before_the_promised_size():
+    ok = X.CheckedReader(io.BytesIO(b"abcdef"), expected=6)
+    assert ok.read(4) == b"abcd" and ok.read(4) == b"ef" and ok.read(4) == b""                      # complete: a normal end
+    short = X.CheckedReader(io.BytesIO(b"abcdef"), expected=10)
+    assert short.read(6) == b"abcdef"
+    with pytest.raises(ConnectionError, match="6 of 10 bytes"):
+        short.read(4)
+    assert X.CheckedReader(io.BytesIO(b"abc"), expected=0).read(10) == b"abc"                        # no size promised: nothing to check
+
+
+def test_open_dump_reports_a_truncated_url_download(monkeypatch):
+    body = dump(5, 0).encode()
+
+    class Resp(io.BytesIO):
+        headers = {"Content-Length": str(len(body) + 5000)}                                          # the server promised more than it sent
+    monkeypatch.setattr(X.urllib.request, "urlopen", lambda req, timeout=None: Resp(body))
+    with pytest.raises(ConnectionError, match="the connection closed"):
+        list(X.iter_games(X.open_dump("https://example.org/dump.pgn")))
+    Resp.headers = {"Content-Length": str(len(body))}
+    assert len(list(X.iter_games(X.open_dump("https://example.org/dump.pgn")))) == 5              # a complete download reads fine
+
+
+def test_reconnecting_many_times_is_fine_as_long_as_each_connection_makes_progress(monkeypatch):
+    monkeypatch.setattr(X.time, "sleep", lambda s: None)
+    text = dump(120, 0)
+    calls = {"n": 0}
+
+    class Flaky(io.StringIO):
+        def __iter__(self):
+            for i, line in enumerate(iter(self.readline, "")):
+                if i > 150 * calls["n"]:                                                             # each connection gets a little further, then drops
+                    raise ConnectionError("closed")
+                yield line
+
+    def opener():
+        calls["n"] += 1
+        return Flaky(text)
+    c = X.Counts(len(EDGES) - 1)
+    X.count_stream(opener, c, edges=EDGES, max_ply=6, holdout=0, log=lambda *_: None)
+    ref = X.Counts(len(EDGES) - 1)
+    X.count_stream(stream(text), ref, edges=EDGES, max_ply=6, holdout=0, log=lambda *_: None)
+    assert calls["n"] > 6 and c.tables == ref.tables and c.scanned == 120                            # more than 5 drops, no abort
+
+
+def test_reconnecting_without_any_progress_gives_up(monkeypatch):
+    monkeypatch.setattr(X.time, "sleep", lambda s: None)
+
+    def opener():
+        raise ConnectionError("the server is down")
+    with pytest.raises(ConnectionError):
+        X.count_stream(opener, X.Counts(len(EDGES) - 1), edges=EDGES, max_ply=6, holdout=0, log=lambda *_: None)

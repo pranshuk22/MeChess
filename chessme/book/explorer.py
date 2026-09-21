@@ -112,15 +112,54 @@ def signed64(k):
 
 # ---- reading games -------------------------------------------------------------------------------------------------------
 
+class CheckedReader(io.RawIOBase):
+    """A binary stream over a download that raises when the download ends before the size the server promised. `http.client` returns an empty
+    read (not an error) when the connection is closed early, so a dropped connection looks like the end of the file: on Kaggle a run ended
+    silently after about an hour, at 4 of about 100 million games."""
+
+    def __init__(self, raw, expected=None):
+        super().__init__()
+        self.raw, self.expected, self.received = raw, expected, 0
+
+    def readable(self):
+        return True
+
+    def readinto(self, b):
+        data = self.raw.read(len(b))
+        n = len(data)
+        self.received += n
+        if n == 0 and len(b) and self.expected and self.received < self.expected:
+            raise ConnectionError(f"the connection closed after {self.received:,} of {self.expected:,} bytes")
+        b[:n] = data
+        return n
+
+    def close(self):
+        try:
+            self.raw.close()
+        finally:
+            super().close()
+
+
 def open_dump(source):
-    """A text stream of a PGN dump: a path or URL, `.zst` or plain."""
+    """A text stream of a PGN dump: a path or URL, `.zst` or plain. A download that ends early raises ConnectionError (see CheckedReader)."""
     if str(source).startswith("http"):
-        raw = urllib.request.urlopen(urllib.request.Request(source, headers=UA), timeout=120)
+        resp = urllib.request.urlopen(urllib.request.Request(source, headers=UA), timeout=120)
+        try:
+            expected = int(resp.headers.get("Content-Length") or 0)
+        except (AttributeError, ValueError):
+            expected = 0
+        raw = CheckedReader(resp, expected)
     else:
         raw = open(source, "rb")
     if str(source).endswith(".zst"):
         import zstandard
-        raw = zstandard.ZstdDecompressor().stream_reader(raw)
+        # A .zst file can hold many compressed frames; by default the reader stops silently at the end of the FIRST one. On a real Lichess dump
+        # that cut a run short after 4 million of about 100 million games while reporting success.
+        dec = zstandard.ZstdDecompressor(max_window_size=2 ** 31)
+        try:
+            raw = dec.stream_reader(raw, read_across_frames=True)
+        except TypeError:                                     # an old zstandard without the option
+            raw = dec.stream_reader(raw)
     return io.TextIOWrapper(raw, encoding="utf-8", errors="replace", newline="\n")
 
 
@@ -228,6 +267,7 @@ class Counts:
         self.scanned = 0
         self.hit_deadline = False
         self.config = None
+        self.stream_ended = False                                # the source ran out of games (rather than the scan limit or the time budget)
         self.window_end = [None] * n_bands                       # scan index at which a band reached its cap (None: still collecting)
         self.pruned_below = 0                                    # entries with at most this many games may be missing (memory guard)
 
@@ -353,7 +393,7 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
     band, until the band has `max_per_band` games (the first `holdout` of each band are kept aside for the coverage test and folded in afterwards).
     Stops when `max_scan` games were scanned, or every band is full. `counts.scanned` makes it resumable: already scanned games are skipped."""
     t0 = last_ck = time.time()
-    failures = 0
+    failures, scanned_at_failure = 0, counts.scanned
     while True:
         try:
             stream = open_stream()
@@ -392,9 +432,16 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
                     log("time budget reached or stop requested: finishing with what has been counted")
                     counts.hit_deadline = True
                     return counts
+            counts.stream_ended = True
+            if max_scan and counts.scanned < max_scan:
+                log(f"WARNING: the stream ended after {counts.scanned:,} games, before the scan limit of {max_scan:,}: this is the end of the source "
+                    "(or, for a .zst file, of its first compressed frame): check before trusting the counts as a full scan")
             return counts                                            # the stream ended
         except (OSError, EOFError, ValueError) as e:
+            if counts.scanned > scanned_at_failure:
+                failures = 0                                          # it got somewhere since the last failure: only failures in a row count
             failures += 1
+            scanned_at_failure = counts.scanned
             log(f"  stream error ({e!r}); reconnecting and skipping the {counts.scanned:,} games already scanned (attempt {failures})")
             if failures > 5:
                 raise
@@ -656,6 +703,8 @@ def render_report(counts, edges, books, cov, meta):
          f"- First {meta.get('max_ply', '?')} plies; a book move needs at least {meta.get('book_min_games', '?')} games and {100 * meta.get('book_min_share', 0):.0f}% of the games at its position.", "",
          "- Counts are exact: every qualifying game was counted, none sampled. A band stops collecting when it is full; a rare band collects over the whole scan, so **each band has its own window** (below).",
          "- Top games: for the first 12 plies each move keeps a link to the highest-rated game that played it (public Lichess game id).",
+         *([f"- **WARNING: the stream ended after {counts.scanned:,} games, before the scan limit of {meta.get('max_scan', 0):,}.** The counts are exact for those games only."]
+           if meta.get("ended_early") else []),
          f"- Memory guard: {'nothing was dropped' if not counts.pruned_below else f'entries with at most {counts.pruned_below} games may be missing'}.", "",
          "## Books and coverage (held-out games: excluded from the book, added to the counts afterwards)", "",
          "| band | games counted | window | book positions | book moves | share of games still in book after N plies |", "|---|---|---|---|---|---|"]
@@ -753,13 +802,15 @@ def run(source, out_dir, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, max_pe
                  checkpoint=ck, checkpoint_every=checkpoint_every, checkpoint_minutes=checkpoint_minutes, config=config, progress_every=progress_every, log=log)
     save_state(ck, counts, counts.scanned, config)                # before the held-out games are folded in: a rebuild folds them itself
     meta = {"source": str(source).rsplit("/", 1)[-1], "scanned": counts.scanned, "max_ply": max_ply, "max_per_band": max_per_band,
-            "book_min_games": book_min_games, "book_min_frac": book_min_frac, "book_min_share": book_min_share}
+            "book_min_games": book_min_games, "book_min_frac": book_min_frac, "book_min_share": book_min_share,
+            "ended_early": bool(counts.stream_ended and max_scan and counts.scanned < max_scan), "max_scan": max_scan}
     rows, books, cov = _write_outputs(counts, edges, out, meta=meta, db_min_games=db_min_games, db_min_frac=db_min_frac, book_min_games=book_min_games,
                                       book_min_frac=book_min_frac, book_min_share=book_min_share, eval_margin_cp=eval_margin_cp, depth=max_ply,
                                       openings_dir=openings_dir, log=log)
     finished = not counts.hit_deadline
     if finished and drop_state_when_finished:
         ck.unlink()                                       # a complete run needs no checkpoint; a stopped one keeps it for resuming
-    res = {"scanned": counts.scanned, "counted": sum(counts.games), "db_rows": rows, "books": books, "coverage": cov, "finished": finished}
+    res = {"scanned": counts.scanned, "counted": sum(counts.games), "db_rows": rows, "books": books, "coverage": cov, "finished": finished,
+           "ended_early": meta["ended_early"]}
     log(str(res))
     return res
