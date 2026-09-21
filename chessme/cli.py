@@ -946,7 +946,7 @@ def cmd_books_nlp_label(args):
     if args.input_root or args.data_dir:
         from . import kaggle as KG
         r = KG.prepare_label(out.parent, args.input_root or "/kaggle/input", data_dir=args.data_dir, model_dir=model_dir, log=log)
-        data, model_dir = data or r["annotated"], model_dir or r["model"]
+        data, model_dir = data or r["annotated"], r["model"]                 # the resolved model folder (a top folder given by the user is searched)
     if not data or not model_dir:
         sys.exit("give --data (annotated_moves.jsonl.gz or the books-learn folder) and --model-dir, or --input-root / --data-dir on Kaggle")
     data = Path(data)

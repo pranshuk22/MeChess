@@ -210,3 +210,19 @@ def test_prepare_label_accepts_the_top_folder_and_names_what_it_found_when_it_fa
     (top / "learn" / "nlp" / "config.json").write_text("{}")
     r = KG.prepare_label(tmp_path / "out", root, data_dir=str(root / "data"), model_dir=str(top), log=lambda *_: None)
     assert r["model"] == str(top / "learn" / "nlp")
+
+
+def test_cli_with_kaggle_style_inputs_and_the_training_outputs_top_folder(model_dir, tmp_path):
+    """What the Kaggle notebook runs: --input-root, --data-dir, and --model-dir naming the top folder of the training output (the model is in learn/nlp)."""
+    import shutil
+    root = tmp_path / "input"
+    (root / "data" / "annotated").mkdir(parents=True)
+    write(root / "data" / "annotated" / "annotated_moves.jsonl.gz", records())
+    top = root / "train-output"
+    shutil.copytree(model_dir, top / "learn" / "nlp")
+    (top / "MeChess").mkdir()
+    cmd = [sys.executable, "-m", "chessme", "books-nlp-label", "--input-root", str(root), "--data-dir", str(root / "data"), "--model-dir", str(top),
+           "--out", str(tmp_path / "out" / "labelled" / "l.jsonl.gz"), "--log", str(tmp_path / "l.log"), "--sample", "3"]
+    done = subprocess.run(cmd, capture_output=True, text=True)
+    assert done.returncode == 0, done.stderr[-800:]
+    assert len(read(tmp_path / "out" / "labelled" / "l.jsonl.gz")) > 0
