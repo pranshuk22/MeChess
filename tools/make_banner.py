@@ -161,7 +161,7 @@ def banner():
 <ellipse cx="300" cy="330" rx="330" ry="300" fill="url(#halo)"/>
 {traces()}
 {board_strip()}
-<g transform="translate(112,84) scale(1.0)">
+<g transform="translate(112,64) scale(1.0)">
   <g opacity="0.55" filter="url(#soft)"><use xlink:href="#k" href="#k" transform="translate(0,0)"/></g>
   {k}
   <clipPath id="s1"><rect x="-10" y="196" width="420" height="13"/></clipPath>
