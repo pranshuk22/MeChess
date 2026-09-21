@@ -72,16 +72,18 @@ More: [getting started](docs/getting-started.md), [every command](docs/cli.md).
 
 ## How it fits together
 
-```
-your games (Lichess / chess.com)      Lichess open database
-        |                                   |
-   fetch -> ingest -> weighted games        +--> pretraining shards
-        |                                            |
-        +--> opening book                            v
-        +--> "me" model  <-------- fine-tune on your games
-        +--> style analysis (engine judge: Stockfish)
-                     |
-   opening book -> engine candidate moves (MultiPV) -> prior picks -> Elo dial  ==>  UCI engine
+```mermaid
+flowchart TD
+    G["your games<br/>(Lichess / chess.com)"] --> F["fetch, ingest<br/>weighted games"]
+    L["Lichess open database"] --> P["pretraining shards"]
+    F --> B["opening book"]
+    F --> M["'me' model"]
+    P --> M
+    F --> S["style analysis<br/>(judge: Stockfish)"]
+    B --> C["engine candidate moves (MultiPV)"]
+    M --> C
+    S -.-> C
+    C --> R["prior picks"] --> D["Elo dial"] --> U(["UCI engine"])
 ```
 
 Details in [docs/architecture.md](docs/architecture.md).

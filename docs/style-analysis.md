@@ -128,12 +128,12 @@ rating-independent dimensions exist.
 
 ## Order of a full run
 
-```
-style-data       -> your dataset            style-pop-data -> population baseline
-style-report --baseline ...   -> readable report
-
-style-cohort-fetch -> style-cohort-analyze -> style-cohort-report        (is style a stable trait?)
-style-anchors-fetch -> style-cohort-analyze --out data/style/anchors -> style-anchors-report
+```mermaid
+flowchart LR
+    A[style-data<br/>your dataset] --> R[style-report --baseline ...<br/>readable report]
+    B[style-pop-data<br/>population baseline] --> R
+    C[style-cohort-fetch] --> D[style-cohort-analyze] --> E[style-cohort-report<br/>is style a stable trait?]
+    G[style-anchors-fetch] --> H["style-cohort-analyze<br/>--out data/style/anchors"] --> I[style-anchors-report]
 ```
 
 ## Things to know
