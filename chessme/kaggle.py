@@ -4,7 +4,9 @@ depends on where Kaggle puts files lives here, where it is tested and also usabl
   prepare_nlp   find the data written by the collection notebook (an input) and link it into the working folder; restore the checkpoint
                 of an earlier training run (also an input) so a new session continues where the old one stopped
   slim_collect  drop the raw downloads after a collection run (the outputs are what the next notebook needs)
-  slim_nlp      drop the linked data and the dry-run folder after training (only the model, metrics and logs are kept)"""
+  slim_nlp      drop the linked data and the dry-run folder after training (only the model, metrics and logs are kept)
+  find_model    the trained chess-text model (an earlier training run's output) mounted under the inputs
+  prepare_label find the data and the model for the labelling run and restore an interrupted labelling run's partial output"""
 import glob
 import os
 import shutil
@@ -84,3 +86,37 @@ def slim_nlp(out):
             p.unlink()
         elif p.is_dir():
             shutil.rmtree(p, ignore_errors=True)
+
+
+def find_model(input_root):
+    """The folder of a trained chess-text model (holds config.json and model.pt) under `input_root`, or None. When several are mounted the
+    first in name order is returned; name the folder explicitly (--model-dir) to choose."""
+    found = sorted(glob.glob(os.path.join(str(input_root), "**", "nlp", "model.pt"), recursive=True))
+    found = [f for f in found if (Path(f).parent / "config.json").exists()]
+    return Path(found[0]).parent if found else None
+
+
+def prepare_label(out, input_root="/kaggle/input", data_dir=None, model_dir=None, log=print):
+    """Locate the annotated moves and the trained model for `books-nlp-label`, and restore the partial output of an interrupted run found among
+    the inputs. Raises before any GPU time is spent when something is missing. Returns {"annotated", "model", "resumed_from"}."""
+    root = data_dir or input_root
+    data = find_data(root)
+    if data is None:
+        raise FileNotFoundError(f"no annotated_moves.jsonl.gz under {root}: add the collection notebook's output as an input (or set DATA_DIR)")
+    model = Path(model_dir) if model_dir else find_model(input_root)
+    if model is None or not (Path(model) / "model.pt").exists():
+        raise FileNotFoundError(f"no trained model (nlp/model.pt with config.json) under {input_root}: add the training notebook's output as an input (or set MODEL_DIR)")
+    out = Path(out)
+    resumed = None
+    have = (out / "labelled.jsonl.gz.part").exists() or (out / "labelled.jsonl.gz").exists()
+    for part in sorted(glob.glob(os.path.join(str(input_root), "**", "labelled.jsonl.gz.part"), recursive=True)):
+        progress = part[:-len(".part")] + ".progress"
+        if not have and os.path.exists(progress):
+            out.mkdir(parents=True, exist_ok=True)
+            shutil.copy(part, out / "labelled.jsonl.gz.part")
+            shutil.copy(progress, out / "labelled.jsonl.gz.progress")
+            resumed = part
+            log(f"restored an interrupted labelling run: {part}")
+            break
+    log(f"annotated moves: {data / 'annotated' / 'annotated_moves.jsonl.gz'}\nmodel: {model}")
+    return {"annotated": str(data / "annotated" / "annotated_moves.jsonl.gz"), "model": str(model), "resumed_from": resumed}

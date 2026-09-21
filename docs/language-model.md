@@ -91,7 +91,26 @@ trained on unmasked text; that figure is a distribution mismatch, not a quality 
 
 The model reads text. It helps to (1) tag large amounts of prose with concepts, (2) pick and rank explanations to quote in game reports, and (3)
 provide human move judgements as labels. It does **not** judge a move by itself (it never sees the position), does not make the engine stronger, and
-its concept labels can only be as good as the 32-concept lexicon. The position-to-concept model that would use these labels is planned, not built.
+its concept labels can only be as good as the 32-concept lexicon. The position-to-concept model that would use these labels is planned, not built; the labels for it are made by the next command.
+
+## Labelling annotated moves (`chessme books-nlp-label`)
+
+Every annotated move with a readable comment (25+ characters, English) becomes a labelled example: the position (FEN), the move, and
+
+| Field | Meaning |
+|---|---|
+| `concepts_lexicon` | concepts whose keywords the comment contains (high precision, low recall) |
+| `concepts_model` | concepts the model finds from context: it is given the comment **with the keywords hidden** (it was trained that way; shown the keywords it predicts nothing) |
+| `concepts` / `model_only` | the union, and what only the model found (the part to check by eye) |
+| `judgement`, `evaluation` (+ `_conf`) | the verdict and the evaluation class the comment implies, with the model's probability |
+| `glyph`, `eval`, `source`, `game` | the human glyph and evaluation symbol where the source had them, the source and a public game id; no player or annotator names |
+
+The command is streaming and resumable (progress every 2,048 moves; a cut-off write is discarded and the finished file equals an uninterrupted run),
+takes `--limit` for a trial and `--deadline-minutes` for a time budget (exit code 3 = paused, run it again), and writes `label_report.md` and
+`label_stats.json` next to the output: per concept how often the lexicon and the model find it and how well the model finds what the lexicon finds,
+the judgement head against the human glyphs (the glyph is not an input), and a sample of model-only concepts to read. **Read that sample before using
+the labels**: they are weak labels, and only a check by eye tells whether the model-only concepts are real. The Kaggle version is
+[notebook 4](kaggle.md).
 
 ## Other commands
 

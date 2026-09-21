@@ -846,6 +846,35 @@ def cmd_books_nlp_predict(args):
         print(f"{text[:80]!r}\n   concepts {r['concepts']}  judgement {r['judgement']}  evaluation {r['evaluation']}")
 
 
+def cmd_books_nlp_label(args):
+    from .books import label as LB, nlp as NLP
+    log = _file_logger(args.log)
+    out = Path(args.out)
+    log(f"=== books-nlp-label {' '.join(sys.argv[2:])}")
+    data, model_dir = args.data, args.model_dir
+    if args.input_root or args.data_dir:
+        from . import kaggle as KG
+        r = KG.prepare_label(out.parent, args.input_root or "/kaggle/input", data_dir=args.data_dir, model_dir=model_dir, log=log)
+        data, model_dir = data or r["annotated"], model_dir or r["model"]
+    if not data or not model_dir:
+        sys.exit("give --data (annotated_moves.jsonl.gz or the books-learn folder) and --model-dir, or --input-root / --data-dir on Kaggle")
+    data = Path(data)
+    if data.is_dir():
+        data = data / "annotated" / "annotated_moves.jsonl.gz" if (data / "annotated").exists() else data / "annotated_moves.jsonl.gz"
+    if not data.exists():
+        sys.exit(f"no annotated moves at {data}")
+    model, cfg = NLP.load(model_dir, variant=args.variant)
+    log(f"model {model_dir} ({args.variant}), input {data}")
+    res = LB.run(data, out, model, cfg, batch=args.batch, limit=args.limit, deadline_minutes=args.deadline_minutes, chunk=args.chunk, log=log, fresh=args.fresh)
+    if not res["finished"]:
+        sys.exit(3)                                   # paused at the time budget: run the same command again
+    stats, pick = LB.summarise(out, sample=args.sample)
+    report = out.with_name("label_report.md")
+    report.write_text(LB.render(stats, pick), encoding="utf-8")
+    out.with_name("label_stats.json").write_text(json.dumps(stats, indent=1), encoding="utf-8")
+    log(f"{stats['records']} labelled moves; report {report}")
+
+
 def cmd_books_preflight(args):
     from .books import preflight as PF
     ok = PF.run(args.out, need_gpu=args.need_gpu, need_transformers=args.backend == "transformer", model_name=args.model if args.backend == "transformer" else None,
@@ -1482,6 +1511,20 @@ def main():
     npd.add_argument("model_dir"); npd.add_argument("texts", nargs="+")
     npd.add_argument("--variant", choices=["composite", "concepts"], default="composite", help="the model selected on all three heads, or the best on concepts alone")
     npd.set_defaults(func=cmd_books_nlp_predict)
+    nl = sub.add_parser("books-nlp-label", help="label every annotated move's comment with the trained text model (concepts, verdict, evaluation): training data for a position model")
+    nl.add_argument("--data", help="annotated_moves.jsonl.gz, or the books-learn folder that holds annotated/annotated_moves.jsonl.gz")
+    nl.add_argument("--model-dir", help="a trained model folder (config.json, model.pt); on Kaggle found under --input-root")
+    nl.add_argument("--variant", choices=["composite", "concepts"], default="composite", help="the model kept on all three heads, or the one best on concepts alone (labels are mostly concepts)")
+    nl.add_argument("--out", default="data/books_learn/labelled/labelled.jsonl.gz")
+    nl.add_argument("--batch", type=int, default=128); nl.add_argument("--chunk", type=int, default=2048, help="records per saved step (a resume restarts at the last one)")
+    nl.add_argument("--limit", type=int, help="label only the first N records (a trial)")
+    nl.add_argument("--sample", type=int, default=60, help="records with model-only concepts to list in the report for checking by eye")
+    nl.add_argument("--deadline-minutes", type=float, help="stop cleanly after this many minutes (exit code 3); run the same command to continue")
+    nl.add_argument("--fresh", action="store_true", help="ignore a partial earlier run")
+    nl.add_argument("--data-dir", help="Kaggle: the collection notebook's output folder (searched recursively)")
+    nl.add_argument("--input-root", help="Kaggle: find the data and the model, and restore an interrupted run, under this folder (e.g. /kaggle/input)")
+    nl.add_argument("--log", default="data/books_learn/labelled/label.log")
+    nl.set_defaults(func=cmd_books_nlp_label)
     pf = sub.add_parser("books-preflight", help="check dependencies, disk, network and GPU before a long run (exit code 1 on failure)")
     pf.add_argument("--out", default="data/books_learn"); pf.add_argument("--need-gpu", action="store_true"); pf.add_argument("--backend", choices=["bow", "transformer"], default="bow")
     pf.add_argument("--model", default="distilroberta-base"); pf.add_argument("--min-free-gb", type=float, default=3.0); pf.add_argument("--no-network", action="store_true")

@@ -1,6 +1,6 @@
 # Running on Kaggle
 
-Three notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training does.
+Four notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
 Each notebook is an **adapter**: it clones the repository, installs a few packages and runs `chessme` commands, nothing else. All the logic
 (resuming from earlier output, linking inputs, checkpoints, time budgets) is in the repository, tested, and runs the same on a laptop; the
 Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data-dir`, `--resume-glob` and `--slim` flags.
@@ -10,6 +10,7 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
 | `notebooks/1_collect_data_cpu.ipynb` | **None** | preflight, then `chessme books-learn`: 100+ books, all annotated-game sources, Stack Exchange, Wikipedia, opening names | CPU only; roughly 1 to 2 hours (about 300 MB of downloads) |
 | `notebooks/2_train_language_model_gpu.ipynb` | **GPU** | preflight (GPU, dependencies, model download, data), a dry-run of the whole training path, then the real run with a time budget | about 105 minutes for 3 epochs of `distilroberta-base` on a T4 or P100 (measured) |
 | `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds the opening explorer for every rating range, a theory book per band and a report ([details](opening-explorer.md)) | hours; checkpointed, with a time budget |
+| `notebooks/4_label_comments_gpu.ipynb` | **GPU** | `chessme books-nlp-label`: labels every annotated move's comment with the trained model (concepts, verdict, who stands better) and writes a report; trial on 2,000 moves first | needs the outputs of notebooks 1 and 2 as inputs; the GPU part is short (an estimate: 15 to 30 minutes for a few hundred thousand comments; not measured yet) |
 
 ## How to run
 
@@ -21,7 +22,12 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
    `/kaggle/input/notebooks/<your-username>/<notebook-name>`) or leave it empty to search everything under `/kaggle/input`. The notebook prints an
    **inventory** of what it found and stops if an expected source has no examples. The archives (`.tar.gz`) were read by notebook 1; their content is
    in `annotated_moves.jsonl.gz`.
-5. To **continue** a run (notebooks 2 and 3), add the notebook's own earlier output as an input and run it again: the checkpoint is restored.
+5. To **continue** a run (notebooks 2, 3 and 4), add the notebook's own earlier output as an input and run it again: the checkpoint is restored.
+
+Notebook 4 takes **two** inputs, the output of notebook 1 (the data) and of notebook 2 (the model, found as `nlp/model.pt` with `config.json`; a
+model folder can be named with `MODEL_DIR`). It stops at once, before using the GPU, if either is missing. Its progress is saved every 2,048 moves, so an
+interrupted or time-limited run continues exactly where it stopped (add its own earlier output as an input); the finished file is identical to an uninterrupted run.
+The same on a laptop: `python -m chessme books-nlp-label --data data/books_learn --model-dir <model folder>`.
 
 ## What protects the quota
 

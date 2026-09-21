@@ -130,6 +130,7 @@ See [language-model.md](language-model.md). Every step is resumable and can be p
 | `books-topics` | Cluster the paragraphs of the books into topics (needs `sentence-transformers`) |
 | `books-nlp-train` | Train the chess-text language model (concepts, move judgement, evaluation): `--backend bow|transformer`, `--dry-run`, `--deadline-minutes`, `--patience`, `--lab-per-batch`, `--dropout`, `--data-dir` / `--input-root` (Kaggle) |
 | `books-nlp-report` | Print the held-out metrics of a trained model, which model was kept and whether it stopped early |
+| `books-nlp-label` | Label every annotated move's comment with a trained model (concepts, verdict, evaluation) into `labelled.jsonl.gz`, with a report; resumable, `--limit`, `--deadline-minutes`, `--variant concepts`; on Kaggle `--input-root` finds the data and the model ([details](language-model.md)) |
 | `books-nlp-predict` | Read comments with a trained model (`--variant concepts` for the best concept-only model) |
 
 ## Move-quality features and jobs

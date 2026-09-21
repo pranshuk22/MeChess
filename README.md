@@ -99,7 +99,7 @@ Details in [docs/architecture.md](docs/architecture.md).
 - [Game analysis](docs/game-analysis.md): move classes, accuracy, the `analyse` report
 - [Opening explorer and theory books](docs/opening-explorer.md): what is collected, the conditions, the output formats, robustness
 - [Books, annotated games and the language model](docs/language-model.md): sources, the notation and glyph reader, the model, results so far
-- [Running on Kaggle](docs/kaggle.md): the three notebooks, quotas, checkpoints, resuming
+- [Running on Kaggle](docs/kaggle.md): the four notebooks, quotas, checkpoints, resuming
 - [Training resources](docs/training-resources.md): every source with its terms and how it was verified
 - [Data sources and privacy](docs/data-sources.md): where games come from, terms, what is stored
 - [Running long jobs](docs/operations.md): memory guard, logs, resuming, laptops that sleep
