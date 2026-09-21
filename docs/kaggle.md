@@ -10,7 +10,7 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
 | `notebooks/1_collect_data_cpu.ipynb` | **None** | preflight, then `chessme books-learn`: 100+ books, all annotated-game sources, Stack Exchange, Wikipedia, opening names | CPU only; roughly 1 to 2 hours (about 300 MB of downloads) |
 | `notebooks/2_train_language_model_gpu.ipynb` | **GPU** | preflight (GPU, dependencies, model download, data), a dry-run of the whole training path, then the real run with a time budget | about 105 minutes for 3 epochs of `distilroberta-base` on a T4 or P100 (measured) |
 | `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds the opening explorer for every rating range, a theory book per band and a report ([details](opening-explorer.md)) | hours; checkpointed, with a time budget |
-| `notebooks/4_label_comments_gpu.ipynb` | **GPU** | `chessme books-nlp-label`: labels every annotated move's comment with the trained model (concepts, verdict, who stands better) and writes a report; trial on 2,000 moves first | needs the outputs of notebooks 1 and 2 as inputs; the GPU part is short (an estimate: 15 to 30 minutes for a few hundred thousand comments; not measured yet) |
+| `notebooks/4_label_comments_gpu.ipynb` | **GPU** | `chessme books-nlp-label`: labels every annotated move's comment with the trained model (concepts, verdict, who stands better) and writes a report; trial on 2,000 moves first | needs the outputs of notebooks 1 and 2 as inputs; the GPU part is short (measured on a laptop CPU with 4 threads: about 115 short comments per second, so a few hundred thousand comments take under an hour even without a GPU; longer comments are slower) |
 
 ## How to run
 

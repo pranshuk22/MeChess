@@ -112,6 +112,14 @@ the judgement head against the human glyphs (the glyph is not an input), and a s
 the labels**: they are weak labels, and only a check by eye tells whether the model-only concepts are real. The Kaggle version is
 [notebook 4](kaggle.md).
 
+### What the first trial showed (2,097 GameKnot comments, from the first 3,000 records)
+
+- The model finds most of what the lexicon finds for the common concepts (development 88%, sacrifice 83%, centre 83%, strategy 79%, tempo 77%), less for the rare ones (fork 32%, passed pawn 36%, bishop pair 36%).
+- What the model adds beyond the lexicon is **unreliable**: for 159 of 532 labelled moves the model names a concept the lexicon did not, and a read of the sample shows most are wrong or arbitrary (a comment about a pair of bishops labelled *initiative*, a king walk labelled *centre*, agreement with the lexicon of only 10% for *initiative*, 12% for *discovered*, 10% for *isolated pawn*, 0% for *combination*).
+- The concepts where the model agrees with the lexicon on at least 80% of its own predictions (development 95%, tempo 89%, endgame 86%, sacrifice 83%, strategy 81%, weak squares 100%) are the ones whose model-only labels can be trusted.
+
+So when building training data for the position model, use the **lexicon concepts** as the labels and add a model-only concept **only for concepts whose agreement in `label_stats.json` is at least 0.8 with enough support**; treat every other model-only label as noise. This is a sample from one source; the full run's report gives the numbers over all sources. Speed: about 115 short comments per second on a laptop CPU.
+
 ## Other commands
 
 `books-fetch` (books only), `books-studies` (export public Lichess studies by author or id; one request at a time), `books-pdf` (PDFs you own,
