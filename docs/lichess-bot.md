@@ -123,6 +123,18 @@ So the opening is clearly yours (42% against 17% for generic theory), while your
 middlegame: real but small, as the style analysis predicted. The error of 800 positions is about a point, and a paired significance test is not
 included. The clock and the blunders you make are not modelled, which is why the bot cannot match the 32% of your moves that lie outside the engine's window.
 
+### Choosing the strength in the game chat
+
+Type `!elo 1500` in a game's chat and the bot plays at about that Elo from its next move, for that game only (the next game starts again at the `Elo`
+in `config.yml`). `!elo` alone says what it is now; `!help` lists it. Values are clamped to 900-2400, the range the dial was measured over (the reply says so
+when it had to clamp), and at most 5 changes per game are accepted. Whoever is in the game's chat can use it, in practice the opponent.
+
+lichess-bot has no custom chat commands, so `tools/patch_lichess_bot_chat.py` adds the command to your local checkout (`python3 tools/patch_lichess_bot_chat.py
+bot/lichess-bot`; it keeps a backup, is safe to repeat, refuses a file that does not look as expected, and `--revert` undoes it). An upgrade of lichess-bot that
+overwrites `lib/conversation.py` needs the script once more. lichess-bot stays a separate program: nothing of it is copied into this repository. The command
+sets the engine's `Elo` option, which is the measured Elo when the bot runs with `--calibration`; it is tested against a stand-in for lichess-bot's
+conversation class and, by hand, against python-chess talking to the bot's real engine script.
+
 ### Widening the candidate window did not help
 
 The 32% of your moves that the engine's candidates miss are your mistakes and unusual moves. Widening the window (window x1.5 to x4 with 1 to 6 extra
