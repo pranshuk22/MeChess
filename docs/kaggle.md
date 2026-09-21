@@ -43,7 +43,7 @@ The same on a laptop: `python -m chessme books-nlp-label --data data/books_learn
 ## Lessons from the first real runs
 
 - A **committed** run keeps its output only if it finishes, so every long job has a time budget that ends it before Kaggle's 12-hour limit.
-- The first explorer run ended silently after about an hour at 4% of its plan; the likely cause was the download connection closing. The reader
+- The second explorer run (11 hours) stopped at 31.5 million games: every connection lasts about 17 minutes and a reconnect re-reads the file from the start (details in [opening-explorer.md](opening-explorer.md)). The first run ended silently after about an hour at 4% of its plan; the likely cause was the download connection closing. The reader
   now detects a short download and reconnects (see [opening-explorer.md](opening-explorer.md)).
 - The log of a GPU run is worth reading while it runs: the first version showed a noisy total loss that hid the real signals, so the log now shows
   each head's loss and a validation check every 1,000 steps.

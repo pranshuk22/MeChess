@@ -61,13 +61,23 @@ The first Kaggle run scanned 4.0 million games (3.83 million counted): 47 millio
 checkpoint should stay near 1.1-1.5 GB (the entry cap) and the database at a few hundred MB (**estimates**; growth was measured only up to 47
 million entries).
 
-## Known issue from the first run
+## Second run: 31.5 million games, and why it stopped there
 
-That run ended after about 62 minutes at game 4,025,876, silently, out of a planned 100 million. Reading the file locally with the same code went
-past 4.3 million games, so the file is fine; the likely cause is the download connection closing (Python's HTTP client returns an empty read on
-an early close). The reader now detects a short download and reconnects; **this has been tested with simulated drops and a truncated
-download, not against a real hourly disconnect**. The run's counts are exact for the games it did scan, and the checkpoint is compatible: rerunning
-with the earlier output as an input resumes from game 4,025,876.
+The second run (11.2 hours, resumed from the first) scanned 31,473,620 games of `lichess_db_standard_rated_2026-06` (about 36% of the month; 9.16 million
+counted): 51.5 million entries, 11 GB of memory, a 1.09-million-row database and a 1.0 GB checkpoint. Bands from 800 to 2400 reached the 1,000,000-game cap
+(each over its own window of the scan); the thin ones are under 800 (422,000 games), 2400-2600 (515,000) and 2600+ (219,000). Book coverage of the games
+in each band is 62-76% through 4 plies, 14-47% through 8, and at most 18% through 12 plies.
+
+The reader reconnected **39 times**, and this is the limit of the design: every connection ended after about 17 minutes, and a reconnect re-reads the
+file from the start to skip the games already counted. Past about 10.3 GB of the 28.2 GB file that skip alone fills the 17 minutes, so the last six
+reconnects (about two hours) added only 70,000 games. **The scan cannot go further than roughly 31 million games with this design**, however long it runs.
+On the held-out games of a player the 31-million-game theory books cover their moves the same as the 4-million-game ones (39% of a player's first 20
+plies; the difference is under a point): the books are limited by their thresholds and depth, not by the number of games.
+
+What the file offers for a better design (checked on its first 200 MB): the server accepts range requests, and the `.zst` is a sequence of independent
+frames of about 4.7 MB (each preceded by a small skippable frame), so a range can start at a frame boundary and be decoded on its own. Counts are additive, so the month
+can be cut into byte ranges that are counted independently, in parallel, and merged; a range that fails is simply repeated, nothing is re-read from
+the start, and ranges spread over the whole month remove the bias of scanning only its first third.
 
 ## Limits
 
