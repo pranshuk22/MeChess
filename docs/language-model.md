@@ -120,6 +120,20 @@ the labels**: they are weak labels, and only a check by eye tells whether the mo
 
 So when building training data for the position model, use the **lexicon concepts** as the labels and add a model-only concept **only for concepts whose agreement in `label_stats.json` is at least 0.8 with enough support**; treat every other model-only label as noise. This is a sample from one source; the full run's report gives the numbers over all sources. Speed: about 115 short comments per second on a laptop CPU.
 
+### The full labelling run (Kaggle notebook 4, T4 GPU)
+
+727,184 annotated moves with a readable comment were labelled (about 1,700 comments per second): 192,464 have a lexicon concept, 169,561 a model concept, 60,786 a
+concept only the model found. The 727k records are only **326k distinct (position, move)** pairs, because the same annotated games come from several sources
+(ChessGPT's set overlaps GameKnot and others): deduplicate before training. The verdict head matches the human glyph on 91.2% of the 35,389 glyph-labelled moves,
+but the model was trained on these comments, so that is in-sample; the held-out figure is the test accuracy of 72%.
+
+With the rule above (a model-only concept counts only where the model agrees with the lexicon on at least 80% of its predictions, with 500 or more predictions)
+seven concepts qualify: development, endgame, prophylaxis, sacrifice, simplification, strategy and weak squares. The rule adds **89 labelled moves** to the
+192,464 the lexicon already labels, so in practice **the language model adds no usable concept labels beyond the lexicon**; what it offers is the verdict and
+evaluation heads and a check of the lexicon (its worst agreement is on isolated pawn 16%, discovered attack 22%, initiative 34%, bishop pair 39%). The
+position-to-concept model would therefore be trained on the lexicon labels, with the concepts the lexicon finds reliably (its precision was not measured; the
+model's agreement suggests development, sacrifice, simplification, prophylaxis and weak squares are the safest).
+
 ## Other commands
 
 `books-fetch` (books only), `books-studies` (export public Lichess studies by author or id; one request at a time), `books-pdf` (PDFs you own,
