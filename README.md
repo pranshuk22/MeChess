@@ -1,5 +1,7 @@
 # MeChess
 
+<p align="center"><img src="docs/assets/banner.svg" alt="MeChess: an engine that plays like you" width="100%"></p>
+
 **A chess engine that plays like *you*, at a rating you choose, trained on your own games.**
 
 MeChess is a source-available, config-driven research project (free for research, learning and other non-commercial use): a C++ alpha-beta engine, a Python
@@ -8,9 +10,9 @@ a controller that combines them into one UCI engine with an Elo dial. Anyone can
 own Lichess / chess.com accounts and train a personal model; nothing about a person is built into
 the code.
 
-> **Status: research prototype.** The engine, data pipeline, opening book, move-prediction model,
-> controller and style analysis work and are tested. The Elo dial is *not calibrated yet* and there
-> is no packaged release. See the [roadmap](docs/roadmap.md) for what is done and what is next.
+> **Status: research prototype.** The engine, data pipeline, opening book, move-prediction model, controller, game analysis, opening explorer
+> and style analysis work and are tested. The Elo dial has been redesigned (search depth is now a knob) and is **being recalibrated**, so treat
+> its ratings as unmeasured; there is no packaged release. See the [roadmap](docs/roadmap.md) for what is done and what is next.
 
 ## What it does
 
@@ -21,7 +23,12 @@ the code.
 | **Opening book** (`chessme/book`) | A position graph of *your* repertoire with frequencies; the engine can play it (`OwnBook`) | working |
 | **"Me" model** (`chessme/model`) | A small residual conv net that predicts the move you would play at a given rating; C++ inference; comparison harness against Maia-2 / Maia-3 | working |
 | **Controller** (`chessme/mechess`) | A UCI engine: opening book, then engine candidate moves, then a prior picks among them; Elo dial | working, dial uncalibrated |
-| **Style analysis** (`chessme/style`) | Measures *which of several equally good moves* a player tends to choose (28 theory-based features), compares with a rating-matched population, a cohort of players, and famous "anchor" players | experimental |
+| **Style analysis** (`chessme/style`) | Measures *which of several equally good moves* a player tends to choose (28 theory-based features), plus game-level features (openings, clock use, game shape) and a learned player embedding; compared with a rating-matched population, a cohort of players, and famous "anchor" players. The reliably personal parts are the opening repertoire and clock habits; move-choice "style" is small and hard to measure | experimental |
+| **Game analysis** (`chessme/analysis`) | `chessme analyse`: every move of your games classed (Book, Brilliant, Great, Best ... Blunder) from Stockfish evaluations, accuracy by phase, biggest mistakes, resumable | working; class rules are our reading of public descriptions |
+| **Opening explorer and theory books** (`chessme/book`) | A Lichess-style explorer built from the CC0 game database for every rating range (games, White / draw / Black, average rating, engine evaluation, top games) and a playable theory book per band | working; first run partial ([details](docs/opening-explorer.md)) |
+| **Books, annotated games and a text model** (`chessme/books`) | Reads 100+ public-domain chess books and several annotated-game sources (glyphs `! ? !!`, evaluation symbols), and trains a small language model on the comments (concepts, move judgement, evaluation) | working; model quality still being measured |
+| **Lichess bot** | Runs MeChess as a bot account through `lichess-bot` (external) | working; needs the recalibrated dial |
+| **Kaggle notebooks** (`notebooks/`) | Thin adapters that run the collection, training and explorer jobs on Kaggle (CPU or GPU) | working |
 | **Tuning / matches** | Texel tuner, match runner with SPRT, self-play data | working (tuning gave no gain so far) |
 
 ## Quick start
@@ -54,6 +61,13 @@ engine/build/chessme-engine                                   # plain engine, sp
 .venv/bin/python -m chessme mechess --elo 1600 --prior uniform  # controller, speaks UCI
 ```
 
+Analyse your own games (Stockfish needed) and look positions up in an opening explorer:
+
+```bash
+.venv/bin/python -m chessme analyse my_games.pgn --player MyName          # move classes, accuracy, report
+.venv/bin/python -m chessme explorer-query data/explorer/explorer.db --rating 1500 --fen "<FEN>"   # after building or downloading an explorer
+```
+
 More: [getting started](docs/getting-started.md), [every command](docs/cli.md).
 
 ## How it fits together
@@ -80,6 +94,11 @@ Details in [docs/architecture.md](docs/architecture.md).
 - [Lichess bot](docs/lichess-bot.md): running MeChess as a bot account, token handling, comparing the dial with Lichess ratings
 - [Strength and the Elo dial](docs/calibration.md): measuring strength against Stockfish, calibrating the dial
 - [Style analysis](docs/style-analysis.md): the method, the datasets, the tests, the limits
+- [Game analysis](docs/game-analysis.md): move classes, accuracy, the `analyse` report
+- [Opening explorer and theory books](docs/opening-explorer.md): what is collected, the conditions, the output formats, robustness
+- [Books, annotated games and the language model](docs/language-model.md): sources, the notation and glyph reader, the model, results so far
+- [Running on Kaggle](docs/kaggle.md): the three notebooks, quotas, checkpoints, resuming
+- [Training resources](docs/training-resources.md): every source with its terms and how it was verified
 - [Data sources and privacy](docs/data-sources.md): where games come from, terms, what is stored
 - [Running long jobs](docs/operations.md): memory guard, logs, resuming, laptops that sleep
 - [Architecture](docs/architecture.md), [Testing](docs/testing.md), [Third-party software](docs/third-party.md), [Roadmap](docs/roadmap.md)
