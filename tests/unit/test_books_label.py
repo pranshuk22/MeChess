@@ -183,3 +183,30 @@ def test_a_missing_transformers_package_gives_a_clear_message(monkeypatch):
     monkeypatch.setitem(sys.modules, "transformers", None)                          # makes `import transformers` fail
     with pytest.raises(ImportError, match="pip install transformers"):
         N.TransformerEncoder("any-model")
+
+
+def test_a_model_dir_may_be_the_outputs_top_folder_or_the_model_folder(tmp_path):
+    top = tmp_path / "input" / "train-output"
+    (top / "learn" / "nlp").mkdir(parents=True)
+    (top / "learn" / "nlp" / "model.pt").write_bytes(b"x")
+    (top / "learn" / "nlp" / "config.json").write_text("{}")
+    (top / "MeChess").mkdir()
+    assert KG.resolve_model(top) == top / "learn" / "nlp"                       # the folder named in the failed Kaggle run
+    assert KG.resolve_model(top / "learn" / "nlp") == top / "learn" / "nlp"
+    assert KG.resolve_model(tmp_path / "nothing") is None
+    (top / "learn" / "nlp" / "config.json").unlink()
+    assert KG.resolve_model(top) is None                                        # a model.pt without its config is not a model
+
+
+def test_prepare_label_accepts_the_top_folder_and_names_what_it_found_when_it_fails(tmp_path):
+    root = tmp_path / "input"
+    (root / "data" / "annotated").mkdir(parents=True)
+    (root / "data" / "annotated" / "annotated_moves.jsonl.gz").write_bytes(b"")
+    top = root / "train-output"
+    (top / "learn" / "nlp").mkdir(parents=True)
+    (top / "learn" / "nlp" / "model.pt").write_bytes(b"x")
+    with pytest.raises(FileNotFoundError, match=r"\.pt files found there: \['learn/nlp/model.pt'\]"):
+        KG.prepare_label(tmp_path / "out", root, data_dir=str(root / "data"), model_dir=str(top), log=lambda *_: None)      # no config.json yet
+    (top / "learn" / "nlp" / "config.json").write_text("{}")
+    r = KG.prepare_label(tmp_path / "out", root, data_dir=str(root / "data"), model_dir=str(top), log=lambda *_: None)
+    assert r["model"] == str(top / "learn" / "nlp")

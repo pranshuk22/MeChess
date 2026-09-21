@@ -96,6 +96,18 @@ def find_model(input_root):
     return Path(found[0]).parent if found else None
 
 
+def resolve_model(path, log=print):
+    """The model folder for `path`: the folder itself if it holds model.pt and config.json, otherwise the (first, in name order) such folder found under it,
+    so the notebook output's top folder works as well as its `learn/nlp` subfolder. None when there is none."""
+    p = Path(path)
+    if (p / "model.pt").exists() and (p / "config.json").exists():
+        return p
+    found = sorted(f.parent for f in p.rglob("model.pt") if (f.parent / "config.json").exists())
+    if len(found) > 1:
+        log(f"several models under {p}: {[str(f) for f in found]}; using {found[0]} (name the folder exactly to choose)")
+    return found[0] if found else None
+
+
 def prepare_label(out, input_root="/kaggle/input", data_dir=None, model_dir=None, log=print):
     """Locate the annotated moves and the trained model for `books-nlp-label`, and restore the partial output of an interrupted run found among
     the inputs. Raises before any GPU time is spent when something is missing. Returns {"annotated", "model", "resumed_from"}."""
@@ -103,9 +115,12 @@ def prepare_label(out, input_root="/kaggle/input", data_dir=None, model_dir=None
     data = find_data(root)
     if data is None:
         raise FileNotFoundError(f"no annotated_moves.jsonl.gz under {root}: add the collection notebook's output as an input (or set DATA_DIR)")
-    model = Path(model_dir) if model_dir else find_model(input_root)
-    if model is None or not (Path(model) / "model.pt").exists():
-        raise FileNotFoundError(f"no trained model (nlp/model.pt with config.json) under {input_root}: add the training notebook's output as an input (or set MODEL_DIR)")
+    where = model_dir or input_root
+    model = resolve_model(model_dir, log) if model_dir else find_model(input_root)
+    if model is None:
+        seen = sorted(str(p.relative_to(where)) for p in Path(where).rglob("*.pt"))[:8] if Path(where).exists() else []
+        raise FileNotFoundError(f"no trained model (a folder with model.pt and config.json) under {where} (.pt files found there: {seen or 'none'}): add the training "
+                                "notebook's output as an input, or set MODEL_DIR to that output's folder")
     out = Path(out)
     resumed = None
     have = (out / "labelled.jsonl.gz.part").exists() or (out / "labelled.jsonl.gz").exists()
