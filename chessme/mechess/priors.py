@@ -40,3 +40,24 @@ class Maia3Prior:
         moves = tuple(m.uci() for m in board.move_stack)
         item = EvalItem(board.fen(), "", int(elo), int(opp_elo), platform, len(moves), moves if board.root() == chess.Board() else ())
         return {chess.Move.from_uci(u): p for u, p in self.scorer.probs([item])[0].items()}
+
+
+class StylePrior:
+    """Your move-choice taste (the fitted style model, see chessme.style.model): among legal moves, a move is the more likely the more it has
+    what you seek (forcing moves, trades, king attacks, pawn breaks ...) and the less it has what you avoid. The strength of play is the
+    controller's job (the search window and the dial), so the model's own strength term is not used here. `strength` scales the weights."""
+
+    def __init__(self, path, strength=1.0):
+        from ..style.model import load_model
+        self.model, self.strength = load_model(path), float(strength)
+
+    def __call__(self, board, elo, opp_elo, platform):
+        import numpy as np
+
+        from ..style.features import feature_vector
+        moves = list(board.legal_moves)
+        z = (np.array([feature_vector(board, m) for m in moves], dtype=float) - self.model.mean) / self.model.std
+        s = self.strength * (z @ self.model.w)
+        p = np.exp(s - s.max())
+        p /= p.sum()
+        return dict(zip(moves, p.tolist()))

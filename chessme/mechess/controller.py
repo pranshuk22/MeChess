@@ -1,6 +1,7 @@
 """MeChess move selection: opening book -> engine-approved candidate moves -> a prior picks among them.
 
-    1. Book: while inside the book (and inside the dial's book depth) play my own repertoire, sampled by my frequencies.
+    1. Book: while inside the book (and inside the dial's book depth) play the books in priority order (my own repertoire, then theory for the
+       level), sampled by their frequencies.
     2. Candidates: the alpha-beta engine (MultiPV) returns its best lines; keep those within the dial's window of the best.
     3. Prior: a policy model (mine, or a personalised Maia-3) says which of them I would play.
     4. Choice: sample with weight  prior^(1/T) * exp(-loss / cp_scale)  (loss = centipawns below the best candidate).
@@ -27,14 +28,59 @@ class BookReader:
         for e in read_book(path):
             self.by_key.setdefault(e.key, []).append(e)
 
-    def moves(self, board):
-        """[(legal move, weight)] the book has for `board`."""
+    def moves(self, board, elo=None):
+        """[(legal move, weight)] the book has for `board` (`elo` is accepted so every book has the same call; a single book ignores it)."""
         out = []
         for e in self.by_key.get(book_key(board), []):
             move = chess.Move(e.from_sq, e.to_sq, e.promo or None)
             if move in board.legal_moves:
                 out.append((move, e.weight))
         return out
+
+
+class TheoryBands:
+    """A folder of theory books `theory_LO_HI.bin` (one per rating band): the band that holds the Elo being played is used, and loaded once."""
+
+    def __init__(self, directory):
+        from ..book.theory import pick_book
+        self.directory, self._pick, self._readers = directory, pick_book, {}
+
+    def moves(self, board, elo=None):
+        path = self._pick(self.directory, elo or 1500)
+        if path is None:
+            return []
+        if path not in self._readers:
+            self._readers = {path: BookReader(path)}     # keep one band in memory: a game is played at one Elo
+        return self._readers[path].moves(board)
+
+
+class BookStack:
+    """Several books in priority order: the first one that knows the position decides (your own repertoire, then theory for the level)."""
+
+    def __init__(self, books):
+        self.books = list(books)
+
+    def moves(self, board, elo=None):
+        for b in self.books:
+            options = b.moves(board, elo)
+            if options:
+                return options
+        return []
+
+
+def load_books(spec):
+    """A book from `spec`: paths separated by commas, in priority order; a folder means a set of rating-band theory books."""
+    from pathlib import Path
+    books = []
+    for part in (x.strip() for x in str(spec).split(",")):
+        if not part:
+            continue
+        if not Path(part).exists():
+            raise FileNotFoundError(f"book not found: {part}")
+        books.append(TheoryBands(part) if Path(part).is_dir() else BookReader(part))
+    if not books:
+        return None
+    return books[0] if len(books) == 1 else BookStack(books)
 
 
 @dataclass
@@ -78,7 +124,7 @@ class MeChess:
 
         # 1. opening book
         if self.book is not None and len(board.move_stack) < settings.book_plies:
-            options = self.book.moves(board)
+            options = self.book.moves(board, elo)
             if options:
                 move = self._sample([m for m, _ in options], [w for _, w in options], settings.temperature)
                 return Choice(move, "book", [Candidate(m, 0, prior=w) for m, w in options])

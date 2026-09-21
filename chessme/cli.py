@@ -1001,6 +1001,22 @@ def cmd_style_report(args):
     print(f"\nreadable report written to {args.out}")
 
 
+def cmd_style_model_fit(args):
+    from .style import candidates as SC, model as SM
+    train, test = SC.load(Path(args.data) / "train.npz"), SC.load(Path(args.data) / "test.npz")
+    m = SM.fit(train, l2=args.l2)
+    r = SM.evaluate(m, test)
+    print(f"held-out choices among approved moves: {r['n']}")
+    for k in ("style", "loss_only", "uniform"):
+        print(f"  {k:10s} NLL {r[k]['nll']:.3f}  top-1 {100 * r[k]['top1']:.1f}%")
+    gain = r["loss_only"]["nll"] - r["style"]["nll"]
+    print(f"style beats the strength-only model by {gain:+.3f} NLL per decision on held-out games")
+    full = SM.fit(train + test, l2=args.l2, standardise=(m.mean, m.std))   # the saved model uses every decision
+    SM.save_model(full, args.out, n=len(train) + len(test), judge=SC.judge_of(Path(args.data) / "train.npz"),
+                  held_out_nll_gain=round(gain, 4), held_out_n=r["n"])
+    print(f"style model ({len(train) + len(test)} decisions) written to {args.out}; use it with: chessme mechess --prior style={args.out}")
+
+
 def cmd_me_compare(args):
     import gc
     import time
@@ -1083,7 +1099,7 @@ def cmd_me_maia3_ft(args):
 
 def cmd_mechess(args):
     from .mechess import priors
-    from .mechess.controller import BookReader, MeChess
+    from .mechess.controller import MeChess, load_books
     from .mechess.uci import MechessUci
     from .uci_client import UciEngine
 
@@ -1092,18 +1108,15 @@ def cmd_mechess(args):
         prior = priors.OursPrior(path)
     elif kind == "maia3":
         prior = priors.Maia3Prior(args.maia3_repo, path, args.maia3_size, extra_paths=[args.extra_path] if args.extra_path else [])
+    elif kind == "style":
+        prior = priors.StylePrior(path, strength=args.style_strength)
     elif kind == "uniform":
         prior = priors.UniformPrior()
     else:
-        raise SystemExit("--prior must be uniform, ours=CHECKPOINT or maia3=CHECKPOINT")
+        raise SystemExit("--prior must be uniform, ours=CHECKPOINT, maia3=CHECKPOINT or style=MODEL.json")
     engine = UciEngine([args.engine]).start()
     try:
-        book_path = args.book
-        if book_path and Path(book_path).is_dir():                       # a folder of theory books: pick the band of the target Elo
-            from .book import theory as _TH
-            book_path = _TH.pick_book(book_path, args.elo)
-            print(f"theory book for Elo {args.elo}: {book_path}", file=sys.stderr)
-        book = BookReader(book_path) if book_path else None
+        book = load_books(args.book) if args.book else None
         from .mechess.calibration import Calibration
         cal = Calibration.load(args.calibration) if args.calibration else None
         from .mechess import dial
@@ -1520,6 +1533,11 @@ def main():
     sj = sub.add_parser("style-judge-compare", help="how much does the judge engine change the style data? (two dataset folders)")
     sj.add_argument("a"); sj.add_argument("b")
     sj.set_defaults(func=cmd_style_judge_compare)
+    sm = sub.add_parser("style-model-fit", help="fit your style model on a style-data folder and save it for the bot (mechess --prior style=FILE)")
+    sm.add_argument("--data", required=True, help="folder from style-data (train.npz, test.npz)")
+    sm.add_argument("--out", required=True)
+    sm.add_argument("--l2", type=float, default=1.0)
+    sm.set_defaults(func=cmd_style_model_fit)
     sr = sub.add_parser("style-report", help="fit the style model on the training positions, evaluate on the test ones")
     sr.add_argument("--data", default="data/style/example"); sr.add_argument("--l2", type=float, default=1.0)
     sr.add_argument("--baseline", help="folder from style-pop-data: report the player's weights relative to it")
@@ -1529,8 +1547,10 @@ def main():
     mch = sub.add_parser("mechess", help="run MeChess as a UCI engine (book + engine candidates + prior + rating dial)")
     mch.add_argument("--table", help="dial table file (JSON {elo: [nodes, multipv, window, temperature, cp_scale, book_plies, blunder_rate, depth]})")
     mch.add_argument("--calibration", help="calibration file from `chessme calibrate`: --elo / the Elo option then mean the measured Elo")
-    mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book")
-    mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT")
+    mch.add_argument("--engine", default=str(ENGINE_BIN)); mch.add_argument("--book", help="opening books in priority order, comma-separated; a folder holds one theory book per rating band "
+                                                                 "(e.g. your own book.bin,data/explorer)")
+    mch.add_argument("--prior", default="uniform", help="uniform | ours=CHECKPOINT | maia3=CHECKPOINT | style=MODEL.json (from style-model-fit)")
+    mch.add_argument("--style-strength", type=float, default=1.0, help="how strongly the style prior counts: 0 = none, 1 = as fitted")
     mch.add_argument("--maia3-repo"); mch.add_argument("--maia3-size", default="5m"); mch.add_argument("--extra-path")
     mch.add_argument("--elo", type=int, default=1800); mch.add_argument("--seed", type=int, default=0)
     mch.set_defaults(func=cmd_mechess)

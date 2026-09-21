@@ -205,3 +205,22 @@ def style_gain_by_band(positions, edges, seed=0, l2=1.0):
         base = evaluate(fit(train, l2=1e6, standardise=std), test)["style"]
         out.append((lo, hi, len(band), base["nll"] - full["nll"], full["top1"] - base["top1"]))
     return out
+
+
+def save_model(model, path, **meta):
+    """Write a fitted model as JSON (feature names, standardisation, weights, strength coefficient) with free-form `meta` (counts, judge)."""
+    import json
+    from pathlib import Path
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({"names": list(model.names), "mean": model.mean.tolist(), "std": model.std.tolist(),
+                                      "w": model.w.tolist(), "loss_coef": model.loss_coef, "meta": meta}, indent=1))
+
+
+def load_model(path):
+    """The model written by `save_model`; refuses a file whose feature list differs from the current one (the weights would mean something else)."""
+    import json
+    from pathlib import Path
+    d = json.loads(Path(path).read_text())
+    if tuple(d["names"]) != tuple(FEATURE_NAMES):
+        raise ValueError(f"{path}: the style model was fitted with other features; refit it with style-model-fit")
+    return StyleModel(np.array(d["mean"]), np.array(d["std"]), np.array(d["w"]), float(d["loss_coef"]), tuple(d["names"]))
