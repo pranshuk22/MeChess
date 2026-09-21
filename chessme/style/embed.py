@@ -104,6 +104,16 @@ def sample_batch(games_norm, idx, rng, batch, bag):
     return tuple(torch.from_numpy(x) for x in (A, mA, B, mB))
 
 
+def load(out_dir):
+    """(model, normaliser, cfg) of a trained embedding (`out_dir/ckpt.pt`), ready for `embed_bags`."""
+    st = torch.load(Path(out_dir) / "ckpt.pt", weights_only=False)
+    norm = Normaliser.from_state(st["norm"])
+    model = BagEncoder(norm.dim, st["cfg"]["hidden"], st["cfg"]["dim"])
+    model.load_state_dict(st["model"])
+    model.eval()
+    return model, norm, st["cfg"]
+
+
 # ---- evaluation ------------------------------------------------------------------------------------------------------
 
 def embed_bags(model, games_norm, idx, parity):

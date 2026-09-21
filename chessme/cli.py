@@ -430,6 +430,32 @@ def cmd_style_anchors_fetch(args):
     print(f"next: chessme style-cohort-analyze --out {args.out} --engine stockfish")
 
 
+def cmd_style_anchors_games(args):
+    import yaml
+
+    from .style import anchor_games as AG
+    cfg = yaml.safe_load(Path(args.config).read_text())
+    log = _file_logger(args.log)
+    log(f"=== style-anchors-games {' '.join(sys.argv[2:])}")
+    st = AG.fetch(cfg, args.out, args.tmp, files_dir=args.files, only=set(args.only) if args.only else None, max_games=args.max_games, pause=args.pause,
+                  keep_raw=args.keep_raw, log=log)
+    log(f"{st['done']} anchors done; missing: {st['missing'] or 'none'}; too few games: {st['short'] or 'none'}")
+    print(f"next: chessme style-anchors-games-report --data {args.out}")
+
+
+def cmd_style_anchors_games_report(args):
+    from .style import anchor_games as AG, embed as EM, games_fetch as GF
+    anchors = GF.load_players(args.data, min_games=AG.MIN_GAMES)
+    if len(anchors) < 8:
+        sys.exit(f"only {len(anchors)} anchors in {args.data}: run style-anchors-games first")
+    model, norm, _ = EM.load(args.embed)
+    cohort = GF.load_players(args.cohort, min_games=30) if args.cohort and (Path(args.cohort) / "games").exists() else None
+    res = AG.evaluate(anchors, model, norm, cohort=cohort)
+    text = AG.render(res)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_style_anchors_verify(args):
     import yaml
 
@@ -1581,6 +1607,17 @@ def main():
     sm.add_argument("--out", required=True)
     sm.add_argument("--l2", type=float, default=1.0)
     sm.set_defaults(func=cmd_style_model_fit)
+    ag = sub.add_parser("style-anchors-games", help="game-level features (openings, game shape) of the anchors' peak-year games; resumable, one anchor at a time, archives deleted")
+    ag.add_argument("--config", default="configs/anchors.yaml"); ag.add_argument("--out", default="data/style/anchors_games")
+    ag.add_argument("--tmp", default="data/anchors_raw"); ag.add_argument("--files", help="folder with your own <key>.pgn / .zip files, used instead of a download")
+    ag.add_argument("--only", nargs="+"); ag.add_argument("--max-games", type=int, default=100); ag.add_argument("--pause", type=float, default=1.0)
+    ag.add_argument("--keep-raw", action="store_true"); ag.add_argument("--log", default="data/style/logs/anchors_games.log")
+    ag.set_defaults(func=cmd_style_anchors_games)
+    agr = sub.add_parser("style-anchors-games-report", help="can the game-level features and the trained embedding tell the anchors apart? (and do they see era, not style?)")
+    agr.add_argument("--data", default="data/style/anchors_games"); agr.add_argument("--embed", default="data/style/embed")
+    agr.add_argument("--cohort", default="data/style/cohort2", help="the online cohort's game-level folder (adds the format comparison)")
+    agr.add_argument("--out", default="data/style/anchors_games_report.md")
+    agr.set_defaults(func=cmd_style_anchors_games_report)
     sr = sub.add_parser("style-report", help="fit the style model on the training positions, evaluate on the test ones")
     sr.add_argument("--data", default="data/style/example"); sr.add_argument("--l2", type=float, default=1.0)
     sr.add_argument("--baseline", help="folder from style-pop-data: report the player's weights relative to it")

@@ -59,6 +59,7 @@ depend on the feature set and the amount of data and will change with either.
   (about 0.3); then mobility, pawn pushes and pawn breaks (0.14 to 0.19). Most other preferences have reliability under 0.1.
 - **Anchors cannot be told apart.** A 35-way classification of held-out chunks from the famous anchor players is at chance
   (3%), so claims such as "closest to player X" are not supported by these features at this data volume.
+- **Anchors and the game-level features / embedding.** `style-anchors-games` and `style-anchors-games-report` ask the same identification question of the anchors with the newer features (openings and game shape; the classical over-the-board files have no clocks) and with the embedding trained on the online cohort, and check whether the embedding sees era and format instead of style. The result is in the results section below once it has been run.
 - **Consequence.** Do not describe a player as "aggressive" or "positional" from these features alone. The parts of "plays like
   me" that are clearly personal are the opening repertoire, the move-prediction model fine-tuned on the player's games, time use, and
   how much the player cares about strength.
