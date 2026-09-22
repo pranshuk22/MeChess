@@ -17,9 +17,20 @@ from pathlib import Path
 MARK = "# MeChess !elo"
 RANGE = (900, 2400)          # about the range the dial was measured over
 CHANGES = 5
+CHAT_LIMIT = 140             # lib/lichess.py's MAX_CHAT_MESSAGE_LEN: lichess-bot silently drops (does not send) anything longer
+
+# The upstream !help/!commands text (both adjacent string literals, concatenated) plus what we add for !elo. Built from
+# pieces and length-checked below rather than hand-typed twice, so a longer HELP_ADDED can never silently ship
+# a !help reply that lichess-bot drops for being over CHAT_LIMIT (github issue: this exact bug, fixed 2026-09-23).
+HELP_BASE = ("Supported commands: !wait (wait a minute for my first move), !name, "
+             "!eval (or any text starting with !eval), !queue")
+HELP_ADDED = ", !elo N"
+assert len(HELP_BASE + HELP_ADDED) <= CHAT_LIMIT, \
+    f"the patched !help message would be {len(HELP_BASE + HELP_ADDED)} chars, over lichess-bot's {CHAT_LIMIT}-char chat limit " \
+    "(it would be silently dropped, not sent) - shorten HELP_ADDED"
 
 HELP_OLD = '"!eval (or any text starting with !eval), !queue")'
-HELP_NEW = '"!eval (or any text starting with !eval), !queue, !elo N (change my strength for this game)")'
+HELP_NEW = HELP_OLD[:-2] + HELP_ADDED + '")'
 BRANCH_ANCHOR = '        elif cmd == "wait" and self.game.is_abortable():'
 BRANCH = f'        elif cmd.split()[0] == "elo":  {MARK}\n            self.set_elo(line, cmd)\n'
 METHOD_ANCHOR = "    def send_reply(self, line: ChatLine, reply: str) -> None:"

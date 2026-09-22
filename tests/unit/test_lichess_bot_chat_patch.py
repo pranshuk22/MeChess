@@ -130,6 +130,16 @@ def test_patched_file_still_works_for_the_other_commands(bot_dir):
     assert li.sent[0] == "name" and "!elo N" in li.sent[1] and "!wait" in li.sent[1]
 
 
+def test_the_help_reply_fits_lichess_chat_limit(bot_dir):
+    # Regression: the !elo addition used to push !help/!commands past lichess-bot's 140-char chat limit, so
+    # lichess-bot silently dropped it (logged a warning, never sent it) - this failed before the HELP_ADDED fix.
+    P.main([str(bot_dir)])
+    mod = load(bot_dir)
+    conv, li = conversation(mod, FakeEngine())
+    say(mod, conv, "!help")
+    assert len(li.sent[-1]) <= P.CHAT_LIMIT
+
+
 def test_elo_sets_the_engine_option_and_answers(bot_dir):
     P.main([str(bot_dir)])
     mod = load(bot_dir)
