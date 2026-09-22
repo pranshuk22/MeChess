@@ -735,6 +735,21 @@ def cmd_report_select(args):
           + (f"; {len(missing)} not found in the raw files" if missing else ""))
 
 
+def cmd_report_leaks(args):
+    """Personal report step 2: rank where expected points are lost (opening or phase) and test whether that ranking is stable
+    across a split-half of the games, from an `analyse` output directory."""
+    from .analysis import leaks as LK
+    results = LK.load_results(args.dir)
+    if not results:
+        sys.exit(f"no analysed games in {args.dir}/games (run `chessme analyse` first)")
+    stab = LK.stability(results, by=args.by, min_n=args.min_n)
+    text = LK.render(stab)
+    print(text)
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(text)
+
+
 def _stoppable(items, ctl):
     """Yield the items, checking the pause / stop controls before each (raises Stopped)."""
     for it in items:
@@ -1688,6 +1703,12 @@ def main():
     rs.add_argument("--per-class", type=int, help="this many newest games of each time class instead of --n overall")
     rs.add_argument("--time-classes", nargs="+"); rs.add_argument("--since", help="only games from this ISO date on"); rs.add_argument("--out", default="data/analysis/games.pgn")
     rs.set_defaults(func=cmd_report_select)
+    rl = sub.add_parser("report-leaks", help="personal report step 2: rank where expected points are lost (opening/phase) and test the ranking's split-half stability")
+    rl.add_argument("--dir", default="data/analysis", help="an `analyse` output directory (reads dir/games/*.json)")
+    rl.add_argument("--by", choices=["opening", "phase"], default="opening")
+    rl.add_argument("--min-n", type=int, default=8, help="a bucket needs at least this many of your moves to be ranked")
+    rl.add_argument("--out", help="also write the report text here")
+    rl.set_defaults(func=cmd_report_leaks)
     gr = sub.add_parser("style-games-report", help="reliability, quality gate, identification and factors of the game-level features")
     gr.add_argument("--data", default="data/style/cohort2"); gr.add_argument("--min-games", type=int, default=30)
     gr.add_argument("--min-players", type=int, default=40); gr.add_argument("--seed", type=int, default=0)
