@@ -115,3 +115,32 @@ def render(stab, top=15):
         verdict = "stable enough to build on" if stab["stable"] else "NOT stable - do not build a difficulty model on this ranking yet (plan.md 8s)"
         L.append(f"Split-half stability: rank correlation {stab['correlation']:+.2f} over {stab['n_buckets_compared']} buckets ({verdict}).")
     return "\n".join(L) + "\n"
+
+
+def _bucket_phrase(key, s):
+    return f"{key} ({s['mean_loss']:.3f} expected points per move, {s['n']} moves, {s['total_loss']:.1f} total)"
+
+
+def render_english(stab, top=3):
+    """A plain-English paragraph over the same numbers `render` tables - no model, so every sentence is a direct read of
+    the computed stats (nothing here can be a claim the data does not support)."""
+    label = "opening" if stab["by"] == "opening" else "game phase"
+    table = stab["table"]
+    if not table:
+        return f"Not enough analysed games yet to rank leaks by {label}.\n"
+    rows = table[:top]
+    lead = f"Across {stab['n_games']} analysed games, the costliest {label} is {_bucket_phrase(*rows[0])}."
+    if len(rows) > 1:
+        lead += " Next: " + "; then ".join(_bucket_phrase(k, s) for k, s in rows[1:]) + "."
+    if stab["stable"] is None:
+        verdict = (f"There are not enough games yet to tell whether this ranking is real: only {stab['n_buckets_compared']} {label} "
+                   "buckets had enough moves in both halves of a split-half check. Treat it as provisional until more games are analysed.")
+    elif stab["stable"]:
+        verdict = (f"This ranking held up in a split-half check (games split into two halves, rank correlation "
+                   f"{stab['correlation']:+.2f} over {stab['n_buckets_compared']} buckets), so it looks like a real, repeatable pattern "
+                   "rather than noise from this particular batch of games.")
+    else:
+        verdict = (f"This ranking did NOT hold up in a split-half check (rank correlation {stab['correlation']:+.2f} over "
+                   f"{stab['n_buckets_compared']} buckets) - the two halves disagree about where the leaks are, so treat this as noise "
+                   "for now, not a real pattern.")
+    return lead + " " + verdict + "\n"

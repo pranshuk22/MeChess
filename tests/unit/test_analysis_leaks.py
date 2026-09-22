@@ -98,6 +98,32 @@ def test_render_reports_the_ranking_and_the_verdict():
     assert "stable enough to build on" in text
 
 
+def test_render_english_names_the_costliest_bucket_first_and_states_the_verdict():
+    stab = LK.stability(_consistent_openings(), by="opening", min_n=4)
+    text = LK.render_english(stab, top=4)
+    assert text.startswith("Across 8 analysed games, the costliest opening is A00 (0.400 expected points per move, 6 moves, 2.4 total).")
+    assert "Next: B00" in text and "D00" in text                                     # the rest of the ranking, in order
+    assert "held up in a split-half check" in text and "real, repeatable pattern" in text
+
+
+def test_render_english_says_not_stable_when_the_ranking_flips():
+    stab = LK.stability(_flipped_openings(), by="opening", min_n=4)
+    text = LK.render_english(stab)
+    assert "did NOT hold up" in text and "treat this as noise" in text
+
+
+def test_render_english_says_provisional_with_too_few_games():
+    results = [game("g1", "A00", [0.3, 0.3]), game("g2", "B00", [0.1, 0.1])]
+    stab = LK.stability(results, by="opening", min_n=2)
+    text = LK.render_english(stab)
+    assert "not enough games yet" in text or "not enough analysed games" in text
+
+
+def test_render_english_handles_an_empty_ranking():
+    stab = LK.stability([], by="opening", min_n=1)
+    assert LK.render_english(stab) == "Not enough analysed games yet to rank leaks by opening.\n"
+
+
 def test_load_results_reads_the_analyse_output_directory(tmp_path):
     d = tmp_path / "games"
     d.mkdir()
