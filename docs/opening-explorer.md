@@ -74,11 +74,6 @@ reconnects (about two hours) added only 70,000 games. **The scan cannot go furth
 On the held-out games of a player the 31-million-game theory books cover their moves the same as the 4-million-game ones (39% of a player's first 20
 plies; the difference is under a point): the books are limited by their thresholds and depth, not by the number of games.
 
-What the file offers for a better design (checked on its first 200 MB): the server accepts range requests, and the `.zst` is a sequence of independent
-frames of about 4.7 MB (each preceded by a small skippable frame), so a range can start at a frame boundary and be decoded on its own. Counts are additive, so the month
-can be cut into byte ranges that are counted independently, in parallel, and merged; a range that fails is simply repeated, nothing is re-read from
-the start, and ranges spread over the whole month remove the bias of scanning only its first third.
-
 ## Limits
 
 - Speeds are merged in the move counts (the speed mix and clock use are kept separately); per-speed opening tables are not stored.

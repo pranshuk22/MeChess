@@ -19,9 +19,9 @@ MeChess uses the following. **None of it is bundled, copied or redistributed by 
 
 Notes:
 
-- **Licence tension to be aware of:** python-chess is GPL-3.0 and the Python code here imports it as a library, while this
-  repository's licence (PolyForm Noncommercial) adds a no-commercial-use restriction that the GPL does not allow on a
-  combined work you distribute. Using the code on your own machine is unaffected; before *redistributing* the Python side
-  together with python-chess, get advice or replace that dependency. The C++ engine does not use python-chess.
+- python-chess is GPL-3.0 and the Python code here imports it as a library. This repository's own code is MIT, which
+  is GPL-compatible, but a combined work you *redistribute* that includes python-chess still has to honour the GPL
+  (source availability, same licence on the combination). Using the code on your own machine is unaffected. The C++
+  engine does not use python-chess.
 - If you use Maia weights, respect their licence for anything you publish or host.
 - The pretrained and fine-tuned models produced from your own data are not in the repository (`*.pt` is git-ignored).

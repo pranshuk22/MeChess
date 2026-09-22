@@ -97,14 +97,14 @@ halves agree):
   a linear map from the embedding to rating explains about half of the variance (R squared 0.51), so much of what it encodes is still strength.
 - An artefact was found and removed: the clock reading after the first move depends on the increment, not on the player.
 - **Move-quality features** (accuracy by phase, class rates, opportunism, conversion; [game-analysis.md](game-analysis.md)) are computed for a
-  sample of 400 players; their reliability report has not been recorded here yet.
+  sample of 400 players.
 
 What this shows: players are reliably *distinguishable* by what they play and how they use the clock. It does not show that any axis means
 "aggressive" or "positional"; naming axes still needs validation against players whose style is known.
 
 ## Research directions (what the literature suggests)
 
-A review of published work on identifying and modelling individual chess players points to the following, which the roadmap adopts. Sources
+A review of published work on identifying and modelling individual chess players points to the following. Sources
 are given so they can be checked; claims marked (abstract) were not verified beyond the abstract.
 
 - **Identification is feasible with learned features and many games.** Behavioral stylometry (McIlroy-Young et al., NeurIPS 2021,
@@ -123,9 +123,7 @@ are given so they can be checked; claims marked (abstract) were not verified bey
 - **Industry tools report performance dimensions, not styles:** Aimchess uses openings, tactics, endings, advantage capitalization, resourcefulness
   and time management, compared with players of the same rating. Advantage capitalization and resourcefulness are the style-like ones.
 
-Planned feature families: opening repertoire, clock use, game shape, engine-derived conversion and sharpness, deviation from rating-typical play,
-and (later) a learned embedding; with pre-fixed reliability gates on a held-out half of the players. Named "types" come only after reliable,
-rating-independent dimensions exist.
+Named "types" are given only where reliable, rating-independent dimensions exist; see the game-level features and embedding results above.
 
 ## Order of a full run
 

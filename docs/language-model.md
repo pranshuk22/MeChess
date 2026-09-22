@@ -30,7 +30,7 @@ and a `report.md`.
 - **Concepts**: a lexicon of 32 strategic concepts (outpost, prophylaxis, zugzwang, minority attack, ...) counted in prose and comments.
 
 Measured on the first 12 public-domain books, the reader extracts game lines from 9 of them (about 650 lines in all); the other three (Steinitz,
-Znosko-Borovsky, *Chess and Checkers*) use layouts it does not read yet, and most examples in books start from diagrams. Treat the extracted lines as a small, precise sample, not a corpus of all book moves.
+Znosko-Borovsky, *Chess and Checkers*) use layouts it does not read, and most examples in books start from diagrams. Treat the extracted lines as a small, precise sample, not a corpus of all book moves.
 
 ## The model (`chessme books-nlp-train`)
 
@@ -91,7 +91,7 @@ trained on unmasked text; that figure is a distribution mismatch, not a quality 
 
 The model reads text. It helps to (1) tag large amounts of prose with concepts, (2) pick and rank explanations to quote in game reports, and (3)
 provide human move judgements as labels. It does **not** judge a move by itself (it never sees the position), does not make the engine stronger, and
-its concept labels can only be as good as the 32-concept lexicon. The position-to-concept model that would use these labels is planned, not built; the labels for it are made by the next command.
+its concept labels can only be as good as the 32-concept lexicon. The labelling command below turns those labels into position-level training data.
 
 ## Labelling annotated moves (`chessme books-nlp-label`)
 

@@ -8,7 +8,7 @@ of each source before you use or share anything derived from it.
 
 Listed in [`chessme/books/sources.json`](../chessme/books/sources.json); `chessme books-fetch` downloads and reads them.
 
-| Book | Where | Notation | Status |
+| Book | Where | Notation | Verification |
 |---|---|---|---|
 | Capablanca, *Chess Fundamentals* (1921) | Project Gutenberg #33870; Internet Archive `chessfundamental00capa` | descriptive (`P - K 4`, `Kt-B3`) | verified 2026-09-21; 22 lines from the start position extracted |
 | E. Lasker, *Chess Strategy* | Gutenberg #5614; Archive `chessstrategy00lask` | descriptive | verified; 58 lines |
@@ -25,7 +25,7 @@ used** (Silman, Dvoretsky, Kasparov, ...): they are copyrighted and must not be 
 
 ## Annotated games
 
-| Source | What it holds | Terms | Status |
+| Source | What it holds | Terms | Verification |
 |---|---|---|---|
 | Lichess open database (`database.lichess.org`) | every rated game, with evaluations for a part of them | CC0 | verified |
 | Lichess studies | user-annotated games with comments, variations and glyphs; exportable through the API | user-generated: **check the terms before bulk use** | [A] |
@@ -40,8 +40,7 @@ used** (Silman, Dvoretsky, Kasparov, ...): they are copyrighted and must not be 
 | `notnil/fenify` | MIT (verified) | targets chess-book images; the author reports 99.8% per-square accuracy [A]; last push 2023 |
 | `tsoj/Chess_diagram_to_FEN` | MIT (verified) | pretrained models available; recently maintained (2026) |
 
-Until a diagram model is in the pipeline we read only game lines that start from the initial position; lines that start from a
-diagram need its FEN.
+We read only game lines that start from the initial position; lines that start from a diagram need its FEN.
 
 ## Reading PDFs
 
@@ -52,9 +51,9 @@ diagram need its FEN.
 
 ## What is integrated (checked 2026-09-21)
 
-| Source | Status |
+| Source | Integration |
 |---|---|
-| 103 public-domain books and periodicals (`chessme/books/sources.json`) | every entry verified to have OCR text; of the first 12 all were read and 9 gave game lines (three use layouts the reader does not parse yet) |
+| 103 public-domain books and periodicals (`chessme/books/sources.json`) | every entry verified to have OCR text; of the first 12 all were read and 9 gave game lines (three use layouts the reader does not parse) |
 | ChessGPT "free" annotated archive: GameKnot (12,769 games), PGN Library, Path to Chess Mastery, Lichess studies | integrated (`books-learn`) |
 | ChessGPT annotated-PGN shards (2 x 87 MB, includes variations) | integrated; overlapping Lichess studies are dropped by study id |
 | `Icannos/chess_studies` (CC0, about 3,000 annotated chapters) | integrated |

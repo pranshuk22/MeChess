@@ -14,7 +14,7 @@ running it as a separate process is fine, see [third-party](third-party.md)).
    the judge that made it (for example `stockfish@20000n`) and results from different judges must not be mixed.
 2. **A reference opponent** for measuring our engine's strength and calibrating the Elo dial: limited with `UCI_LimitStrength` and
    `UCI_Elo` and played in an adaptive ladder ([calibration.md](calibration.md)).
-3. **A labelling tool** (planned): centipawn loss per move in your games, for the mistake model and reports.
+3. **The judge behind game analysis** ([game-analysis.md](game-analysis.md)): centipawn loss per move in your games, for move classes and accuracy.
 
 Anything that speaks UCI can be the judge: pass it with `--engine /path/to/engine` (the default is our own
 engine at `engine/build/chessme-engine`).
@@ -57,8 +57,7 @@ Useful facts:
   (for example only lines 3 to 8, re-sorted). It also prints `lowerbound` / `upperbound` lines during aspiration
   windows. Neither is a real score. See below for how the client copes.
 - Scores are from the side to move's point of view. In recent versions centipawns are normalised so that about
-  100 cp corresponds to roughly a 50% win chance (check the documentation of your version); this is why we
-  are considering win-probability loss instead of a fixed centipawn window (see the [roadmap](roadmap.md)).
+  100 cp corresponds to roughly a 50% win chance (check the documentation of your version).
 - `UCI_LimitStrength` and `UCI_Elo` make Stockfish play weaker on purpose; their scale is *not* the Lichess or
   chess.com scale.
 - `stockfish bench` prints a speed test; not used by MeChess.

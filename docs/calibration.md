@@ -110,6 +110,13 @@ With a personalised prior and an opening book the measured strengths of the same
 1300 about 960, 1400 about 1030, 1500 about 1140, 1600 about 1390, 1700 about 1430, 1800 about 1630, 2100 about 1960, 2400 about 2340, 2600 about 2500
 (the lowest five linked by direct games, the rest measured against Stockfish; 100 to 200 games each, no engine faults).
 
+The production bot uses this: `tools/after_calibration.sh` runs `chessme calibrate --table table_v3.json --prior style=<fitted style model>
+--book "<your repertoire>,<theory book>"`, writing `data/calibration/dial_mechess.json`. With that exact configuration (your own book plus a theory
+book for the band being played, and your fitted style model instead of a generic engine prior) the measured strengths were: 1000 about 799, 1200
+about 989, 1300 about 1133 (these three linked by direct games), 1400 about 1200, 1500 about 1295, 1600 about 1385, 1700 about 1426, 1800 about 1589,
+2100 about 1928, 2400 about 2163, 2600 about 2373 (+/- 33-35 at each measured point). `chessme mechess --calibration data/calibration/dial_mechess.json`
+is what the Lichess bot runs.
+
 Neural priors are started with one CPU thread per game (`OMP_NUM_THREADS=1`) so that parallel games do not fight over cores; memory use
 is around 1.8 GB for three parallel games. A calibration file records the dial table it was measured with, and `mechess --calibration`
 uses that table automatically.
@@ -177,14 +184,19 @@ wall-clock measurements).
 - `chessme/mechess/dial.py`: `settings_for(elo, table, calibration)`.
 
 
-## Search depth as a knob (redesign of the weak end)
+## Search depth as a knob (the weak end)
 
 Measuring the first dial showed that node budgets with MultiPV 5 reach only depth 2 to 3, so at the weak end fewer nodes or a wider window no
 longer weakened the play measurably, and the bot gave games away. The dial table therefore has an eighth column, `depth` (0 = none), sent to the
 engine as `go depth D nodes N` (whichever limit is reached first). A depth-limited search is cheap (MultiPV 5: depth 3 about 38k nodes and 36 ms,
 depth 6 about 219k nodes and 196 ms) and already sees a simple fork at depth 3.
 
-A new table (`data/calibration/table_v3.json`, weak levels depth 2 to 3 with a small random-move rate, mid levels depth 4 to 5, top levels
-node-capped) is defined **but has not been measured yet**: a first 10-game probe put the depth-4 row near 1,620 on the Stockfish scale against
-about 1,240 for the old 1,800 row, which only shows that the knob changes strength a lot. The full calibration (uniform prior first, for the public
-bot; then the personalised prior) is the next measurement.
+The depth-based table (`data/calibration/table_v3.json`) is calibrated: uniform prior, 100 ms per move, against Stockfish 19 (110 to 120 games
+per point at the strong end, no engine faults):
+
+| Dial setting | 1000 | 1200 | 1300 | 1400 | 1500 | 1600 | 1700 | 1800 | 2100 | 2400 | 2600 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Measured (Stockfish scale) | ~520 | ~734 | ~919 | ~988 | ~1110 | 1257 +/- 34 | 1429 +/- 34 | 1542 +/- 34 | 1720 +/- 34 | 2132 +/- 34 | 2454 +/- 35 |
+
+(the 1000-1500 rows are below Stockfish's lowest setting and are linked by direct games rather than measured against it). This is the file
+`chessme calibrate ... --out data/calibration/dial_v3.json` produces and is the table the public bot uses (uniform prior).

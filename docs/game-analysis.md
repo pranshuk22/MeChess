@@ -32,8 +32,7 @@ move played.
 | **Miss** | an inaccuracy or mistake right after the opponent's error (which lost at least 0.10) where the gain was not taken |
 
 The bands follow the published Chess.com scale; **the special classes are our reading of their public descriptions** (their exact rules are not
-public), and all thresholds are configurable (`Thresholds`). Nothing here claims to match a site move for move: validating against Lichess's own
-labels on the same games is listed in the [roadmap](roadmap.md).
+public), and all thresholds are configurable (`Thresholds`). Nothing here claims to match a site move for move.
 
 ## Accuracy and the rest of the report
 
@@ -54,6 +53,5 @@ and gate. They feed the style work described in [style-analysis.md](style-analys
 
 - The special classes are judgement calls; use the numbers (loss, accuracy), not only the labels.
 - Fixed nodes, not fixed depth: very sharp positions can move between runs of a different budget.
-- Clock use, time trouble and the human difficulty of a move are not part of the classification yet.
-- The thresholds are hand-set today. The plan is to learn them from human glyphs (`? ?? !` in annotated games) and check them against
-  Lichess: see [language-model.md](language-model.md) and the plan.
+- Clock use, time trouble and the human difficulty of a move are not part of the classification.
+- The thresholds are hand-set, not learned from data.

@@ -1,74 +1,96 @@
 # MeChess
 
-<p align="center"><img src="docs/assets/banner.svg" alt="MeChess: an engine that plays like you" width="100%"></p>
+<p align="center"><img src="docs/assets/banner.svg" alt="MeChess: a chess engine trained to play like you" width="100%"></p>
 
-**A chess engine that plays like *you*, at a rating you choose, trained on your own games.**
+**A chess engine trained to play like *you*, not to play the strongest possible chess.**
 
-MeChess is a source-available, config-driven research project (free for research, learning and other non-commercial use): a C++ alpha-beta engine, a Python
-toolkit that learns a player's openings, move preferences and style from their public games, and
-a controller that combines them into one UCI engine with an Elo dial. Anyone can point it at their
-own Lichess / chess.com accounts and train a personal model; nothing about a person is built into
-the code.
+Most engines (Stockfish, Leela) search for the objectively best move. MeChess instead learns the
+moves *a specific person* tends to play from their own game history, and uses a real search engine
+underneath to keep that playable. Point it at your Lichess or chess.com account and it studies
+your openings, your habits, and your move preferences, imperfections included.
 
-> **Status: research prototype.** The engine, data pipeline, opening book, move-prediction model, controller, game analysis, opening explorer
-> and style analysis work and are tested. The Elo dial has been redesigned (search depth is now a knob) and is **being recalibrated**, so treat
-> its ratings as unmeasured; there is no packaged release. See the [roadmap](docs/roadmap.md) for what is done and what is next.
+[Quick start](#quick-start) · [How it's built](docs/architecture.md) · [Run it as a Lichess bot](docs/lichess-bot.md) · [Analyse your own games](docs/game-analysis.md)
 
-## What it does
+## What makes it different
 
-| Part | What it is | State |
-|---|---|---|
-| **Engine** (`engine/`, C++17) | Bitboards + magic move generation, negamax / PVS alpha-beta, transposition table, quiescence, null-move, LMR, futility, aspiration, time management, MultiPV, UCI. Move generation is verified against published perft suites | working, well tested |
-| **Data pipeline** (`chessme/ingest`, `dataset`) | Downloads your games (Lichess API, chess.com API), normalises them, weights them by recency and time control, audits them | working |
-| **Opening book** (`chessme/book`) | A position graph of *your* repertoire with frequencies; the engine can play it (`OwnBook`) | working |
-| **"Me" model** (`chessme/model`) | A small residual conv net that predicts the move you would play at a given rating; C++ inference; comparison harness against Maia-2 / Maia-3 | working |
-| **Controller** (`chessme/mechess`) | A UCI engine: opening book, then engine candidate moves, then a prior picks among them; Elo dial | working, dial uncalibrated |
-| **Style analysis** (`chessme/style`) | Measures *which of several equally good moves* a player tends to choose (28 theory-based features), plus game-level features (openings, clock use, game shape) and a learned player embedding; compared with a rating-matched population, a cohort of players, and famous "anchor" players. The reliably personal parts are the opening repertoire and clock habits; move-choice "style" is small and hard to measure | experimental |
-| **Game analysis** (`chessme/analysis`) | `chessme analyse`: every move of your games classed (Book, Brilliant, Great, Best ... Blunder) from Stockfish evaluations, accuracy by phase, biggest mistakes, resumable | working; class rules are our reading of public descriptions |
-| **Opening explorer and theory books** (`chessme/book`) | A Lichess-style explorer built from the CC0 game database for every rating range (games, White / draw / Black, average rating, engine evaluation, top games) and a playable theory book per band | working; first run partial ([details](docs/opening-explorer.md)) |
-| **Books, annotated games and a text model** (`chessme/books`) | Reads 100+ public-domain chess books and several annotated-game sources (glyphs `! ? !!`, evaluation symbols), and trains a small language model on the comments (concepts, move judgement, evaluation) | working; model quality still being measured |
-| **Lichess bot** | Runs MeChess as a bot account through `lichess-bot` (external) | working; needs the recalibrated dial |
-| **Kaggle notebooks** (`notebooks/`) | Thin adapters that run the collection, training and explorer jobs on Kaggle (CPU or GPU) | working |
-| **Tuning / matches** | Texel tuner, match runner with SPRT, self-play data | working (tuning gave no gain so far) |
+- **Style over raw strength**: reranks candidate moves to match what *you'd* actually play, not
+  whichever line scores highest.
+- **Learns from your own games**: trained on your Lichess/chess.com history, not a generic dataset.
+- **Real search, not just prediction**: a C++ alpha-beta engine generates the candidates; a small
+  trained model picks among them.
+- **Built-in game analysis**: classifies every move (Best, Good, Mistake, Blunder, ...) like a
+  post-game review, judged by Stockfish.
+- **Config-driven, not personal**: no account is hard-coded anywhere; point it at your own games
+  and it's your engine, not ours.
+
+Anyone can run this on their own account. Your account names live only in a local, git-ignored
+config file, never in the code.
+
+If you're a **chess enthusiast**: think of it as "what if a bot played in *my* style, at *my*
+level". You can run it as a Lichess bot, get an accuracy report on your games, or look up any
+opening position across rating bands.
+
+If you're an **ML researcher**: it's a personalisation problem on top of policy learning, using a
+small residual conv-net policy over a factorised move head (from-square/to-square), pretrained on
+population data and fine-tuned per player, combined with classical alpha-beta search via a
+candidate-and-rerank controller. See [architecture.md](docs/architecture.md) for the exact design
+and [training-resources.md](docs/training-resources.md) for the data.
+
+## What's in the box
+
+| Part | What it does |
+|---|---|
+| **Engine** (C++17, `engine/`) | A standard alpha-beta chess engine: bitboards, transposition table, quiescence search, time management, UCI protocol. Move generation is checked against published perft test suites. |
+| **Data pipeline** (`chessme/ingest`) | Downloads your games from Lichess/chess.com, cleans them up, weights them (recent games and slower time controls count more). |
+| **Opening book** (`chessme/book`) | A map of the positions you actually play, built from your games, with how often you go each way. |
+| **"Me" model** (`chessme/model`) | A small neural network that predicts the move *you'd* play in a position, at a given rating. Compared against the published Maia-2 / Maia-3 human-move-prediction models. |
+| **Controller** (`chessme/mechess`) | The UCI engine you actually play against: opening book first, then the chess engine's candidate moves, then the "me" model picks among them. Has a strength dial. |
+| **Style analysis** (`chessme/style`) | Measures *how* you choose between equally good moves (solid vs. sharp, positional vs. tactical), compared against a population of other players. |
+| **Game analysis** (`chessme/analysis`) | `chessme analyse`: classes every move in your games (Book, Brilliant, Best, ... Blunder), accuracy by game phase, your worst mistakes. |
+| **Opening explorer** (`chessme/book`) | A Lichess-style "what does everyone play here" lookup, built from a public database, broken down by rating band. |
+| **Chess-book reader** (`chessme/books`) | Reads 100+ public-domain chess books and annotated games, and trains a small language model on how they describe moves. |
+| **Lichess bot** | Runs MeChess as an actual bot account on Lichess. |
 
 ## Quick start
 
-Requirements: Python 3.10+ (3.12 pinned), a C++17 compiler (`clang++` or `g++`), and optionally
-[Stockfish](docs/stockfish.md) (strongly recommended as the judge of "good moves").
+You need Python 3.10+ and a C++17 compiler (`clang++` or `g++`). Stockfish is optional but
+recommended: it's what judges "good moves" for analysis and style measurement.
 
 ```bash
 git clone https://github.com/<you>/MeChess.git && cd MeChess
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-make -C engine                # builds engine/build/chessme-engine (+ perft, texel, unit tests)
-make test                     # C++ unit tests + quick perft + Python unit tests (seconds)
+make -C engine        # builds engine/build/chessme-engine
+make test              # a few seconds: C++ + Python unit tests, a quick perft check
 ```
 
-Then make your own profile (your copy is git-ignored, so account names stay on your machine):
+Set up your own profile. This is where your account names go, and it never gets committed:
 
 ```bash
-cp configs/profiles/example.yaml configs/profiles/me.yaml     # edit the accounts
+cp configs/profiles/example.yaml configs/profiles/me.yaml   # edit it: your accounts, rating floors
 export CHESSME_PROFILE=me
-.venv/bin/python -m chessme fetch          # download your games
-.venv/bin/python -m chessme ingest         # normalise them
-.venv/bin/python -m chessme audit          # see what you have
-.venv/bin/python -m chessme book           # build your opening book
+
+.venv/bin/python -m chessme fetch      # download your games
+.venv/bin/python -m chessme ingest     # clean and normalise them
+.venv/bin/python -m chessme audit      # see what you got (counts, ratings, colour split)
+.venv/bin/python -m chessme book       # build your opening book
 ```
 
-Run the engine directly (UCI) or the MeChess controller:
+Play against it, either the raw engine or the full "plays like me" controller:
 
 ```bash
-engine/build/chessme-engine                                   # plain engine, speaks UCI
-.venv/bin/python -m chessme mechess --elo 1600 --prior uniform  # controller, speaks UCI
+engine/build/chessme-engine                                     # plain engine, speaks UCI
+.venv/bin/python -m chessme mechess --elo 1600 --prior uniform   # the full controller
 ```
 
-Analyse your own games (Stockfish needed) and look positions up in an opening explorer:
+Get a report on your own games, or look up a position in the opening explorer:
 
 ```bash
-.venv/bin/python -m chessme analyse my_games.pgn --player MyName          # move classes, accuracy, report
-.venv/bin/python -m chessme explorer-query data/explorer/explorer.db --rating 1500 --fen "<FEN>"   # after building or downloading an explorer
+.venv/bin/python -m chessme analyse my_games.pgn --player MyName
+.venv/bin/python -m chessme explorer-query data/explorer/explorer.db --rating 1500 --fen "<FEN>"
 ```
 
-More: [getting started](docs/getting-started.md), [every command](docs/cli.md).
+More detail: [getting started](docs/getting-started.md) (every step above, explained) and
+[every command](docs/cli.md).
 
 ## How it fits together
 
@@ -83,44 +105,41 @@ flowchart TD
     B --> C["engine candidate moves (MultiPV)"]
     M --> C
     S -.-> C
-    C --> R["prior picks"] --> D["Elo dial"] --> U(["UCI engine"])
+    C --> R["prior picks"] --> D["strength dial"] --> U(["UCI engine"])
 ```
 
-Details in [docs/architecture.md](docs/architecture.md).
+More detail in [docs/architecture.md](docs/architecture.md).
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md): install, build, first run, environment variables
-- [Command reference](docs/cli.md): every `chessme` command and the engine's UCI options
-- [Using Stockfish](docs/stockfish.md): why and how we use it, its command line, how our client reads it
-- [Lichess bot](docs/lichess-bot.md): running MeChess as a bot account, token handling, comparing the dial with Lichess ratings
-- [Strength and the Elo dial](docs/calibration.md): measuring strength against Stockfish, calibrating the dial
-- [Style analysis](docs/style-analysis.md): the method, the datasets, the tests, the limits
+- [Command reference](docs/cli.md): every `chessme` command and engine UCI option
+- [Architecture](docs/architecture.md): how the code is laid out and how data flows through it
+- [Using Stockfish](docs/stockfish.md): why and how it's used as a judge
+- [Lichess bot](docs/lichess-bot.md): running MeChess as a bot account
+- [Strength and the rating dial](docs/calibration.md): how strength is measured and calibrated
+- [Style analysis](docs/style-analysis.md): the method, data, and its limits
 - [Game analysis](docs/game-analysis.md): move classes, accuracy, the `analyse` report
-- [Opening explorer and theory books](docs/opening-explorer.md): what is collected, the conditions, the output formats, robustness
-- [Books, annotated games and the language model](docs/language-model.md): sources, the notation and glyph reader, the model, results so far
-- [Running on Kaggle](docs/kaggle.md): the four notebooks, quotas, checkpoints, resuming
-- [Training resources](docs/training-resources.md): every source with its terms and how it was verified
-- [Data sources and privacy](docs/data-sources.md): where games come from, terms, what is stored
-- [Running long jobs](docs/operations.md): memory guard, logs, resuming, laptops that sleep
-- [Architecture](docs/architecture.md), [Testing](docs/testing.md), [Third-party software](docs/third-party.md), [Roadmap](docs/roadmap.md)
+- [Opening explorer](docs/opening-explorer.md): what's collected and how to query it
+- [Books, annotated games, and the language model](docs/language-model.md)
+- [Running on Kaggle](docs/kaggle.md): the notebooks, quotas, checkpoints
+- [Data sources and privacy](docs/data-sources.md), [training resources](docs/training-resources.md),
+  [third-party software](docs/third-party.md), [testing](docs/testing.md), [running long jobs](docs/operations.md)
 
 ## Privacy
 
-Your account names live only in your own profile file (git-ignored). Tokens are read from the
-environment (`LICHESS_TOKEN`), never from files. Only public games are used. See
-[data sources and privacy](docs/data-sources.md).
+Your account names live only in your own profile file, which is git-ignored and never leaves your
+machine. Tokens are read from the environment (`LICHESS_TOKEN`), never from a file. Only public
+games are used. See [data sources and privacy](docs/data-sources.md).
 
 ## Contributing
 
-Issues and pull requests are welcome; contributions are accepted under the same licence. Every feature comes with unit tests and, where it touches the
-engine, an integration test; every bug fix comes with a regression test. Run `make test` before
-sending a change, and keep commits small.
+Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the testing
+policy and how to send a change.
 
 ## License
 
-[PolyForm Noncommercial License 1.0.0](LICENSE): free to use, copy, modify and share for research, learning, personal
-projects, education and other **non-commercial** purposes. **Commercial use (selling it, or building a product or
-business on it) is not permitted.** Stockfish (GPL), Maia-2 / Maia-3 (AGPL / research releases) and the game archives you
-may download have their own terms; MeChess uses them only as external programs or data you obtain yourself and never
-bundles or copies them. See [third-party software](docs/third-party.md).
+[MIT](LICENSE): free to use, modify, and distribute, including commercially. Stockfish (GPL),
+Maia-2 / Maia-3 (AGPL / research releases), and any game archives you download have their own
+terms; MeChess uses them only as external programs or data you fetch yourself, and never bundles
+or copies them. See [third-party software](docs/third-party.md).

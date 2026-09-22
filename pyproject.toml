@@ -2,7 +2,7 @@
 name = "chessme"
 version = "0.1.0"
 description = "Train a chess engine to play like you, from your own games"
-license = {text = "PolyForm-Noncommercial-1.0.0"}
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = ["requests", "pyyaml", "chess", "numpy", "torch", "zstandard"]
 
