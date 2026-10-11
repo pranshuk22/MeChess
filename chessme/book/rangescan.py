@@ -60,6 +60,8 @@ TAIL_MAX = 16 * 1024 * 1024
 DEFAULT_PARTS = 700                                   # about 40 MB of the real dump each: ~125k games, ~1.5M table entries, ~300 MB per worker
 DEFAULT_SLICES = 64
 WINDOW_FORMAT = 1
+TASK_RETRIES = 3                                      # a window whose download fails even after the fetcher's own retries is tried again this often ...
+TASK_WAIT = 60                                        # ... after this many seconds (times the attempt number): a network blip must not end a run of hours
 
 
 # ---- byte-level frame detection (no network; pure functions over a buffer) -----------------------------------------------
@@ -159,7 +161,7 @@ class HttpRangeFetcher:
     Content-Range that starts where asked, a body of exactly the promised length), so a server or CDN node that ignores `Range` or cuts the
     body short is an error and a retry - never a silently wrong window, or the whole 28 GB file read into memory."""
 
-    def __init__(self, url, timeout=120, tries=4, sleep=time.sleep, opener=None):
+    def __init__(self, url, timeout=120, tries=6, sleep=time.sleep, opener=None):
         self.url, self.timeout, self.tries, self.sleep = url, timeout, tries, sleep
         self.opener = opener or (lambda req: urllib.request.urlopen(req, timeout=timeout))
 
@@ -443,8 +445,15 @@ def check_manifest(windows_dir, manifest):
 
 def _scan_window_task(task):
     source, total, start, end, edges, max_ply, min_base, max_entries, holdout, slices, out = task
-    c = scan_window(make_fetcher(source).fetch, total, start, end, edges=edges, max_ply=max_ply, min_base=min_base, max_entries=max_entries,
-                    holdout=holdout, slices=slices, out=out, log=lambda *a: None)
+    for attempt in range(TASK_RETRIES + 1):
+        try:
+            c = scan_window(make_fetcher(source).fetch, total, start, end, edges=edges, max_ply=max_ply, min_base=min_base, max_entries=max_entries,
+                            holdout=holdout, slices=slices, out=out, log=lambda *a: None)
+            break
+        except ConnectionError:
+            if attempt == TASK_RETRIES:
+                raise
+            time.sleep(TASK_WAIT * (attempt + 1))
     return out, c.scanned, sum(c.games)
 
 

@@ -439,3 +439,25 @@ def test_windows_can_be_kept_elsewhere_than_the_output_folder(tmp_path):
     RS.run(str(dump), 2, out, edges=EDGES, max_ply=4, holdout=0, slices=2, thresholds=THRESHOLDS, windows_dir=scratch, workers=1,
            control_dir=tmp_path / "ctl", log=lambda *a: None)
     assert (scratch / "manifest.json").exists() and (scratch / "0000" / "meta.pkl.gz").exists() and not list(out.glob("windows_*"))
+
+
+def test_a_window_task_survives_a_network_outage_and_gives_up_after_a_few_tries(tmp_path, monkeypatch):
+    """A scan of hours must not end because one window's download failed once (the fetcher's own retries only cover a few seconds)."""
+    slept, calls = [], {"n": 0}
+    monkeypatch.setattr(RS.time, "sleep", lambda s: slept.append(s))
+    real = RS.scan_window
+
+    def flaky(*a, **k):
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            raise ConnectionError("fetching bytes failed")
+        return real(*a, **k)
+    monkeypatch.setattr(RS, "scan_window", flaky)
+    buf, _ = make_dump([game(1500, 1500, 1.0, ITALIAN)])
+    dump = tmp_path / "m.pgn.zst"
+    dump.write_bytes(buf)
+    task = (str(dump), len(buf), 0, len(buf), EDGES, 4, 30, 1000, 0, 2, str(tmp_path / "w"))
+    assert RS._scan_window_task(task)[1:] == (1, 1) and slept == [60, 120]
+    monkeypatch.setattr(RS, "scan_window", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("down for good")))
+    with pytest.raises(ConnectionError, match="down for good"):
+        RS._scan_window_task(task)
