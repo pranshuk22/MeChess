@@ -88,6 +88,11 @@ def test_summary_of_a_known_model(positions, items):
     assert r["n"] == len(items) and r["games"] == 80
     assert r["top1"][0] == pytest.approx(1.0) and r["sampled_match"][0] == pytest.approx(0.5)
     assert r["nll"][0] == pytest.approx(np.log(2)) and r["ece"] == pytest.approx(0.5, abs=1e-9)     # right every time but says 50%
+    assert r["overconf"][0] == pytest.approx(-0.5)                                                  # confidence 0.5, accuracy 1.0: UNDER-confident
+    over = R.summarize(S.score_items(FixedScorer(0.99), items), arr, n_boot=50)
+    assert over["overconf"][0] == pytest.approx(0.99 - 1.0)
+    wrong = R.summarize(S.score_items(FixedScorer(0.01), items), arr, n_boot=50)                   # never the top move, claims 1%: confidence is the best other move's
+    assert wrong["overconf"][0] > 0
     lo, hi = r["nll"][1], r["nll"][2]
     assert lo <= r["nll"][0] <= hi
     assert "50.0" in R.table({"x": r}) and "| x |" in R.table({"x": r})

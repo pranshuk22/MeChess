@@ -43,6 +43,8 @@ def summarize(scores, arr, mask=None, n_boot=500, seed=0, alpha=0.05):
                       ("entropy", scores["entropy"]), ("sampled_agreement", scores["sq_sum"])):
         mean, lo, hi, _, _ = M.cluster_bootstrap_mean(vals, g, n_boot=n_boot, seed=seed, mask=sel, alpha=alpha)
         row[key] = (mean, lo, hi)
+    over = scores["conf"] - scores["top1"].astype(float)                    # mean confidence minus accuracy: > 0 = overconfident
+    row["overconf"] = M.cluster_bootstrap_mean(over, g, n_boot=n_boot, seed=seed, mask=sel, alpha=alpha)[:3]
     row["ece"] = M.ece(scores["conf"][sel], scores["top1"][sel])[0]
     row["top3"] = float((scores["rank"][sel] <= 3).mean())
     return row
@@ -89,12 +91,12 @@ def _ci(t, scale=1.0, digits=2):
 def table(rows, title=""):
     """Markdown table of {label: summary} (top-1 and sampled match in %, NLL in nats)."""
     lines = [title] if title else []
-    lines += ["| subset | positions | games | top-1 % | sampled match % | NLL | top-3 % | ECE | entropy |", "|---|---|---|---|---|---|---|---|---|"]
+    lines += ["| subset | positions | games | top-1 % | sampled match % | NLL | top-3 % | ECE | confidence - accuracy (points) | entropy |", "|---|---|---|---|---|---|---|---|---|---|"]
     for label, r in rows.items():
         if r is None:
             continue
         lines.append(f"| {label} | {r['n']:,} | {r['games']:,} | {_ci(r['top1'], 100, 1)} | {_ci(r['sampled_match'], 100, 1)} | {_ci(r['nll'], 1, 3)} | "
-                     f"{100 * r['top3']:.1f} | {r['ece']:.3f} | {r['entropy'][0]:.2f} |")
+                     f"{100 * r['top3']:.1f} | {r['ece']:.3f} | {_ci(r['overconf'], 100, 1)} | {r['entropy'][0]:.2f} |")
     return "\n".join(lines)
 
 
