@@ -186,3 +186,11 @@ def test_late_is_the_game_level_rule_that_defines_the_published_test_set():
 
 def test_a_game_that_never_goes_below_30_s_is_never_late():
     assert not any(p.late for p in positions_of(make_game(clocks=[170] * len(LINE))))
+
+
+def test_a_subset_can_be_read_without_loading_the_rest(tmp_path):
+    ps = positions_of(make_game())
+    T.write_testset(tmp_path / "t.jsonl.gz", ps)
+    assert T.read_testset(tmp_path / "t.jsonl.gz", [0, 3, 7]) == [ps[0], ps[3], ps[7]]
+    assert T.read_testset(tmp_path / "t.jsonl.gz", []) == []
+    assert T.read_testset(tmp_path / "t.jsonl.gz", range(len(ps))) == ps

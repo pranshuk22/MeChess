@@ -153,9 +153,22 @@ def write_testset(path, positions, meta=None):
     return manifest
 
 
-def read_testset(path):
+def read_testset(path, index=None):
+    """All positions of a test set, or only those at the given row numbers (in the order of `index`, which must be sorted): a score file
+    covers a subset, and loading 900k positions only to use 100k would cost gigabytes."""
     with gzip.open(path, "rt", encoding="utf-8") as f:
-        return [Position(**json.loads(line)) for line in f]
+        if index is None:
+            return [Position(**json.loads(line)) for line in f]
+        wanted = iter(int(i) for i in index)
+        nxt = next(wanted, None)
+        out = []
+        for row, line in enumerate(f):
+            if nxt is None:
+                break
+            if row == nxt:
+                out.append(Position(**json.loads(line)))
+                nxt = next(wanted, None)
+        return out
 
 
 def to_items(positions):

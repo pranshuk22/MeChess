@@ -1358,14 +1358,13 @@ def cmd_humanlike_report(args):
     from .humanlike import report as R
     from .humanlike import score as S
     from .humanlike import testset as T
-    positions = T.read_testset(args.testset)
     manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
     runs = []
     for path in args.scores:
         scores, meta = S.load_scores(path)
         if meta["testset_sha256"] != manifest["sha256"]:
             raise SystemExit(f"{path} was computed on another test set")
-        chosen = [positions[i] for i in scores["index"]]
+        chosen = T.read_testset(args.testset, scores["index"])
         if meta["positions_sha"] != S.positions_hash(chosen):
             raise SystemExit(f"{path}: the positions do not match the scores")
         runs.append((meta["model"], scores, chosen))
