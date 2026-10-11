@@ -263,6 +263,10 @@ def band_of(game, edges, max_diff=300, min_base=30):
 
 # ---- counting -----------------------------------------------------------------------------------------------------------
 
+class EntryLimitExceeded(RuntimeError):
+    """The counting tables passed their entry limit in a scan that must not prune (see count_stream's `strict_entries`)."""
+
+
 class Counts:
     """counts.tables[band][(pos_key << 16) | move16] = packed (games, White wins, draws, rating sum). Also, per band: evaluation sums of
     the annotated games, how long players think per ply, and game-level totals."""
@@ -284,6 +288,7 @@ class Counts:
         self.stream_ended = False                                # the source ran out of games (rather than the scan limit or the time budget)
         self.window_end = [None] * n_bands                       # scan index at which a band reached its cap (None: still collecting)
         self.pruned_below = 0                                    # entries with at most this many games may be missing (memory guard)
+        self.position_totals = None                              # per band {pos_key: exact games that reached it}, kept when rare entries were dropped (sliced merge)
 
     def full(self, band, cap):
         return self.window_end[band] is not None
@@ -300,14 +305,18 @@ class Counts:
         inc = pack(game["result"], avg)
         packed_top = (int(avg) << 48) | game.get("gid", 0) if game.get("gid") else 0
         analysed = False
+        totals = self.position_totals[band] if self.position_totals is not None else None
         for ply, san in enumerate(sans):
             try:
                 mv = board.parse_san(san)
             except ValueError:
                 sans = sans[:ply]
                 break
-            k = (pos_key(board) << 16) | move16(mv)
+            pk = pos_key(board)
+            k = (pk << 16) | move16(mv)
             table[k] = table.get(k, 0) + inc
+            if totals is not None:
+                totals[pk] = totals.get(pk, 0) + 1
             if packed_top and ply < TOP_PLY and packed_top > top.get(k, 0):
                 top[k] = packed_top
             if evals[ply] is not None:
@@ -367,7 +376,8 @@ def save_state(path, counts, games_scanned, config=None):
         pickle.dump({"tables": counts.tables, "games": counts.games, "held_out": counts.held_out, "scanned": games_scanned,
                      "evals": counts.evals, "clock": counts.clock, "stats": counts.stats, "config": config,
                      "speed_games": counts.speed_games, "population": counts.population, "rating_hist": counts.rating_hist,
-                     "window_end": counts.window_end, "pruned_below": counts.pruned_below, "top": counts.top, "layout": LAYOUT}, f, protocol=4)
+                     "window_end": counts.window_end, "pruned_below": counts.pruned_below, "top": counts.top, "layout": LAYOUT,
+                     "position_totals": counts.position_totals}, f, protocol=4)
     tmp.replace(path)
 
 
@@ -388,6 +398,7 @@ def load_state(path):
     c.window_end = st.get("window_end", c.window_end)
     c.pruned_below = st.get("pruned_below", 0)
     c.top = st.get("top", c.top)
+    c.position_totals = st.get("position_totals")
     return c
 
 
@@ -406,10 +417,14 @@ def rss_gb():
 
 def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MAX_PLY, max_per_band=DEFAULT_MAX_PER_BAND, min_base=30, max_scan=None,
                  holdout=1000, max_entries=60_000_000, max_memory_gb=None, deadline=None, should_stop=None, checkpoint=None,
-                 checkpoint_every=1_000_000, checkpoint_minutes=15, config=None, progress_every=100_000, log=print):
+                 checkpoint_every=1_000_000, checkpoint_minutes=15, config=None, progress_every=100_000, strict_entries=False, reconnect=True,
+                 log=print):
     """Read games from `open_stream()` (a callable returning a text stream; called again to reconnect) and count every qualifying game, band by
     band, until the band has `max_per_band` games (the first `holdout` of each band are kept aside for the coverage test and folded in afterwards).
-    Stops when `max_scan` games were scanned, or every band is full. `counts.scanned` makes it resumable: already scanned games are skipped."""
+    Stops when `max_scan` games were scanned, or every band is full. `counts.scanned` makes it resumable: already scanned games are skipped.
+    `strict_entries`: raise `EntryLimitExceeded` when the tables pass `max_entries` instead of pruning the rarest entries (a scan that must stay
+    exact). `reconnect=False`: a stream error is raised at once (an in-memory source cannot be reconnected; retrying a deterministic error
+    only wastes minutes)."""
     t0 = last_ck = time.time()
     failures, scanned_at_failure = 0, counts.scanned
     while True:
@@ -434,6 +449,8 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
                             log(f"  band {edges[band]}-{edges[band + 1]} is full ({max_per_band:,} games) at game {i + 1:,} of the scan")
                 counts.scanned = i + 1                              # only now: a game is 'scanned' once it has been counted
                 if counts.scanned % progress_every == 0:
+                    if strict_entries and counts.size() > max_entries:
+                        raise EntryLimitExceeded(f"{counts.size():,} table entries after {counts.scanned:,} games, over the limit of {max_entries:,}")
                     if counts.size() > max_entries:
                         log(f"  pruning rare entries (limit {max_entries}): entries with at most {counts.prune(max_entries)} games are now incomplete")
                     if max_memory_gb and rss_gb() > max_memory_gb:
@@ -456,6 +473,8 @@ def count_stream(open_stream, counts, *, edges=DEFAULT_BANDS, max_ply=DEFAULT_MA
                     "(or, for a .zst file, of its first compressed frame): check before trusting the counts as a full scan")
             return counts                                            # the stream ended
         except (OSError, EOFError, ValueError) as e:
+            if not reconnect:
+                raise
             if counts.scanned > scanned_at_failure:
                 failures = 0                                          # it got somewhere since the last failure: only failures in a row count
             failures += 1
@@ -552,10 +571,13 @@ def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, open
         # the true number of games at each stored position, counting the moves that were below the threshold too (shown as "other moves")
         stored = {r[1] for r in batch}
         totals = {}
-        for k, v in table.items():
-            pk = k >> 16
-            if signed64(pk) in stored:
-                totals[pk] = totals.get(pk, 0) + (v & FIELD_MASK)
+        if counts.position_totals is not None:                   # exact totals recorded before the rare entries were dropped
+            totals = {pk: n for pk, n in counts.position_totals[b].items() if signed64(pk) in stored}
+        else:
+            for k, v in table.items():
+                pk = k >> 16
+                if signed64(pk) in stored:
+                    totals[pk] = totals.get(pk, 0) + (v & FIELD_MASK)
         db.executemany("INSERT INTO positions VALUES (?,?,?)", [(b, signed64(pk), n) for pk, n in totals.items()])
         del totals, stored
     db.executemany("INSERT INTO openings VALUES (?,?,?)", list(openings))
@@ -667,6 +689,8 @@ def build_books(counts, edges, out_dir, *, max_ply=DEFAULT_MAX_PLY, min_games=20
                 if v:
                     found.append((mv, unpack(v), ev.get(k)))
             total = sum(x[1][0] for x in found)
+            if counts.position_totals is not None:                                  # rare moves were dropped: the exact total is recorded
+                total = max(total, counts.position_totals[b].get(pk, 0))
             sign = 1 if board.turn == chess.WHITE else -1                     # eval is White's point of view; the mover wants it high
             scored = [sign * e[1] / e[0] for _, _, e in found if e and e[0] >= min_eval_n]
             best = max(scored) if scored else None
