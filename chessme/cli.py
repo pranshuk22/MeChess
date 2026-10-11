@@ -1095,10 +1095,13 @@ def cmd_explorer_range_scan(args):
     edges = tuple(args.bands)
     log(f"=== explorer-range-scan {' '.join(sys.argv[2:])}")
     _ensure_opening_names(args.openings_dir, log)
-    merged = RS.run(args.source, args.parts, args.out, edges=edges, max_ply=args.max_ply, min_base=args.min_base,
-                    max_entries=args.max_entries, max_merged_entries=args.max_merged_entries, workers=args.workers, job=args.job,
+    thresholds = {"db_min_games": args.db_min_games, "db_min_frac": args.db_min_frac, "book_min_games": args.book_min_games,
+                  "book_min_frac": args.book_min_frac}
+    merged = RS.run(args.source, args.parts, args.out, edges=edges, max_ply=args.max_ply, min_base=args.min_base, max_entries=args.max_entries,
+                    holdout=args.holdout, slices=args.slices, thresholds=thresholds, workers=args.workers, job=args.job,
                     control_dir=args.control_dir, log=log)
-    merged.config = {"edges": list(edges), "max_ply": args.max_ply, "source": args.source.rsplit("/", 1)[-1]}
+    merged.config = {"edges": list(edges), "max_ply": args.max_ply, "min_base": args.min_base, "holdout": args.holdout, "parts": args.parts,
+                     "source": os.path.basename(args.source)}
     state_path = Path(args.out) / "state.pkl.gz"
     EX.save_state(state_path, merged, merged.scanned, merged.config)
     del merged                                                  # rebuild reloads the checkpoint: do not hold two full copies at once
@@ -1622,22 +1625,24 @@ def main():
 
     eb.set_defaults(func=cmd_explorer_build)
 
-    rg = sub.add_parser("explorer-range-scan", help="opening explorer via a partitioned byte-range scan of the dump (parallel, resumable window by "
+    rg = sub.add_parser("explorer-range-scan", help="opening explorer via a partitioned byte-range scan of the dump (parallel, exact, resumable window by "
                         "window - no 17-minute reconnect-from-byte-0 problem); see chessme/book/rangescan.py")
-    rg.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst", help="a .pgn.zst URL (must support HTTP range requests)")
-    rg.add_argument("--out", default="data/explorer")
+    rg.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst",
+                    help="a .pgn.zst URL (must support HTTP range requests) or the path of a downloaded .pgn.zst")
+    rg.add_argument("--out", default="data/explorer_range", help="not data/explorer: a finished explorer-build run lives there and would be overwritten")
     rg.add_argument("--bands", nargs="+", type=int, default=[0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4000])
     rg.add_argument("--max-ply", type=int, default=24); rg.add_argument("--min-base", type=int, default=30)
-    rg.add_argument("--parts", type=int, default=200, help="byte windows to cut the dump into")
+    rg.add_argument("--parts", type=int, default=700, help="byte windows to cut the dump into (about 40 MB each for the real dump); a rerun must use the same number")
     rg.add_argument("--workers", type=int, default=4, help="windows scanned at the same time")
-    rg.add_argument("--max-entries", type=int, default=5_000_000, help="per-window memory guard (each worker holds its own tables)")
-    rg.add_argument("--max-merged-entries", type=int, default=60_000_000, help="cap on the merged table (rarest entries dropped first; recorded in the report)")
+    rg.add_argument("--max-entries", type=int, default=5_000_000, help="a window whose tables pass this many entries stops the scan (never pruned): use more --parts")
+    rg.add_argument("--slices", type=int, default=64, help="each window is saved in this many slices and the merge handles one slice at a time (peak memory)")
+    rg.add_argument("--holdout", type=int, default=1000, help="games per band kept aside for the coverage test (spread over the windows)")
     rg.add_argument("--db-min-games", type=int, default=5); rg.add_argument("--db-min-frac", type=float, default=1e-5)
     rg.add_argument("--book-min-games", type=int, default=20); rg.add_argument("--book-min-frac", type=float, default=5e-5); rg.add_argument("--book-min-share", type=float, default=0.03)
     rg.add_argument("--eval-margin", type=float)
     rg.add_argument("--openings-dir", default="data/opening_names")
     rg.add_argument("--job", default="explorer-range"); rg.add_argument("--control-dir", default="data/control")
-    rg.add_argument("--log", default="data/explorer/explorer_range.log")
+    rg.add_argument("--log", default="data/explorer_range/explorer_range.log")
     rg.set_defaults(func=cmd_explorer_range_scan)
     er = sub.add_parser("explorer-rebuild", help="rebuild explorer.db, the books and the report from a saved checkpoint with other thresholds (no streaming)")
     er.add_argument("state", help="state.pkl.gz written by explorer-build"); er.add_argument("--out", default="data/explorer")
