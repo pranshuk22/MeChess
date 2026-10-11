@@ -1292,17 +1292,13 @@ def cmd_me_maia3_ft(args):
 def cmd_humanlike_testset(args):
     from .humanlike import testset as T
     windows = [int(w) for w in args.windows.split(",")]
-    n = 0
-    positions = []
-    for p in T.iter_window_positions(args.source, args.parts, windows, per_game=args.per_game, seed=args.seed, time_class=args.time_class,
-                                     allow_bots=args.allow_bots):
-        positions.append(p)
-        n += 1
-        if n % 50000 == 0:
-            print(f"  {n:,} positions", flush=True)
-    meta = {"source": os.path.basename(args.source), "parts": args.parts, "windows": windows, "per_game": args.per_game, "seed": args.seed,
-            "time_class": args.time_class, "allow_bots": args.allow_bots}
-    print(json.dumps(T.write_testset(args.out, positions, meta), indent=1))
+    manifest = T.build_balanced(args.source, args.parts, windows, args.out, workers=args.workers, cap_per_bin=args.cap_per_bin,
+                                shard_dir=args.shard_dir, keep_shards=args.keep_shards, seed=args.seed, log=lambda m: print(m, flush=True),
+                                per_game=args.per_game, time_class=args.time_class, allow_bots=args.allow_bots)
+    print(json.dumps({k: v for k, v in manifest.items() if not k.startswith("rating_bins")}, indent=1))
+    print("positions per rating bin (before -> after the cap):")
+    for b, n in manifest["rating_bins_before"].items():
+        print(f"  {b:>5}: {n:>9,} -> {manifest['rating_bins_after'].get(b, 0):>9,}")
 
 
 def cmd_humanlike_allie(args):
@@ -1920,6 +1916,9 @@ def main():
     ht.add_argument("--parts", type=int, default=700); ht.add_argument("--windows", required=True, help="comma-separated window numbers (0 to parts-1)")
     ht.add_argument("--per-game", type=int, default=4); ht.add_argument("--seed", type=int, default=2026)
     ht.add_argument("--time-class", default="blitz"); ht.add_argument("--allow-bots", action="store_true")
+    ht.add_argument("--workers", type=int, default=1, help="windows parsed at the same time (about 100 games/s per worker)")
+    ht.add_argument("--cap-per-bin", type=int, help="thin each 100-point rating bin to at most this many positions (a natural month is thin at the extremes)")
+    ht.add_argument("--shard-dir"); ht.add_argument("--keep-shards", action="store_true")
     ht.add_argument("--out", required=True)
     ht.set_defaults(func=cmd_humanlike_testset)
     ha = sub.add_parser("humanlike-allie", help="turn the published Allie test set (jsonl) into a test set of ours; by default only the positions the papers evaluate")

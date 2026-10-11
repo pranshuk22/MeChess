@@ -9,8 +9,11 @@ import gzip
 import hashlib
 import io
 import json
+import multiprocessing
 import random
 import re
+import shutil
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -135,10 +138,10 @@ def iter_window_positions(source, parts, windows, **kw):
             yield from iter_positions(RS.decode_window_text(data), skip_edges=True, **kw)
 
 
-# ---- files -----------------------------------------------------------------------------------------------------------------
+# ---- files, and balanced sets built from many windows -------------------------------------------------------------------
 
-def write_testset(path, positions, meta=None):
-    """Write positions as JSON lines (gzip) plus `<path>.manifest.json` with the count, the parameters and a SHA-256 of the content."""
+def _write_lines(path, positions):
+    """Write positions as gzip JSON lines. Returns (count, sha256 of the content)."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     h, n = hashlib.sha256(), 0
@@ -148,27 +151,97 @@ def write_testset(path, positions, meta=None):
             f.write(line + "\n")
             h.update(line.encode())
             n += 1
-    manifest = {"file": path.name, "positions": n, "sha256": h.hexdigest(), **(meta or {})}
+    return n, h.hexdigest()
+
+
+def write_testset(path, positions, meta=None):
+    """Write positions as JSON lines (gzip) plus `<path>.manifest.json` with the count, the parameters and a SHA-256 of the content."""
+    path = Path(path)
+    n, sha = _write_lines(path, positions)
+    manifest = {"file": path.name, "positions": n, "sha256": sha, **(meta or {})}
     Path(str(path) + ".manifest.json").write_text(json.dumps(manifest, indent=1))
     return manifest
+
+
+def iter_testset(path):
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            yield Position(**json.loads(line))
 
 
 def read_testset(path, index=None):
     """All positions of a test set, or only those at the given row numbers (in the order of `index`, which must be sorted): a score file
     covers a subset, and loading 900k positions only to use 100k would cost gigabytes."""
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        if index is None:
-            return [Position(**json.loads(line)) for line in f]
-        wanted = iter(int(i) for i in index)
-        nxt = next(wanted, None)
-        out = []
-        for row, line in enumerate(f):
-            if nxt is None:
-                break
-            if row == nxt:
-                out.append(Position(**json.loads(line)))
-                nxt = next(wanted, None)
-        return out
+    if index is None:
+        return list(iter_testset(path))
+    wanted = iter(int(i) for i in index)
+    nxt = next(wanted, None)
+    out = []
+    for row, p in enumerate(iter_testset(path)):
+        if nxt is None:
+            break
+        if row == nxt:
+            out.append(p)
+            nxt = next(wanted, None)
+    return out
+
+
+def rating_bin_of(p):
+    """The 100-point bin of the GAME's average rating (Maia-3's balancing), as an int."""
+    from .metrics import rating_bin
+    return int(rating_bin((p.me + p.opp) / 2.0))
+
+
+def keep_fraction_hash(gid, ply, seed):
+    """A deterministic number in [0, 1) for a position: a position is kept when it is below its rating bin's keep fraction."""
+    return int.from_bytes(hashlib.sha256(f"{seed}:keep:{gid}:{ply}".encode()).digest()[:8], "big") / 2.0 ** 64
+
+
+def _window_task(task):
+    source, parts, window, kw, shard = task
+    positions = list(iter_window_positions(source, parts, [window], **kw))
+    n, _ = _write_lines(shard, positions)
+    return str(shard), dict(Counter(rating_bin_of(p) for p in positions)), n
+
+
+def build_balanced(source, parts, windows, out, *, workers=1, cap_per_bin=None, shard_dir=None, keep_shards=False, seed=2026, log=print, **kw):
+    """A test set from byte windows of a dump, built in parallel and balanced over rating.
+
+    Each window is parsed by one worker into a shard file. Then, per 100-point bin of the game's average rating, positions are thinned to at
+    most `cap_per_bin` by a deterministic hash of the position (no randomness, so the same inputs give the same set for any `workers`).
+    Without a cap nothing is thinned. The manifest records the counts per bin before and after."""
+    out = Path(out)
+    shard_dir = Path(shard_dir) if shard_dir else out.parent / (out.name + ".shards")
+    shard_dir.mkdir(parents=True, exist_ok=True)
+    kw = dict(kw, seed=seed)
+    tasks = [(source, parts, w, kw, shard_dir / f"w{w:04d}.jsonl.gz") for w in windows]
+    if workers > 1:
+        with multiprocessing.get_context("spawn").Pool(workers) as pool:
+            results = list(pool.imap(_window_task, tasks))
+    else:
+        results = [_window_task(t) for t in tasks]
+    before = Counter()
+    for shard, counts, n in results:
+        before.update(counts)
+        log(f"  {Path(shard).name}: {n:,} positions")
+    fraction = {b: (1.0 if not cap_per_bin else min(1.0, cap_per_bin / n)) for b, n in before.items()}
+    after = Counter()
+
+    def kept():
+        for shard, _, _ in results:
+            for p in iter_testset(shard):
+                b = rating_bin_of(p)
+                if keep_fraction_hash(p.gid, p.ply, seed) < fraction[b]:
+                    after[b] += 1
+                    yield p
+    meta = {"source": Path(str(source)).name, "parts": parts, "windows": list(windows), "cap_per_bin": cap_per_bin, "seed": seed, **{k: v for k, v in kw.items() if k != "seed"}}
+    manifest = write_testset(out, kept(), meta)
+    manifest["rating_bins_before"] = {str(b): n for b, n in sorted(before.items())}
+    manifest["rating_bins_after"] = {str(b): n for b, n in sorted(after.items())}
+    Path(str(out) + ".manifest.json").write_text(json.dumps(manifest, indent=1))
+    if not keep_shards:
+        shutil.rmtree(shard_dir, ignore_errors=True)
+    return manifest
 
 
 def to_items(positions):

@@ -194,3 +194,56 @@ def test_a_subset_can_be_read_without_loading_the_rest(tmp_path):
     assert T.read_testset(tmp_path / "t.jsonl.gz", [0, 3, 7]) == [ps[0], ps[3], ps[7]]
     assert T.read_testset(tmp_path / "t.jsonl.gz", []) == []
     assert T.read_testset(tmp_path / "t.jsonl.gz", range(len(ps))) == ps
+
+
+# ---- balanced sets built from many windows, in parallel -------------------------------------------------------------------
+
+def rated_dump(tmp_path, n_per_level=60, levels=(800, 1700, 2300)):
+    games = []
+    for k, lvl in enumerate(levels):
+        for i in range(n_per_level):
+            games.append(str(make_game(site=f"l{lvl}g{i:04d}", WhiteElo=str(lvl), BlackElo=str(lvl - 50),
+                                       clocks=[170 - 2 * (j // 2) for j in range(len(LINE))])) + "\n\n")
+    random.Random(0).shuffle(games)
+    size = len(games) // 6
+    buf, _ = make_dump(["".join(games[i:i + size]) for i in range(0, len(games), size)])
+    dump = tmp_path / "month.pgn.zst"
+    dump.write_bytes(buf)
+    return dump
+
+
+def test_the_cap_thins_crowded_rating_bins_only(tmp_path):
+    dump = rated_dump(tmp_path)
+    m = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "bal.jsonl.gz", cap_per_bin=40, per_game=3, log=lambda *a: None)
+    before, after = m["rating_bins_before"], m["rating_bins_after"]
+    assert len(before) == 3 and any(after[b] < before[b] for b in before)            # three rating levels, and the cap really removed positions
+    for b, n in before.items():
+        assert after[b] <= 1.6 * 40 + 5                                          # thinned towards the cap (a hash threshold: approximate)
+        if n <= 40:
+            assert after[b] == n                                                 # a bin under the cap is left whole
+    assert sum(after.values()) == m["positions"] and m["cap_per_bin"] == 40 and m["windows"] == list(range(6))
+
+
+def test_no_cap_keeps_everything_and_the_shards_are_removed(tmp_path):
+    dump = rated_dump(tmp_path)
+    m = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "all.jsonl.gz", per_game=3, log=lambda *a: None)
+    assert m["rating_bins_before"] == m["rating_bins_after"]
+    assert not (tmp_path / "all.jsonl.gz.shards").exists()
+    T.build_balanced(str(dump), 6, [0, 1], tmp_path / "k.jsonl.gz", per_game=3, keep_shards=True, log=lambda *a: None)
+    assert len(list((tmp_path / "k.jsonl.gz.shards").glob("w*.jsonl.gz"))) == 2
+
+
+def test_the_result_is_identical_for_any_number_of_workers(tmp_path):
+    """Regression guard for parallel building: the keep rule is a hash of the position, never of the order or the process."""
+    dump = rated_dump(tmp_path)
+    one = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "w1.jsonl.gz", workers=1, cap_per_bin=40, per_game=3, log=lambda *a: None)
+    two = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "w2.jsonl.gz", workers=2, cap_per_bin=40, per_game=3, log=lambda *a: None)
+    assert one["sha256"] == two["sha256"] and one["positions"] == two["positions"]
+    assert T.read_testset(tmp_path / "w1.jsonl.gz") == T.read_testset(tmp_path / "w2.jsonl.gz")
+
+
+def test_another_seed_keeps_other_positions_but_the_same_amount_roughly(tmp_path):
+    dump = rated_dump(tmp_path)
+    a = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "a.jsonl.gz", cap_per_bin=40, per_game=3, seed=1, log=lambda *a: None)
+    b = T.build_balanced(str(dump), 6, list(range(6)), tmp_path / "b.jsonl.gz", cap_per_bin=40, per_game=3, seed=2, log=lambda *a: None)
+    assert a["sha256"] != b["sha256"] and abs(a["positions"] - b["positions"]) < 0.5 * a["positions"]
