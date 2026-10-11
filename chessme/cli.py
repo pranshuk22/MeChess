@@ -1098,7 +1098,7 @@ def cmd_explorer_range_scan(args):
     thresholds = {"db_min_games": args.db_min_games, "db_min_frac": args.db_min_frac, "book_min_games": args.book_min_games,
                   "book_min_frac": args.book_min_frac}
     merged = RS.run(args.source, args.parts, args.out, edges=edges, max_ply=args.max_ply, min_base=args.min_base, max_entries=args.max_entries,
-                    holdout=args.holdout, slices=args.slices, thresholds=thresholds, workers=args.workers, job=args.job,
+                    holdout=args.holdout, slices=args.slices, thresholds=thresholds, windows_dir=args.windows_dir, workers=args.workers, job=args.job,
                     control_dir=args.control_dir, log=log)
     merged.config = {"edges": list(edges), "max_ply": args.max_ply, "min_base": args.min_base, "holdout": args.holdout, "parts": args.parts,
                      "source": os.path.basename(args.source)}
@@ -1635,6 +1635,8 @@ def main():
     rg.add_argument("--parts", type=int, default=700, help="byte windows to cut the dump into (about 40 MB each for the real dump); a rerun must use the same number")
     rg.add_argument("--workers", type=int, default=4, help="windows scanned at the same time")
     rg.add_argument("--max-entries", type=int, default=5_000_000, help="a window whose tables pass this many entries stops the scan (never pruned): use more --parts")
+    rg.add_argument("--windows-dir", help="where the scanned windows are kept (about 45 MB each, ~31 GB for the real dump); default <out>/windows_<parts>. "
+                    "On Kaggle use scratch space (/kaggle/temp): /kaggle/working is limited to 20 GB")
     rg.add_argument("--slices", type=int, default=64, help="each window is saved in this many slices and the merge handles one slice at a time (peak memory)")
     rg.add_argument("--holdout", type=int, default=1000, help="games per band kept aside for the coverage test (spread over the windows)")
     rg.add_argument("--db-min-games", type=int, default=5); rg.add_argument("--db-min-frac", type=float, default=1e-5)

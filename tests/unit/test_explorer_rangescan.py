@@ -427,3 +427,15 @@ def test_run_scans_a_local_dump_in_parallel_resumes_and_matches_a_single_pass(tm
     assert merged.tables == single.tables and merged.games == single.games
     with pytest.raises(ValueError, match="other settings"):
         RS.run(str(dump), 4, tmp_path / "out", **{**kw, "max_ply": 6})
+
+
+def test_windows_can_be_kept_elsewhere_than_the_output_folder(tmp_path):
+    """The windows of the real dump take ~31 GB; on Kaggle the output folder holds 20 GB, so they go to scratch space."""
+    games = [game(1500, 1500, 1.0, ITALIAN) for _ in range(6)]
+    buf, _ = make_dump(["".join(games[:3]), "".join(games[3:])])
+    dump = tmp_path / "m.pgn.zst"
+    dump.write_bytes(buf)
+    out, scratch = tmp_path / "out", tmp_path / "scratch" / "windows"
+    RS.run(str(dump), 2, out, edges=EDGES, max_ply=4, holdout=0, slices=2, thresholds=THRESHOLDS, windows_dir=scratch, workers=1,
+           control_dir=tmp_path / "ctl", log=lambda *a: None)
+    assert (scratch / "manifest.json").exists() and (scratch / "0000" / "meta.pkl.gz").exists() and not list(out.glob("windows_*"))

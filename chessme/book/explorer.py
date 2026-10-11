@@ -747,7 +747,7 @@ def render_report(counts, edges, books, cov, meta):
          "- Top games: for the first 12 plies each move keeps a link to the highest-rated game that played it (public Lichess game id).",
          *([f"- **WARNING: the stream ended after {counts.scanned:,} games, before the scan limit of {meta.get('max_scan', 0):,}.** The counts are exact for those games only."]
            if meta.get("ended_early") else []),
-         f"- Memory guard: {'nothing was dropped' if not counts.pruned_below else f'entries with at most {counts.pruned_below} games may be missing'}.", "",
+         f"- Memory guard: {'nothing was dropped' if not counts.pruned_below else f'entries with at most {counts.pruned_below} games in a band may be missing (dropped by the memory guard, or by the range scan merge because the database and books never keep them); the number of games at a position, shown as other moves, stays exact when it was recorded'}.", "",
          "## Books and coverage (held-out games: excluded from the book, added to the counts afterwards)", "",
          "| band | games counted | window | book positions | book moves | share of games still in book after N plies |", "|---|---|---|---|---|---|"]
     for b in range(len(counts.tables)):

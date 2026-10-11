@@ -449,15 +449,16 @@ def _scan_window_task(task):
 
 
 def run(source, n_parts, out_dir, *, edges=EX.DEFAULT_BANDS, max_ply=EX.DEFAULT_MAX_PLY, min_base=30, max_entries=5_000_000, holdout=1000,
-        slices=DEFAULT_SLICES, thresholds=None, workers=4, job="explorer-range", control_dir="data/control", log=print):
+        slices=DEFAULT_SLICES, thresholds=None, windows_dir=None, workers=4, job="explorer-range", control_dir="data/control", log=print):
     """Partitioned scan of the whole dump (an URL, or a local `.pgn.zst`): probe its size, cut it into `n_parts` byte windows, scan each
-    independently in worker processes (resumable - a window already saved under `out_dir/windows_<n_parts>/` is skipped), then merge them
+    independently in worker processes (resumable - a window already saved under `windows_dir`, default `out_dir/windows_<n_parts>/`, is
+    skipped; the windows take about 45 MB each, 31 GB for the real dump, so `windows_dir` can point at scratch space), then merge them
     exactly, slice by slice (see the module docstring). `thresholds` = the explorer's keep thresholds (db_min_games, db_min_frac,
     book_min_games, book_min_frac): entries below what the database and the books will keep are dropped in the merge."""
     from .. import jobs as J
     thresholds = thresholds or {"db_min_games": 5, "db_min_frac": 1e-5, "book_min_games": 20, "book_min_frac": 5e-5}
     out_dir = Path(out_dir)
-    windows_dir = out_dir / f"windows_{n_parts}"
+    windows_dir = Path(windows_dir) if windows_dir else out_dir / f"windows_{n_parts}"
     total = make_fetcher(source).total_size()
     windows = partition_bytes(total, n_parts)
     check_manifest(windows_dir, {"format": WINDOW_FORMAT, "source": os.path.basename(str(source)), "total_bytes": total, "parts": n_parts,
