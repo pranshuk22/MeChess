@@ -1289,6 +1289,98 @@ def cmd_me_maia3_ft(args):
     print(f"best validation: step {best['step']}  top-1 {100 * best['val_top1']:.1f}%  nll {best['val_nll']:.3f}  -> {args.out}")
 
 
+def cmd_humanlike_testset(args):
+    from .humanlike import testset as T
+    windows = [int(w) for w in args.windows.split(",")]
+    n = 0
+    positions = []
+    for p in T.iter_window_positions(args.source, args.parts, windows, per_game=args.per_game, seed=args.seed, time_class=args.time_class,
+                                     allow_bots=args.allow_bots):
+        positions.append(p)
+        n += 1
+        if n % 50000 == 0:
+            print(f"  {n:,} positions", flush=True)
+    meta = {"source": os.path.basename(args.source), "parts": args.parts, "windows": windows, "per_game": args.per_game, "seed": args.seed,
+            "time_class": args.time_class, "allow_bots": args.allow_bots}
+    print(json.dumps(T.write_testset(args.out, positions, meta), indent=1))
+
+
+def _humanlike_scorer(args):
+    from .model import compare
+    kind, _, arg = args.scorer.partition("=")
+    extra = [args.extra_path] if args.extra_path else []
+    if kind == "maia3":
+        size = arg.replace("+history", "")
+        return compare.Maia3Scorer(args.maia3_repo, Path(args.weights_dir) / f"maia3-{size}.pt", size, use_history=arg.endswith("+history"),
+                                   extra_paths=extra, batch_size=args.batch)
+    if kind == "maia2":
+        return compare.Maia2Scorer(args.maia2_repo, Path(args.weights_dir) / f"{arg}_model.pt", extra_paths=extra, batch_size=args.batch)
+    if kind == "ours":
+        return compare.OursScorer(arg, batch_size=args.batch)
+    raise SystemExit(f"unknown scorer {args.scorer!r} (use maia3=5m|23m|79m[+history], maia2=blitz|rapid, ours=CHECKPOINT)")
+
+
+def cmd_humanlike_score(args):
+    import numpy as np
+
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    positions = T.read_testset(args.testset)
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    index = np.arange(len(positions))
+    if args.limit and args.limit < len(positions):
+        index = np.sort(np.random.default_rng(args.seed).permutation(len(positions))[:args.limit])
+    chosen = [positions[i] for i in index]
+    scorer = _humanlike_scorer(args)
+    t0 = time.time()
+    scores = S.score_items(scorer, T.to_items(chosen), progress=lambda d, n: print(f"  {d:,}/{n:,}  {time.time() - t0:.0f}s", flush=True) if d % 5000 < 512 or d == n else None)
+    scores["index"] = index
+    S.save_scores(args.out, scores, scorer.name, manifest["sha256"], {"positions_sha": S.positions_hash(chosen), "scorer_spec": args.scorer,
+                                                                     "seconds": round(time.time() - t0, 1)})
+    print(f"{scorer.name}: {len(chosen):,} positions in {time.time() - t0:.0f}s -> {args.out}")
+
+
+def cmd_humanlike_report(args):
+    import numpy as np
+
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    positions = T.read_testset(args.testset)
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    runs = []
+    for path in args.scores:
+        scores, meta = S.load_scores(path)
+        if meta["testset_sha256"] != manifest["sha256"]:
+            raise SystemExit(f"{path} was computed on another test set")
+        chosen = [positions[i] for i in scores["index"]]
+        if meta["positions_sha"] != S.positions_hash(chosen):
+            raise SystemExit(f"{path}: the positions do not match the scores")
+        runs.append((meta["model"], scores, chosen))
+    if len({tuple(r[1]["index"]) for r in runs}) > 1:
+        raise SystemExit("the score files cover different positions: score them with the same --limit/--seed")
+    arr = R.position_arrays(runs[0][2])
+    masks = R.masks(arr, min_ply=args.min_ply, drop_forced=args.drop_forced)
+    lines = [f"# Human-likeness report: {Path(args.testset).name}", "",
+             f"Test set {manifest['positions']:,} positions (sha256 {manifest['sha256'][:12]}), scored subset {len(runs[0][2]):,}. "
+             f"'comparable' = past the first {args.min_ply} plies and not after the first sub-30 s clock (the filters of the published Maia/Allie numbers); "
+             "'full' = every position. Intervals are 95% game-level bootstrap intervals. **sampled match** = the chance a move sampled from the model equals "
+             "the human's move; **top-1** = the same for the model's most probable move.", ""]
+    for name, scores, _ in runs:
+        lines += [f"## {name}", "", R.table({k: R.summarize(scores, arr, m, n_boot=args.boot) for k, m in masks.items()}), ""]
+        for by in ("rating", "phase"):
+            lines += [R.table(R.strata(scores, arr, masks["comparable"], by, n_boot=args.boot), f"### {name}: comparable positions by {by}"), ""]
+        lines += [R.table(R.strata(scores, arr, masks["full"], "clock", n_boot=args.boot), f"### {name}: all positions by the mover's clock"), ""]
+    if len(runs) >= 2:
+        (na, sa, _), (nb, sb, _) = runs[0], runs[1]
+        lines += [f"## {na} minus {nb} (paired, same positions)", "",
+                  R.comparison_table({k: R.compare(sa, sb, arr, m, n_boot=args.boot) for k, m in masks.items()}), ""]
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -1812,6 +1904,25 @@ def main():
     sr.add_argument("--boot", type=int, default=30, help="bootstrap resamples for the standard errors")
     sr.add_argument("--label", default="you"); sr.add_argument("--out", default="data/style/style_report.md")
     sr.set_defaults(func=cmd_style_report)
+    ht = sub.add_parser("humanlike-testset", help="build a fixed test set of positions (with clocks, history, ratings) from byte windows of a Lichess dump")
+    ht.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst")
+    ht.add_argument("--parts", type=int, default=700); ht.add_argument("--windows", required=True, help="comma-separated window numbers (0 to parts-1)")
+    ht.add_argument("--per-game", type=int, default=4); ht.add_argument("--seed", type=int, default=2026)
+    ht.add_argument("--time-class", default="blitz"); ht.add_argument("--allow-bots", action="store_true")
+    ht.add_argument("--out", required=True)
+    ht.set_defaults(func=cmd_humanlike_testset)
+    hs = sub.add_parser("humanlike-score", help="score a move model (Maia-3, Maia-2, ours) over a test set; one record per position")
+    hs.add_argument("--testset", required=True); hs.add_argument("--scorer", required=True, help="maia3=5m|23m|79m[+history] | maia2=blitz|rapid | ours=CHECKPOINT")
+    hs.add_argument("--maia3-repo"); hs.add_argument("--maia2-repo"); hs.add_argument("--weights-dir"); hs.add_argument("--extra-path")
+    hs.add_argument("--limit", type=int, help="score a random subset (seeded); every model to be compared must use the same --limit and --seed")
+    hs.add_argument("--seed", type=int, default=1); hs.add_argument("--batch", type=int, default=64); hs.add_argument("--out", required=True)
+    hs.set_defaults(func=cmd_humanlike_score)
+    hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and the paired difference of the first two")
+    hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
+    hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")
+    hr.add_argument("--drop-forced", action="store_true", help="also leave out positions with a single legal move")
+    hr.add_argument("--boot", type=int, default=300, help="bootstrap resamples"); hr.add_argument("--out", default="data/humanlike/report.md")
+    hr.set_defaults(func=cmd_humanlike_report)
     mch = sub.add_parser("mechess", help="run MeChess as a UCI engine (book + engine candidates + prior + rating dial)")
     mch.add_argument("--table", help="dial table file (JSON {elo: [nodes, multipv, window, temperature, cp_scale, book_plies, blunder_rate, depth]})")
     mch.add_argument("--calibration", help="calibration file from `chessme calibrate`: --elo / the Elo option then mean the measured Elo")
