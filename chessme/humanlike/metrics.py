@@ -70,10 +70,11 @@ def phase_of(ply, heavy):
     return out
 
 
-def comparable_mask(ply, clock, after_low, min_ply=10):
-    """The positions that the published Maia/Allie numbers are computed on: past the first `min_ply` plies, and not at or after the first
-    time the mover's clock was under 30 s (`after_low` is True from that move on). Positions with an unknown clock are kept."""
-    return (np.asarray(ply) >= min_ply) & ~np.asarray(after_low, dtype=bool)
+def comparable_mask(ply, late, min_ply=10):
+    """The positions that the published Maia-3 / Allie numbers are computed on: past the first `min_ply` plies (10: Allie's "first 5 moves"),
+    and not strictly after the first position at which either player had under 30 s (`late`). This definition reproduces the Allie test set's
+    reported size exactly (884,049 positions from its 18,239 games); a per-mover version does not."""
+    return (np.asarray(ply) >= min_ply) & ~np.asarray(late, dtype=bool)
 
 
 # ---- paired cluster bootstrap --------------------------------------------------------------------------------------

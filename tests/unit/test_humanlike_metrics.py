@@ -41,8 +41,9 @@ def test_phase_matches_the_comparison_groups():
 
 def test_comparable_mask_reproduces_the_published_filters():
     ply = np.array([4, 10, 30, 30, 50])
-    after_low = np.array([False, False, False, True, True])
-    assert list(M.comparable_mask(ply, None, after_low)) == [False, True, True, False, False]
+    late = np.array([False, False, False, True, True])
+    assert list(M.comparable_mask(ply, late)) == [False, True, True, False, False]
+    assert list(M.comparable_mask(ply, late, min_ply=20)) == [False, False, True, False, False]
 
 
 def test_cluster_bootstrap_interval_reflects_the_number_of_games_not_positions():

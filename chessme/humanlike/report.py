@@ -13,7 +13,7 @@ def position_arrays(positions):
     a = {"gid": np.array([p.gid for p in positions]), "ply": np.array([p.ply for p in positions]),
          "me": np.array([p.me for p in positions]), "opp": np.array([p.opp for p in positions]),
          "clock": np.array([p.clock for p in positions], dtype=np.float64),
-         "after_low": np.array([p.after_low for p in positions], dtype=bool),
+         "after_low": np.array([p.after_low for p in positions], dtype=bool), "late": np.array([p.late for p in positions], dtype=bool),
          "n_legal": np.array([p.n_legal for p in positions]), "heavy": np.array([heavy_pieces(p.fen) for p in positions])}
     a["game_rating"] = (a["me"] + a["opp"]) / 2.0
     assert all(len(v) == n for v in a.values())
@@ -22,9 +22,9 @@ def position_arrays(positions):
 
 def masks(arr, min_ply=10, drop_forced=False):
     """The named subsets of a test set. 'comparable' is what the published numbers are computed on (past the opening, not after the first
-    sub-30 s clock); 'full' is every position; the clock regimes use the mover's clock before the move."""
+    position where either player was under 30 s); 'full' is every position; the clock regimes use the mover's clock before the move."""
     ok = np.ones(len(arr["ply"]), dtype=bool) if not drop_forced else arr["n_legal"] >= 2
-    out = {"full": ok, "comparable": ok & M.comparable_mask(arr["ply"], arr["clock"], arr["after_low"], min_ply)}
+    out = {"full": ok, "comparable": ok & M.comparable_mask(arr["ply"], arr["late"], min_ply)}
     regime = M.clock_regime(arr["clock"])
     for name in M.CLOCK_REGIMES:
         out[f"clock {name}"] = ok & (regime == name)

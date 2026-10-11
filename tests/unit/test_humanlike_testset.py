@@ -166,3 +166,23 @@ def test_positions_are_read_from_byte_windows_of_a_compressed_dump(tmp_path):
     assert ids and ids <= {f"win{i:05d}" for i in range(12)}
     assert len(got) == 2 * len(ids)                                           # two positions per kept game
     assert len(ids) < 12                                                      # the first and last game of every window were dropped
+
+
+def test_late_is_the_game_level_rule_that_defines_the_published_test_set():
+    """Allie / Maia-3: a game is cut at the first position where EITHER player has under 30 s; that position is kept, later ones are not."""
+    # white's clock after ply 2 is 25 s: from the next position (ply 3, black to move) white is the OPPONENT with under 30 s, so ply 3 is the first
+    # event; it is kept and everything after it is late (even though white's clock is back above 30 s from ply 4 on)
+    g = make_game(clocks=[175, 175, 25, 175, 90, 175, 80, 175, 70, 175, 60, 175], base=180)
+    ps = positions_of(g)
+    assert [(p.clock, p.opp_clock) for p in ps if p.ply == 3] == [(175, 25)]
+    assert [p.ply for p in ps if not p.late] == [0, 1, 2, 3]
+    assert all(p.late for p in ps if p.ply > 3)
+    # the mover's own low clock is an event as well: black falls to 20 s after ply 3, which white sees as opp_clock at ply 4 ... so the same rule
+    g2 = make_game(clocks=[175, 175, 170, 20, 160, 100, 150, 90, 140, 80, 130, 70], base=180)
+    ps2 = positions_of(g2)
+    first_event = min(p.ply for p in ps2 if p.clock < 30 or p.opp_clock < 30)
+    assert first_event == 4 and [p.ply for p in ps2 if not p.late] == list(range(first_event + 1))
+
+
+def test_a_game_that_never_goes_below_30_s_is_never_late():
+    assert not any(p.late for p in positions_of(make_game(clocks=[170] * len(LINE))))

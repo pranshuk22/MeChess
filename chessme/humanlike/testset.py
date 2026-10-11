@@ -42,6 +42,8 @@ class Position:
     n_legal: int
     moves: str                # UCI moves from the standard start position to this position
     result: str
+    late: bool = False        # strictly AFTER the first position at which EITHER player had under 30 s: the rule that defines the Allie / Maia-3 test
+                              # set (reproduced exactly on the 18,239 Allie test games: 884,049 positions); the position of the first event is kept
 
 
 def parse_tc(tc):
@@ -80,6 +82,7 @@ def game_positions(game, *, per_game=4, seed=0, time_class="blitz", allow_bots=F
     rows, board, played = [], game.board(), []
     clock_before = {chess.WHITE: float(base), chess.BLACK: float(base)}   # seconds left before the next move of each colour
     low = {chess.WHITE: False, chess.BLACK: False}
+    event_seen = False                                                      # has either player been under 30 s at an EARLIER position?
     ratings = {chess.WHITE: int(h["WhiteElo"]), chess.BLACK: int(h["BlackElo"])}
     for node in game.mainline():
         mover = board.turn
@@ -91,9 +94,12 @@ def game_positions(game, *, per_game=4, seed=0, time_class="blitz", allow_bots=F
         if clock_before[mover] < LOW_CLOCK:
             low[mover] = True
         spent = clock_before[mover] + inc - after
+        late = event_seen
+        if clock_before[mover] < LOW_CLOCK or clock_before[not mover] < LOW_CLOCK:
+            event_seen = True
         rows.append(Position(gid, len(played), board.fen(), node.move.uci(), ratings[mover], ratings[not mover], base, inc,
                              clock_before[mover], clock_before[not mover], spent, low[mover], board.legal_moves.count(),
-                             " ".join(played), h["Result"]))
+                             " ".join(played), h["Result"], late))
         clock_before[mover] = after
         played.append(node.move.uci())
         board.push(node.move)
