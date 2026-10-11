@@ -1305,6 +1305,18 @@ def cmd_humanlike_testset(args):
     print(json.dumps(T.write_testset(args.out, positions, meta), indent=1))
 
 
+def cmd_humanlike_allie(args):
+    from .humanlike import allie as A
+    from .humanlike import testset as T
+    positions = list(A.iter_positions(args.file, comparable_only=not args.all))
+    meta = {"source": "Allie test set (yimingzhang/allie-data, lichess-2022-blitz-test)", "comparable_only": not args.all,
+            "published_positions": A.PUBLISHED_POSITIONS}
+    m = T.write_testset(args.out, positions, meta)
+    print(json.dumps(m, indent=1))
+    if not args.all:
+        print(f"{m['positions']:,} positions; the papers report {A.PUBLISHED_POSITIONS:,}" + (" (exact match)" if m["positions"] == A.PUBLISHED_POSITIONS else " (DIFFERENT)"))
+
+
 def _humanlike_scorer(args):
     from .model import compare
     kind, _, arg = args.scorer.partition("=")
@@ -1363,7 +1375,7 @@ def cmd_humanlike_report(args):
     masks = R.masks(arr, min_ply=args.min_ply, drop_forced=args.drop_forced)
     lines = [f"# Human-likeness report: {Path(args.testset).name}", "",
              f"Test set {manifest['positions']:,} positions (sha256 {manifest['sha256'][:12]}), scored subset {len(runs[0][2]):,}. "
-             f"'comparable' = past the first {args.min_ply} plies and not after the first sub-30 s clock (the filters of the published Maia/Allie numbers); "
+             f"'comparable' = past the first {args.min_ply} plies and not after the first position where either player was under 30 s (the filter of the published Maia-3 / Allie numbers); "
              "'full' = every position. Intervals are 95% game-level bootstrap intervals. **sampled match** = the chance a move sampled from the model equals "
              "the human's move; **top-1** = the same for the model's most probable move.", ""]
     for name, scores, _ in runs:
@@ -1911,6 +1923,10 @@ def main():
     ht.add_argument("--time-class", default="blitz"); ht.add_argument("--allow-bots", action="store_true")
     ht.add_argument("--out", required=True)
     ht.set_defaults(func=cmd_humanlike_testset)
+    ha = sub.add_parser("humanlike-allie", help="turn the published Allie test set (jsonl) into a test set of ours; by default only the positions the papers evaluate")
+    ha.add_argument("--file", required=True, help="2022-test-annotated.jsonl from the Hugging Face dataset yimingzhang/allie-data")
+    ha.add_argument("--all", action="store_true", help="keep every position (the filters then only set the `late` flag)"); ha.add_argument("--out", required=True)
+    ha.set_defaults(func=cmd_humanlike_allie)
     hs = sub.add_parser("humanlike-score", help="score a move model (Maia-3, Maia-2, ours) over a test set; one record per position")
     hs.add_argument("--testset", required=True); hs.add_argument("--scorer", required=True, help="maia3=5m|23m|79m[+history] | maia2=blitz|rapid | ours=CHECKPOINT")
     hs.add_argument("--maia3-repo"); hs.add_argument("--maia2-repo"); hs.add_argument("--weights-dir"); hs.add_argument("--extra-path")
