@@ -18,7 +18,7 @@ make test
 1. **Write tests.** Every feature ships with unit tests, and an integration test where it touches
    the engine; every bug fix ships with a regression test that fails before the fix and passes
    after it. See [docs/testing.md](docs/testing.md) for the test layout and markers.
-2. **Run the suite.** `make test` (seconds) covers the common case; `make test-all` (about 1.5
+2. **Run the suite.** `make test` (a couple of minutes) covers the common case; `make test-all` (about 5
    minutes) also runs the verified perft suite and the Python integration tests against the real
    engine binary. CI runs `make test test-verify` plus the full Python suite on every push and
    pull request.

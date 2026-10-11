@@ -28,6 +28,8 @@ def test_time_class_rule():
     f = normalize.time_class_from_tc
     assert f("15+0") == "ultrabullet"
     assert f("60+0") == "bullet"
+    assert f("120+0") == "bullet" and f("120+1") == "bullet" and f("60+2") == "bullet"       # Lichess: bullet below 180 s of estimated time
+    assert f("180+0") == "blitz"
     assert f("180+2") == "blitz"
     assert f("300+0") == "blitz"
     assert f("600+0") == "rapid"
@@ -118,3 +120,25 @@ def test_rows_are_sorted_by_time_and_missing_files_are_fine(tmp_path):
                                         {"platform": "chesscom", "username": "NoFilesHere"}]))
     ids = [r["game_id"] for r in rows_of(tmp_path)]
     assert ids == ["lichess:early001", "lichess:late0001"]
+
+
+def test_arena_and_team_battle_games_count_as_rated(tmp_path):
+    """Regression: `rated` was `"rated" in event`, so arena / swiss / team-battle games (always rated) were stored as casual."""
+    arena = fill(LICHESS_GAME, "Me", "Opp").replace('[Event "Rated Blitz game"]', '[Event "Hourly SuperBlitz Arena"]').replace(
+        '[Event "rated blitz game"]', '[Event "Hourly SuperBlitz Arena"]')
+    casual = fill(LICHESS_GAME, "Me", "Opp").replace("abcd1234", "casual01").replace('[Event "Rated Blitz game"]', '[Event "Casual Blitz game"]').replace(
+        '[Event "rated blitz game"]', '[Event "casual blitz game"]')
+    write_lichess(tmp_path, "Me", arena + casual)
+    normalize.ingest(cfg_for(tmp_path, [{"platform": "lichess", "username": "Me"}]))
+    rated = {r["game_id"]: r["rated"] for r in rows_of(tmp_path)}
+    assert rated == {"lichess:abcd1234": True, "lichess:casual01": False}
+    assert {r["time_class"] for r in rows_of(tmp_path)} == {"blitz"}
+
+
+def test_a_game_the_account_did_not_play_is_unusable_not_black(tmp_path):
+    """Regression: when neither player matched the account (renamed account, wrong file) the game was silently stored as the account's black game."""
+    write_lichess(tmp_path, "Me", fill(LICHESS_GAME, "SomeoneElse", "Opp"))
+    normalize.ingest(cfg_for(tmp_path, [{"platform": "lichess", "username": "Me"}]))
+    (r,) = rows_of(tmp_path)
+    assert r["usable"] is False and r["unusable_reason"] == "account_not_in_game"
+    assert r["color"] is None and r["my_rating"] is None and r["my_result"] is None

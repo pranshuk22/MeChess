@@ -7,8 +7,8 @@ regression test.** Tests describe the behaviour they protect and avoid vacuous a
 
 | Command | What runs | Time |
 |---|---|---|
-| `make test` | C++ unit tests, quick perft suite, Python unit tests (not marked `slow`) | seconds |
-| `make test-all` | also the perft suite with hash / make-unmake verification at every node, and the Python integration tests against the real engine binary | about 1.5 minutes |
+| `make test` | C++ unit tests, quick perft suite, Python unit tests (not marked `slow`) | a couple of minutes (the C++ part takes seconds) |
+| `make test-all` | also the perft suite with hash / make-unmake verification at every node, and the Python integration tests against the real engine binary | about 5 minutes |
 | `make test-deep` | the deep perft suite (about 600 million nodes) | minutes |
 | `.venv/bin/python -m pytest tests/unit/test_style_features.py -q` | a single file | |
 

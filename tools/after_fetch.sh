@@ -18,17 +18,17 @@ if ! tail -3 "$FLOG" | grep -q "finished:"; then
 fi
 echo "$(date +%H:%M:%S) fetch finished: $(tail -1 "$FLOG" | cut -c1-100)"
 echo "$(date +%H:%M:%S) 1/4 game-level report -> data/style/games_report.md"
-$PY -m chessme style-games-report --out data/style/games_report.md > data/style/logs/games_report.log 2>&1
+$PY -m chessme style-games-report --out data/style/games_report.md > data/style/logs/games_report.log 2>&1 || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
 echo "$(date +%H:%M:%S) 2/4 embedding training -> data/style/embed (log data/style/logs/embed.log)"
-WATCH_OUT=data/style/logs/embed_watch.log tools/watch.sh 3000 $PY -u -m chessme style-embed-train --steps 3000 --eval-every 500
+WATCH_OUT=data/style/logs/embed_watch.log tools/watch.sh 3000 $PY -u -m chessme style-embed-train --steps 3000 --eval-every 500 || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
 echo "$(date +%H:%M:%S) 3/4 move-quality features (400 players x 10 games, 3 workers) -> data/style/logs/quality.log"
-WATCH_OUT=data/style/logs/quality_watch.log tools/watch.sh 3000 $PY -u -m chessme style-games-quality --players 400 --games 10 --workers 3
-$PY -m chessme style-quality-report > data/style/quality_report.txt 2>&1
+WATCH_OUT=data/style/logs/quality_watch.log tools/watch.sh 3000 $PY -u -m chessme style-games-quality --players 400 --games 10 --workers 3 || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
+$PY -m chessme style-quality-report > data/style/quality_report.txt 2>&1 || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
 echo "$(date +%H:%M:%S) quality report -> data/style/quality_report.txt"
 echo "$(date +%H:%M:%S) 4/4 dial calibration, depth-based table, uniform prior -> data/calibration/dial_v3.json"
 WATCH_OUT=data/calibration/v3_abs.log tools/watch.sh 3000 $PY -u -m chessme calibrate --table data/calibration/table_v3.json \
   --dial 1000 1200 1300 1400 1500 1600 1700 1800 2100 2400 2600 --prior uniform --movetime 100 --se 35 --min-games 60 --max-games 300 \
-  --concurrency 3 --out data/calibration/dial_v3.json
+  --concurrency 3 --out data/calibration/dial_v3.json || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
 WATCH_OUT=data/calibration/v3_link.log tools/watch.sh 3000 $PY -u -m chessme calibrate-link --calibration data/calibration/dial_v3.json \
-  --table data/calibration/table_v3.json --prior uniform --link-pairs 100 --concurrency 3
+  --table data/calibration/table_v3.json --prior uniform --link-pairs 100 --concurrency 3 || { echo "$(date +%H:%M:%S) STEP FAILED (exit $?, see its log): stopping the chain"; exit 1; }
 echo "$(date +%H:%M:%S) all done: reports in data/style/, calibration data/calibration/dial_v3.json"

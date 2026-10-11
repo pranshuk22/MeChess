@@ -151,3 +151,16 @@ def test_preflight_reports_each_check_and_fails_when_a_source_is_down(tmp_path):
     assert lines[-1].startswith("preflight FAILED") and "internet archive" in lines[-1]
     import torch
     assert PF.run(tmp_path, need_gpu=True, network=False, min_free_gb=0, log=lambda *_: None) == torch.cuda.is_available()   # requiring a GPU passes only where there is one
+
+
+def test_study_file_names_are_salted_so_usernames_cannot_be_recovered_by_hashing(tmp_path):
+    """Regression: names were sha1(username)[:8], which anyone can reproduce for a list of candidate usernames."""
+    import hashlib
+    one, two = tmp_path / "one", tmp_path / "two"
+    for d in (one, two):
+        S.run(d, users=["alice"], sleep=lambda s: None, opener=lambda url: STUDY.encode(), log=lambda *_: None)
+    (a,), (b,) = list(one.glob("*.pgn")), list(two.glob("*.pgn"))
+    assert a.stem != hashlib.sha1(b"alice").hexdigest()[:8] and a.stem != b.stem              # not the plain hash, and not the same across folders
+    calls = []
+    S.run(one, users=["alice"], sleep=lambda s: None, opener=lambda url: calls.append(url) or STUDY.encode(), log=lambda *_: None)
+    assert calls == []                                                                        # the salt is kept, so a finished export is still recognised

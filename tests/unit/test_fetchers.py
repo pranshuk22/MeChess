@@ -143,3 +143,48 @@ def test_lichess_back_to_back_fetches_never_overwrite_each_other(tmp_path, monke
     assert len(files) == 2
     assert all(f.stat().st_size > 0 for f in files)
     assert not (tmp_path / "lichess" / "Me" / "download.part").exists()
+
+
+def test_chesscom_refetches_a_month_that_was_saved_before_it_ended(tmp_path, monkeypatch):
+    """Regression: only the current and the previous month were refreshed, so a month fetched half-way through (and not looked at again for two
+    months) stayed half-empty forever."""
+    import os
+
+    urls = [month_url("me", 2020, 1), month_url("me", 2020, 2)]
+    fetched = []
+
+    def fake_get(url, **k):
+        if url.endswith("/games/archives"):
+            return FakeResp(200, json_body={"archives": urls})
+        fetched.append(url)
+        return FakeResp(200, json_body={"games": [chesscom_game(uuid=url[-7:])]})
+
+    monkeypatch.setattr(chesscom, "get", fake_get)
+    monkeypatch.setattr(chesscom.time, "sleep", lambda s: None)
+    chesscom.fetch("Me", tmp_path)
+    folder = tmp_path / "chesscom" / "Me"
+    stamp = lambda y, m, d: datetime(y, m, d, 12, tzinfo=timezone.utc).timestamp()
+    os.utime(folder / "2020-01.json", (stamp(2020, 1, 15), stamp(2020, 1, 15)))        # downloaded in the middle of January: incomplete
+    os.utime(folder / "2020-02.json", (stamp(2020, 3, 2), stamp(2020, 3, 2)))          # downloaded after February ended: final
+    fetched.clear()
+    chesscom.fetch("Me", tmp_path)
+    assert fetched == [urls[0]]
+    fetched.clear()
+    chesscom.fetch("Me", tmp_path)                                                       # and now it is final too
+    assert fetched == []
+
+
+def test_lichess_download_cut_short_is_discarded_and_does_not_move_the_state(tmp_path, monkeypatch):
+    """Regression: an exception while streaming left download.part behind; worse, a *silently* shorter body was filed as a normal batch."""
+    class Cut(FakeResp):
+        def iter_content(self, chunk_size=1):
+            yield self._body
+            raise ConnectionError("connection reset")
+
+    body = fill(LICHESS_GAME, "Me", "Opp").encode()
+    monkeypatch.setattr(lichess, "get", lambda *a, **k: Cut(200, body=body))
+    import pytest
+    with pytest.raises(ConnectionError):
+        lichess.fetch("Me", tmp_path)
+    folder = tmp_path / "lichess" / "Me"
+    assert not (folder / "download.part").exists() and not list(folder.glob("games_*.pgn")) and not (folder / "state.json").exists()

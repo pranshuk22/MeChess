@@ -14,6 +14,9 @@ memory when it ends, and **kills the whole process tree if its total resident me
 It counts child processes too (engine workers), which a plain `ulimit` or a look at the parent process would miss.
 Give every job its own `WATCH_OUT`, otherwise jobs overwrite each other's logs.
 
+The exit status is the command's own, or **137 when the guard killed it for memory**, so a script that chains steps (`tools/after_fetch.sh`,
+`tools/after_calibration.sh`) stops at the first step that failed instead of carrying on with missing results.
+
 ## Pipeline scripts
 
 | Script | What it does |

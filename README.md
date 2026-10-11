@@ -60,7 +60,7 @@ recommended: it's what judges "good moves" for analysis and style measurement.
 git clone https://github.com/<you>/MeChess.git && cd MeChess
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 make -C engine        # builds engine/build/chessme-engine
-make test              # a few seconds: C++ + Python unit tests, a quick perft check
+make test              # C++ + Python unit tests, a quick perft check (a couple of minutes)
 ```
 
 Set up your own profile. This is where your account names go, and it never gets committed:

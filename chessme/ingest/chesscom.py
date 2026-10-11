@@ -8,6 +8,13 @@ from .http import get
 BASE = "https://api.chess.com/pub/player/{user}/games/archives"
 
 
+def _month_over_since_fetch(path, year, month):
+    """True if the saved archive was downloaded after its month had ended (so it holds every game of the month). The file's modification time is
+    when it was fetched; a month saved while still running (or the day it ended) is incomplete forever unless it is fetched again."""
+    end = datetime(year + (month == 12), month % 12 + 1, 1, tzinfo=timezone.utc)
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc) >= end
+
+
 def fetch(user, raw_dir):
     out_dir = raw_dir / "chesscom" / user
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -30,7 +37,9 @@ def fetch(user, raw_dir):
         year, month = url.rstrip("/").split("/")[-2:]
         key = f"{year}-{month}"
         path = out_dir / f"{key}.json"
-        if path.exists() and key not in recent:
+        # An archive is final only if it was downloaded after its month had ended: one saved in the middle of the month (a fetch two months
+        # ago, say) would otherwise stay half-empty forever.
+        if path.exists() and key not in recent and _month_over_since_fetch(path, int(year), int(month)):
             total += len(json.loads(path.read_text()).get("games", []))
             continue
         rr = get(url)

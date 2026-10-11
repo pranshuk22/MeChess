@@ -9,7 +9,7 @@ while true; do
   if [ -f "$log" ] && grep -q -E "$pat" "$log"; then
     echo "DONE: $(grep -E "$pat" "$log" | tail -3)"; exit 0
   fi
-  cur=$(stat -f %m "$log" 2>/dev/null || echo 0)
+  cur=$(stat -c %Y "$log" 2>/dev/null || stat -f %m "$log" 2>/dev/null || echo 0)   # GNU stat first, then BSD/macOS
   if [ "$cur" = "$last" ]; then idle=$((idle+1)); else idle=0; last=$cur; fi
   if [ $idle -ge $((stall*6)) ]; then echo "STALLED: no change in $log for $stall minutes; last line: $(tail -1 "$log" 2>/dev/null | cut -c1-140)"; exit 1; fi
   sleep 10

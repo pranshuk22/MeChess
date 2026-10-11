@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 MATE_CP = 10000
 LICHESS_K = 0.00368208          # Lichess: win% = 50 + 50 * (2 / (1 + exp(-K * cp)) - 1)
+LICHESS_CP_CAP = 1000           # Lichess clamps the score to +-1000 cp before the formula (so a +30 to +10 drop costs no accuracy there)
 
 
 @dataclass(frozen=True)
@@ -31,9 +32,10 @@ class Thresholds:
 DEFAULT = Thresholds()
 
 
-def win_prob(cp, k=LICHESS_K):
-    """Expected points for the side the evaluation favours when positive, from a centipawn score (mate scores are clamped)."""
-    cp = max(-MATE_CP, min(MATE_CP, cp))
+def win_prob(cp, k=LICHESS_K, cap=MATE_CP):
+    """Expected points for the side the evaluation favours when positive, from a centipawn score clamped to +-`cap` (default: mate scores only;
+    pass LICHESS_CP_CAP for Lichess's own accuracy figures)."""
+    cp = max(-cap, min(cap, cp))
     return 1.0 / (1.0 + math.exp(-k * cp))
 
 

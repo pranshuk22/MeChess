@@ -8,7 +8,8 @@ sites do, and writes a per-game record and a Markdown report. The classification
 .venv/bin/python -m chessme analyse my_games.pgn --player MyName --out data/analysis --nodes 200000
 ```
 
-It is **resumable and pausable** (one JSON file per game; `chessme control pause analyse`), analyses at a **fixed node budget** (results do not
+It is **resumable and pausable** (one JSON file per game, named by the Lichess game id, or by a hash of players, date and moves when the PGN has
+none, so adding games to the PGN never renames the others; `chessme control pause analyse`), analyses at a **fixed node budget** (results do not
 depend on the machine), asks Stockfish for two lines per position (so "only move" is known), and takes named openings from `data/opening_names`
 (`chessme theory-book --download` fetches them once).
 
@@ -37,7 +38,8 @@ public), and all thresholds are configurable (`Thresholds`). Nothing here claims
 ## Accuracy and the rest of the report
 
 - **Accuracy** per move follows the Lichess formula `103.1668 exp(-0.04354415 x drop) - 3.1669 + 1` (drop in win probability, in percent),
-  clipped to 0-100, averaged per colour and per phase.
+  clipped to 0-100, averaged per colour and per phase. As on Lichess, the score is clamped to +-1000 centipawns before the win probability is taken
+  (so giving away a +30 advantage for a +10 one costs no accuracy); the class thresholds use the unclamped scale.
 - **Phases**: opening until move 10 (unless the position is already an endgame), endgame when the pieces (no pawns) are worth 26 points or less.
 - **Opportunism / luck** (as in Lichess Insights): how often you punish the opponent's mistakes, and how often yours go unpunished.
 - **Conversion / resourcefulness** (as in Lichess Tutor): games won after reaching 66.6% win chance; games not lost after falling to 33.3%.

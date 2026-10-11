@@ -55,9 +55,14 @@ def fetch(user, raw_dir):
     # Download to a temp file and only keep it if it holds games, so an empty (or failed) run can
     # never clobber or leave behind a file, and two runs in the same second never collide.
     tmp = out_dir / "download.part"
-    with open(tmp, "wb") as f:
-        for chunk in r.iter_content(chunk_size=1 << 16):
-            f.write(chunk)
+    try:
+        with open(tmp, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1 << 16):
+                f.write(chunk)
+    except BaseException:
+        # A download cut short must not be kept: it would be filed as a normal batch and `since_ms` would move past the games it is missing.
+        tmp.unlink(missing_ok=True)
+        raise
 
     n = sum(1 for line in open(tmp, encoding="utf-8", errors="replace") if line.startswith("[Event "))
     if n == 0:

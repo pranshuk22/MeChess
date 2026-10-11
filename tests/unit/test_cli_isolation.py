@@ -32,3 +32,15 @@ def test_the_cli_starts_even_if_a_feature_module_is_broken(module):
 def test_the_full_help_builds_every_parser():
     r = subprocess.run([sys.executable, "-m", "chessme", "--help"], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0 and "explorer-build" in r.stdout and "mechess" in r.stdout
+
+
+@pytest.mark.parametrize("command", ["fetch", "ingest", "audit", "book", "texel-data --out x.txt", "openings --out x.txt", "me-data user --out x"])
+def test_commands_with_a_profile_take_it_from_the_environment(command):
+    """Regression: `fetch`, `ingest`, `audit`, `book` ... required `--profile` although the README (and docs/cli.md) say `CHESSME_PROFILE` is the
+    default, so the documented quick start failed in argparse before doing anything."""
+    import os
+
+    env = {**os.environ, "CHESSME_PROFILE": "no_such_profile_for_the_test"}
+    r = subprocess.run([sys.executable, "-m", "chessme", *command.split()], capture_output=True, text=True, timeout=60, env=env)
+    assert "required" not in r.stderr, r.stderr[-400:]
+    assert "No such profile" in r.stderr + r.stdout, r.stderr[-400:]

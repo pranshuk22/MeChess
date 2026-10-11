@@ -3,6 +3,8 @@ per-game summary (accuracy, class counts, critical moments, opportunism / luck, 
 
 The engine is passed in as a `search(board) -> [Line, ...]` callable (best line first, scores from the side to move's point of view,
 each Line with `.move` (UCI), `.cp` and `.pv`), so the logic runs and is tested without a real engine."""
+import hashlib
+
 import chess
 import chess.pgn
 
@@ -81,7 +83,7 @@ def analyse_game(game, search, *, book=None, thresholds=C.DEFAULT):
         out.append({"ply": i + 1, "move": b.san(mv), "uci": mv.uci(), "color": "white" if mover == chess.WHITE else "black",
                     "class": cls, "loss": round(loss, 4), "best_move": top[0].move, "best_cp": best_cp, "played_cp": played_cp,
                     "win_before": round(C.win_prob(best_cp), 4), "win_after": round(wa, 4),
-                    "accuracy": round(C.move_accuracy(wb, wa), 2), "phase": phase(b)})
+                    "accuracy": round(C.move_accuracy(C.win_prob(best_cp, cap=C.LICHESS_CP_CAP), C.win_prob(played_cp, cap=C.LICHESS_CP_CAP)), 2), "phase": phase(b)})
     return {"moves": out, "summary": summarise(out, game.headers)}
 
 
@@ -142,11 +144,19 @@ class SimpleLine:
         self.move, self.cp, self.pv = move, cp, list(pv)
 
 
-def game_key(game, index):
-    """A stable id for a game: the site id when the headers have one, else the position in the file."""
+def game_key(game, index=None):
+    """A stable id for a game, independent of where it sits in the file: the Lichess game id when the headers have one, else a hash of the
+    players, the date and the moves. (An index in the file would change whenever games are added in front of it - `report-select` writes
+    the newest first - and every game would be analysed again under a new name and then counted twice in the reports.) `index` is accepted
+    for old callers and ignored."""
     site = game.headers.get("Site", "")
     gid = site.rsplit("/", 1)[-1] if "lichess.org" in site else ""
-    return f"{index:05d}-{gid}" if gid else f"{index:05d}"
+    if gid:
+        return gid
+    h = game.headers
+    moves = " ".join(n.move.uci() for n in game.mainline())
+    ident = "|".join([h.get("White", ""), h.get("Black", ""), h.get("UTCDate", h.get("Date", "")), h.get("UTCTime", ""), h.get("Event", ""), moves])
+    return "g" + hashlib.sha1(ident.encode()).hexdigest()[:12]
 
 
 def side_of(game, player):

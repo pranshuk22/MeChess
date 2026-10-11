@@ -155,12 +155,14 @@ class MeChess:
             c.prior = p / total
 
         # 4. choice
-        weights = [self._weight(c, settings) for c in cands]
+        logw = [self._log_weight(c, settings) for c in cands]
+        top = max(logw)
+        weights = [math.exp(x - top) for x in logw]                  # relative to the best: no underflow however small the temperature
         z = sum(weights)
         for c, w in zip(cands, weights):
-            c.weight, c.prob = w, (w / z if z > 0 else 1.0 / len(cands))
+            c.weight, c.prob = w, w / z
         if settings.temperature <= 0:
-            move = max(cands, key=lambda c: c.weight).move
+            move = max(cands, key=lambda c: (c.prior, -c.loss)).move   # the most likely candidate (the smaller loss breaks a tie)
         else:
             move = self.rng.choices([c.move for c in cands], weights=[c.prob for c in cands])[0]
         return self._with_blunder(board, Choice(move, "search", cands), settings)
@@ -174,9 +176,13 @@ class MeChess:
         return choice
 
     @staticmethod
-    def _weight(c, settings):
+    def _log_weight(c, settings):
         t = max(settings.temperature, 1e-3)
-        return math.exp(math.log(c.prior) / t - c.loss / settings.cp_scale)
+        return math.log(c.prior) / t - c.loss / settings.cp_scale
+
+    @staticmethod
+    def _weight(c, settings):
+        return math.exp(MeChess._log_weight(c, settings))
 
     def _sample(self, moves, weights, temperature):
         if temperature <= 0:

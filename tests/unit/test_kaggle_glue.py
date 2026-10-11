@@ -66,6 +66,18 @@ def test_slim_removes_raw_downloads_and_links_but_keeps_results(tmp_path):
     assert not (work / "annotated").exists() and src.exists() and not (work / "nlp_dry").exists() and (work / "nlp").exists()
 
 
+def test_slim_nlp_never_deletes_a_real_data_folder(tmp_path):
+    """Regression: `--slim` after a local training run used to rmtree the real corpus folders (only Kaggle's are symlinks)."""
+    work = tmp_path / "learn"
+    for name in ("annotated", "prose", "books"):
+        (work / name).mkdir(parents=True)
+        (work / name / "keep.txt").write_text("corpus")
+    (work / "nlp_dry").mkdir()
+    K.slim_nlp(work)
+    assert all((work / n / "keep.txt").read_text() == "corpus" for n in ("annotated", "prose", "books"))
+    assert not (work / "nlp_dry").exists()
+
+
 def test_an_explicit_data_dir_is_used_and_a_wrong_one_lists_what_is_there(tmp_path):
     inp = tmp_path / "input"
     d = make_collection(inp)

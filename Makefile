@@ -1,6 +1,6 @@
 # Top-level developer commands.
-#   make test         C++ unit tests + quick perft + Python unit tests   (fast, a few seconds)
-#   make test-all     everything, incl. verified perft and Python integration tests against the real engine (~1.5 min)
+#   make test         C++ unit tests + quick perft + Python unit tests   (a couple of minutes: the C++ part takes seconds, the ~900 Python unit tests most of the time)
+#   make test-all     everything, incl. verified perft and Python integration tests against the real engine (about 5 minutes)
 #   make test-deep    deep perft suite (~600M nodes)
 PY ?= .venv/bin/python
 

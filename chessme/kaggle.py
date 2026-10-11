@@ -79,13 +79,15 @@ def slim_collect(out):
 
 
 def slim_nlp(out):
-    """Remove the linked data and the dry-run folder after training."""
-    for name in DATA_DIRS + ("nlp_dry",):
+    """Remove the links to the input data and the dry-run folder after training. Only symlinks are removed: a real `annotated/`, `prose/`
+    or `books/` folder is the collected corpus itself (a local run points `--data` at it) and is never deleted."""
+    for name in DATA_DIRS:
         p = Path(out) / name
         if p.is_symlink():
             p.unlink()
-        elif p.is_dir():
-            shutil.rmtree(p, ignore_errors=True)
+    dry = Path(out) / "nlp_dry"
+    if dry.is_dir() and not dry.is_symlink():
+        shutil.rmtree(dry, ignore_errors=True)
 
 
 def find_model(input_root):

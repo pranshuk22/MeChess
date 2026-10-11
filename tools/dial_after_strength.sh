@@ -11,5 +11,5 @@ done
 echo "$(date +%H:%M:%S) strength run finished; starting the dial calibration -> data/calibration/dial.log"
 WATCH_OUT=data/calibration/dial.log tools/watch.sh 2000 .venv/bin/python -u -m chessme calibrate \
   --dial 1200 1500 1800 2100 2400 2600 --prior uniform --movetime 100 --se 35 --min-games 60 --max-games 300 \
-  --concurrency 3 --out data/calibration/dial.json
+  --concurrency 3 --out data/calibration/dial.json || { echo "$(date +%H:%M:%S) the dial calibration FAILED (exit $?, see data/calibration/dial.log)"; exit 1; }
 echo "$(date +%H:%M:%S) dial calibration finished: data/calibration/dial.json"

@@ -338,3 +338,22 @@ def test_the_uci_elo_option_accepts_labels_below_800():
     u = MechessUci(m, inp=io.StringIO("setoption name Elo value 400\nquit\n"), out=io.StringIO(), elo=1800)
     u.run()
     assert u.opts["Elo"] == 400
+
+
+def test_temperature_zero_plays_the_most_likely_candidate_even_when_no_prior_is_dominant():
+    """Regression: with the temperature floored at 1e-3 every weight exp(log(prior) / T) underflowed to 0 whenever the best prior was below
+    about 0.47, and `max` then returned the first candidate (the engine's best), not the most likely one."""
+    lines = [L("e2e4", 30), L("d2d4", 28), L("g1f3", 27), L("c2c4", 26), L("b1c3", 25)]
+    pri = prior_of({"e2e4": 0.15, "d2d4": 0.40, "g1f3": 0.15, "c2c4": 0.15, "b1c3": 0.15})
+    t0 = {1200: (100, 5, 100, 0.0, 50.0, 20), 2600: (100, 5, 100, 0.0, 50.0, 20)}
+    assert mc(lines, pri, t0).choose(START, 1500).move == chess.Move.from_uci("d2d4")
+
+
+def test_a_tiny_positive_temperature_does_not_underflow_either():
+    lines = [L("e2e4", 30), L("d2d4", 28), L("g1f3", 27)]
+    pri = prior_of({"e2e4": 0.2, "d2d4": 0.5, "g1f3": 0.3})
+    tiny = {1200: (100, 3, 100, 0.01, 50.0, 20), 2600: (100, 3, 100, 0.01, 50.0, 20)}
+    picks = Counter(mc(lines, pri, tiny, seed=s).choose(START, 1500).move.uci() for s in range(30))
+    assert picks == {"d2d4": 30}
+    c = mc(lines, pri, tiny).choose(START, 1500)
+    assert sum(x.prob for x in c.candidates) == pytest.approx(1.0) and max(x.prob for x in c.candidates) > 0.99

@@ -39,7 +39,7 @@ def build(rows, cfg=None):
     usable = [r for r in rows if r["usable"]]
     add("# Data audit\n")
     dates = [r["played_at"][:10] for r in rows if r["played_at"]]
-    add(f"- Games ingested: **{len(rows)}** ({min(dates)} to {max(dates)})")
+    add(f"- Games ingested: **{len(rows)}**" + (f" ({min(dates)} to {max(dates)})" if dates else ""))
     add(f"- Usable for training: **{len(usable)}** ({pct(len(usable), len(rows))})")
     add(f"- Plies in usable games: {sum(r['plies'] for r in usable)}; "
         f"my moves: ~{sum((r['plies'] + (r['color'] == 'white')) // 2 for r in usable)}\n")
@@ -130,9 +130,10 @@ def build(rows, cfg=None):
         add(f"\n- Total my moves kept: **{tot_n}**; effective (weighted) size: **{round(tot_w)}**")
         ratings = defaultdict(list)
         for r in kept:
-            ratings[r["platform"]].append(r["my_rating"])
-        add("- Rating ranges kept (scales kept separate): " + ", ".join(
-            f"{k} {min(v)}-{max(v)}" for k, v in sorted(ratings.items())))
+            if r["my_rating"]:                              # a kept game can lack a rating when the profile sets no floor for its platform
+                ratings[r["platform"]].append(r["my_rating"])
+        add("- Rating ranges kept (scales kept separate): " + (", ".join(
+            f"{k} {min(v)}-{max(v)}" for k, v in sorted(ratings.items())) or "none (no ratings)"))
         recent = sum(1 for r in kept if (w.ref - datetime.fromisoformat(r["played_at"])).days <= 365)
         add(f"- Games in the last 12 months of data: {recent} ({pct(recent, len(kept))})\n")
 

@@ -17,19 +17,25 @@ def _int(x):
         return None
 
 
+def time_class_of(base, inc):
+    """The Lichess speed class of a game from its clock: estimated duration base + 40 x increment seconds (ultrabullet under 30 s, bullet under
+    180 s, blitz under 480 s, rapid under 1500 s, else classical). The single definition used by ingest, the clock model and the explorer."""
+    total = base + 40 * inc
+    for limit, name in [(30, "ultrabullet"), (180, "bullet"), (480, "blitz"), (1500, "rapid")]:
+        if total < limit:
+            return name
+    return "classical"
+
+
 def time_class_from_tc(tc):
     """Lichess rule: base + 40*increment seconds."""
     if not tc or "+" not in tc:
         return "correspondence"
     try:
         base, inc = tc.split("+")
-        total = int(base) + 40 * int(inc)
+        return time_class_of(int(base), int(inc))
     except ValueError:
         return "correspondence"
-    for limit, name in [(30, "ultrabullet"), (120, "bullet"), (480, "blitz"), (1500, "rapid")]:
-        if total < limit:
-            return name
-    return "classical"
 
 
 def _played_at(h, fallback_epoch=None):
@@ -59,8 +65,9 @@ def _row(game, *, platform, account, game_id, variant, time_class, rated, my_nam
          white_rating=None, black_rating=None, opening=None):
     h = game.headers
     white, black = h.get("White", "?"), h.get("Black", "?")
-    color = "white" if white.lower() == account.lower() else "black"
-    opp = black if color == "white" else white
+    # Which side is the account? Neither name matching (a renamed account, a game filed under the wrong user) must not silently become "black".
+    color = "white" if white.lower() == account.lower() else "black" if black.lower() == account.lower() else None
+    opp = black if color == "white" else white if color == "black" else None
     wr = white_rating if white_rating is not None else _int(h.get("WhiteElo"))
     br = black_rating if black_rating is not None else _int(h.get("BlackElo"))
     result = h.get("Result", "*")
@@ -81,7 +88,9 @@ def _row(game, *, platform, account, game_id, variant, time_class, rated, my_nam
         if game.errors and not parse_error:
             reason, parse_error = "parse_error", True
     if reason is None:
-        if len(sans) < MIN_PLIES:
+        if color is None:
+            reason = "account_not_in_game"
+        elif len(sans) < MIN_PLIES:
             reason = "too_short"
         elif result == "*":
             reason = "unfinished"
@@ -89,7 +98,7 @@ def _row(game, *, platform, account, game_id, variant, time_class, rated, my_nam
             reason = "vs_own_account"
 
     my_result = None
-    if result in ("1-0", "0-1", "1/2-1/2"):
+    if color is not None and result in ("1-0", "0-1", "1/2-1/2"):
         if result == "1/2-1/2":
             my_result = "draw"
         else:
@@ -100,8 +109,8 @@ def _row(game, *, platform, account, game_id, variant, time_class, rated, my_nam
         "platform": platform,
         "account": account,
         "color": color,
-        "my_rating": wr if color == "white" else br,
-        "opp_rating": br if color == "white" else wr,
+        "my_rating": wr if color == "white" else br if color == "black" else None,
+        "opp_rating": br if color == "white" else wr if color == "black" else None,
         "opp_name": opp,
         "result": result,
         "my_result": my_result,
@@ -137,7 +146,7 @@ def _lichess_rows(account, files, my_names):
                 variant = h.get("Variant", "Standard").lower().replace(" ", "")
                 variant = "standard" if variant == "standard" else variant
                 yield _row(game, platform="lichess", account=account, game_id=f"lichess:{gid}",
-                           variant=variant, time_class=tc, rated="rated" in event,
+                           variant=variant, time_class=tc, rated=not event.startswith("casual"),
                            my_names=my_names, opening=h.get("Opening"))
 
 

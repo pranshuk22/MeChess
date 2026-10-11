@@ -65,3 +65,14 @@ def test_non_429_errors_are_returned_not_retried(monkeypatch):
     monkeypatch.setattr(http.requests, "get", fake)
     assert http.get("https://example.test").status_code == 404
     assert calls["n"] == 1
+
+
+def test_get_retries_server_errors_then_returns_the_last_one(monkeypatch):
+    """Regression: a 502 / 503 from a briefly overloaded server was returned at once and the caller gave up on that month or user."""
+    sleeps, seen = [], [Resp(503), Resp(502), Resp(200)]
+    monkeypatch.setattr(http.requests, "get", lambda *a, **k: seen.pop(0))
+    monkeypatch.setattr(http.time, "sleep", lambda s: sleeps.append(s))
+    assert http.get("https://example.test").status_code == 200 and sleeps == [5, 10]
+    always = lambda *a, **k: Resp(500)
+    monkeypatch.setattr(http.requests, "get", always)
+    assert http.get("https://example.test", retries=3).status_code == 500          # out of retries: the caller sees the error and reports it

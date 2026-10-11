@@ -583,3 +583,37 @@ def test_reconnecting_without_any_progress_gives_up(monkeypatch):
         raise ConnectionError("the server is down")
     with pytest.raises(ConnectionError):
         X.count_stream(opener, X.Counts(len(EDGES) - 1), edges=EDGES, max_ply=6, holdout=0, log=lambda *_: None)
+
+
+# ---- regressions: packed counters, checkpoint layouts, movetext glyphs -------------------------------------------------------
+
+def test_packed_counts_do_not_overflow_past_16_7_million_games():
+    # Regression: three 24-bit fields shared one integer, so the 16,777,216th game carried into the White-wins field.
+    n = (1 << 24) + 5
+    v = X.pack(1.0, 1500) * n + X.pack(0.5, 1500) * 3 + X.pack(0.0, 1500)
+    assert X.unpack(v) == (n + 4, n, 3, 1) and X.avg_rating_of(v) == 1500.0
+
+
+def test_a_checkpoint_of_the_old_24_bit_layout_is_converted_on_load(tmp_path):
+    import gzip
+    import pickle
+
+    def old_pack(white, rating):                                   # layout 1, as written by earlier versions
+        return 1 + ((1 << 24) if white == 1.0 else 0) + ((1 << 48) if white == 0.5 else 0) + (rating << 72)
+    v = old_pack(1.0, 1500) + old_pack(0.5, 1600) + old_pack(0.0, 1400)
+    state = {"tables": [{123: v}], "games": [3], "held_out": [[]], "scanned": 3, "evals": [{}], "clock": [{}], "stats": [{}]}
+    path = tmp_path / "old.pkl.gz"
+    with gzip.open(path, "wb") as f:
+        pickle.dump(state, f)
+    c = X.load_state(path)
+    assert X.unpack(c.tables[0][123]) == (3, 1, 1, 1) and X.avg_rating_of(c.tables[0][123]) == 1500.0
+    X.save_state(path, c, 3)                                        # a checkpoint written now carries its layout and is not converted twice
+    assert X.unpack(X.load_state(path).tables[0][123]) == (3, 1, 1, 1)
+
+
+def test_movetext_with_move_glyphs_keeps_its_comments_attached():
+    # Regression: `Qh5?! { [%eval -0.3] }` separated the comment from the move, and the words in it were read as moves.
+    line = "1. e4 { [%eval 0.17] [%clk 0:03:00] } 1... e5 { [%eval 0.2] } 2. Qh5?! { [%eval -0.3] [%clk 0:02:58] } 2... Nc6 { [%eval -0.2] } 3. Bc4 3... Nf6?? { [%eval 10.0] } 4. Qxf7# 1-0"
+    sans, evals, clocks, last = X.parse_moves(line, 24)
+    assert sans == ["e4", "e5", "Qh5", "Nc6", "Bc4", "Nf6", "Qxf7#"]
+    assert evals == [17, 20, -30, -20, None, 1000, None] and clocks[2] == 178.0 and last == 4

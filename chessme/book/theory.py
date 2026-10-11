@@ -159,6 +159,7 @@ def build(lines, games=(), *, max_ply=20, min_games=1, min_share=0.03, extend_mi
             board.push(mv)
     played = defaultdict(Counter)
     score = defaultdict(lambda: defaultdict(float))
+    scored = defaultdict(Counter)                      # games with a known result, per move (a PGN without results has none)
     n_games = left_theory = 0
     for moves, colour, result in games:
         n_games += 1
@@ -170,6 +171,7 @@ def build(lines, games=(), *, max_ply=20, min_games=1, min_share=0.03, extend_mi
                 break                                  # the game left known theory here
             played[k][uci] += 1
             if result is not None and colour is not None:
+                scored[k][uci] += 1
                 mover_is_player = (board.turn == chess.WHITE) == (colour == "white")
                 score[k][uci] += result if mover_is_player else 1.0 - result
             board.push(chess.Move.from_uci(uci))
@@ -185,7 +187,7 @@ def build(lines, games=(), *, max_ply=20, min_games=1, min_share=0.03, extend_mi
                 dropped["below min_share"] += 1
                 continue
             mv = chess.Move.from_uci(u)
-            sc = round(1000 * score[k][u] / played[k][u]) if played[k][u] and score[k][u] else 500
+            sc = round(1000 * score[k][u] / scored[k][u]) if scored[k][u] else 500        # 500 only when no result is known (a move that always lost scores 0)
             entries.append(Entry(k, mv.from_square, mv.to_square, mv.promotion or 0, float(w), int(played[k][u]), sc))
     cov_named = coverage(entries, games) if games else {}
     added = 0
@@ -193,7 +195,7 @@ def build(lines, games=(), *, max_ply=20, min_games=1, min_share=0.03, extend_mi
         entries, added = extend(entries, games, max_ply=max_ply, min_games=extend_min_games, min_share=extend_min_share)
     stats = {"lines": len(lines), "positions": len({e.key for e in entries}), "entries": len(entries), "games": n_games,
              "left_theory": left_theory, "dropped": dict(dropped), "coverage": coverage(entries, games) if games else {},
-             "coverage_named_only": cov_named, "extension_moves": added}
+             "coverage_named_only": cov_named, "extension_moves": added, "extend_min_games": extend_min_games, "extend_min_share": extend_min_share}
     return entries, stats
 
 
@@ -204,6 +206,6 @@ def render(stats, band=None):
             + ("- How deep the book carries a typical game (share of games still in book after N plies): "
                + ", ".join(f"{p}: {100 * v:.0f}%" for p, v in stats["coverage"].items()) + ".\n" if stats.get("coverage") else "")
             + (f"- Named lines alone would carry: " + ", ".join(f"{p}: {100 * v:.0f}%" for p, v in stats["coverage_named_only"].items())
-               + f". {stats['extension_moves']} popular moves beyond the names were added (played at least {15} times and 8% of the games at that position).\n"
+               + f". {stats['extension_moves']} popular moves beyond the names were added (played at least {stats.get('extend_min_games', 15)} times and {100 * stats.get('extend_min_share', 0.08):.0f}% of the games at that position).\n"
                if stats.get("coverage_named_only") else "")
             + f"- Dropped: {stats['dropped'] or 'nothing'}.\n")

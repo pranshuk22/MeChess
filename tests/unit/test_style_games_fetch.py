@@ -89,6 +89,14 @@ class TestFetch:
         GF.run(tmp_path / "v1", tmp_path / "v2", n_games=5, min_games=3, pause=0, control_dir=tmp_path / "ctl", log=lambda *_: None, getter=g)
         assert len(calls) == 1
 
+    def test_games_that_cannot_be_processed_make_a_short_player_not_a_crash(self, tmp_path, monkeypatch):
+        """Regression: when every selected game failed game_record, `sorted(...)[len(recs) // 2]` raised IndexError and stopped the whole run."""
+        monkeypatch.setattr(GF, "game_record", lambda *a, **k: None)
+        g = getter_for({"anna": lichess_pgn("anna", n=6)})
+        stats = run(tmp_path, ["anna"], None, getter=g)
+        assert stats["short"] == 1 and stats["done"] == 0
+        assert GF.load_players(tmp_path / "v2", min_games=3) == {}
+
     def test_players_without_a_username_on_record_are_skipped(self, tmp_path):
         v1 = make_cohort(tmp_path, ["anna"])
         ids = json.loads((v1 / "players.json").read_text())

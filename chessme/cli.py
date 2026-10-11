@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -786,7 +787,7 @@ def cmd_analyse(args):
     done = failed = 0
     todo = []
     for i, g in enumerate(games):
-        key = AR.game_key(g, i)
+        key = AR.game_key(g)
         path = out / "games" / f"{key}.json"
         if path.exists():
             done += 1
@@ -794,6 +795,10 @@ def cmd_analyse(args):
             exp = _io.StringIO()
             print(g, file=exp, end="\n\n")
             todo.append((key, exp.getvalue(), str(path), args.engine, args.nodes, args.openings_dir, args.player))
+    stale = [p.name for p in (out / "games").glob("*.json") if re.fullmatch(r"\d{5}(-.*)?\.json", p.name)]
+    if stale:
+        log(f"WARNING: {len(stale)} files in {out / 'games'} are named by their position in the PGN (older versions, e.g. {stale[0]}); games are now "
+            "named by their id, so these are analysed again and would be counted twice: delete the folder's old files (or use a new --out)")
     log(f"{done} already done, {len(todo)} to analyse")
     from .analysis import pool as AP
     from .jobs import run_pool
@@ -815,7 +820,8 @@ def cmd_analyse(args):
         log(f"stopped: {e} (rerun the same command to resume)")
     finally:
         AP.close()
-    results = [(p.stem, _json.loads(p.read_text())) for p in sorted((out / "games").glob("*.json"))]
+    wanted = {AR.game_key(g) for g in games}                    # the report covers the games of this PGN, not leftovers of other runs in the folder
+    results = [(p.stem, _json.loads(p.read_text())) for p in sorted((out / "games").glob("*.json")) if p.stem in wanted]
     (out / "report.md").write_text(AR.render_report(results, args.player))
     log(f"finished: {done} done, {failed} failed; report {out / 'report.md'}")
 
@@ -1080,6 +1086,28 @@ def cmd_explorer_build(args):
     print((Path(args.out) / "report.md").read_text())
 
 
+def cmd_explorer_range_scan(args):
+    """Partitioned range-scan: cuts the dump into byte windows (parallel, resumable window by window), instead of one long-lived
+    stream that has to restart from byte 0 on every disconnect. See chessme/book/rangescan.py."""
+    from .book import explorer as EX
+    from .book import rangescan as RS
+    log = _file_logger(args.log)
+    edges = tuple(args.bands)
+    log(f"=== explorer-range-scan {' '.join(sys.argv[2:])}")
+    _ensure_opening_names(args.openings_dir, log)
+    merged = RS.run(args.source, args.parts, args.out, edges=edges, max_ply=args.max_ply, min_base=args.min_base,
+                    max_entries=args.max_entries, max_merged_entries=args.max_merged_entries, workers=args.workers, job=args.job,
+                    control_dir=args.control_dir, log=log)
+    merged.config = {"edges": list(edges), "max_ply": args.max_ply, "source": args.source.rsplit("/", 1)[-1]}
+    state_path = Path(args.out) / "state.pkl.gz"
+    EX.save_state(state_path, merged, merged.scanned, merged.config)
+    del merged                                                  # rebuild reloads the checkpoint: do not hold two full copies at once
+    EX.rebuild(state_path, args.out, db_min_games=args.db_min_games, db_min_frac=args.db_min_frac, book_min_games=args.book_min_games,
+              book_min_frac=args.book_min_frac, book_min_share=args.book_min_share, eval_margin_cp=args.eval_margin,
+              max_ply=args.max_ply, openings_dir=args.openings_dir, log=log)
+    print((Path(args.out) / "report.md").read_text())
+
+
 def cmd_explorer_rebuild(args):
     from .book import explorer as EX
     log = _file_logger(args.log)
@@ -1296,17 +1324,17 @@ def main():
     p = argparse.ArgumentParser(prog="chessme")
     sub = p.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fetch", help="download games for the accounts in a profile")
-    f.add_argument("--profile", required=True)
+    f.add_argument("--profile", default=DEFAULT_PROFILE)
     f.add_argument("--only", nargs="*", help="limit to these usernames")
     f.set_defaults(func=cmd_fetch)
     for name, fn, helptext in [("ingest", cmd_ingest, "normalise raw games into data/processed/games.jsonl"),
                                ("audit", cmd_audit, "print a data audit report")]:
         sp = sub.add_parser(name, help=helptext)
-        sp.add_argument("--profile", required=True)
+        sp.add_argument("--profile", default=DEFAULT_PROFILE)
         sp.set_defaults(func=fn)
 
     o = sub.add_parser("openings", help="build an opening-position file from your games (or random)")
-    o.add_argument("--profile", required=True)
+    o.add_argument("--profile", default=DEFAULT_PROFILE)
     o.add_argument("--out", required=True)
     o.add_argument("--plies", type=int, default=8)
     o.add_argument("--n", type=int, default=None, help="keep at most this many")
@@ -1345,7 +1373,7 @@ def main():
     sp.set_defaults(func=cmd_selfplay)
 
     t = sub.add_parser("texel-data", help="tuning positions from your own games (weighted by the profile filters)")
-    t.add_argument("--profile", required=True)
+    t.add_argument("--profile", default=DEFAULT_PROFILE)
     t.add_argument("--out", required=True)
     t.add_argument("--keep-prob", type=float, default=0.2)
     t.add_argument("--weight-scale", type=float, default=0.3)
@@ -1364,7 +1392,7 @@ def main():
     tu.add_argument("--freeze", help="comma-separated parameter groups to keep fixed")
     tu.set_defaults(func=cmd_tune)
     b = sub.add_parser("book", help="build an opening book from your games")
-    b.add_argument("--profile", required=True)
+    b.add_argument("--profile", default=DEFAULT_PROFILE)
     b.add_argument("--out", help="default: profiles/<profile>/book.bin")
     b.add_argument("--max-ply", type=int)
     b.add_argument("--min-games", type=int)
@@ -1377,7 +1405,7 @@ def main():
     md = sub.add_parser("me-data", help="build training shards for the 'me' model")
     md.add_argument("source", help="'user' (your own games, needs --profile) or a Lichess .pgn.zst URL / file")
     md.add_argument("--out", required=True)
-    md.add_argument("--profile")
+    md.add_argument("--profile", default=DEFAULT_PROFILE)
     md.add_argument("--samples-per-bin", type=int, default=20000)
     md.add_argument("--rating-min", type=int, default=1100)
     md.add_argument("--rating-max", type=int, default=2600)
@@ -1591,7 +1619,26 @@ def main():
     eb.add_argument("--job", default="explorer"); eb.add_argument("--control-dir", default="data/control")
     eb.add_argument("--check", action="store_true", help="read a few hundred games and exit: tests the URL, decompression and parsing in seconds")
     eb.add_argument("--log", default="data/explorer/explorer.log")
+
     eb.set_defaults(func=cmd_explorer_build)
+
+    rg = sub.add_parser("explorer-range-scan", help="opening explorer via a partitioned byte-range scan of the dump (parallel, resumable window by "
+                        "window - no 17-minute reconnect-from-byte-0 problem); see chessme/book/rangescan.py")
+    rg.add_argument("--source", default="https://database.lichess.org/standard/lichess_db_standard_rated_2026-06.pgn.zst", help="a .pgn.zst URL (must support HTTP range requests)")
+    rg.add_argument("--out", default="data/explorer")
+    rg.add_argument("--bands", nargs="+", type=int, default=[0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4000])
+    rg.add_argument("--max-ply", type=int, default=24); rg.add_argument("--min-base", type=int, default=30)
+    rg.add_argument("--parts", type=int, default=200, help="byte windows to cut the dump into")
+    rg.add_argument("--workers", type=int, default=4, help="windows scanned at the same time")
+    rg.add_argument("--max-entries", type=int, default=5_000_000, help="per-window memory guard (each worker holds its own tables)")
+    rg.add_argument("--max-merged-entries", type=int, default=60_000_000, help="cap on the merged table (rarest entries dropped first; recorded in the report)")
+    rg.add_argument("--db-min-games", type=int, default=5); rg.add_argument("--db-min-frac", type=float, default=1e-5)
+    rg.add_argument("--book-min-games", type=int, default=20); rg.add_argument("--book-min-frac", type=float, default=5e-5); rg.add_argument("--book-min-share", type=float, default=0.03)
+    rg.add_argument("--eval-margin", type=float)
+    rg.add_argument("--openings-dir", default="data/opening_names")
+    rg.add_argument("--job", default="explorer-range"); rg.add_argument("--control-dir", default="data/control")
+    rg.add_argument("--log", default="data/explorer/explorer_range.log")
+    rg.set_defaults(func=cmd_explorer_range_scan)
     er = sub.add_parser("explorer-rebuild", help="rebuild explorer.db, the books and the report from a saved checkpoint with other thresholds (no streaming)")
     er.add_argument("state", help="state.pkl.gz written by explorer-build"); er.add_argument("--out", default="data/explorer")
     er.add_argument("--db-min-games", type=int, default=5); er.add_argument("--db-min-frac", type=float, default=1e-5)

@@ -13,8 +13,11 @@ chessme = "chessme.cli:main"
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-packages = ["chessme", "chessme.ingest", "chessme.dataset", "chessme.book", "chessme.model", "chessme.mechess", "chessme.style"]
+[tool.setuptools.packages.find]
+include = ["chessme*"]          # every subpackage (analysis, books, ... included): listing them by hand left two out
+
+[tool.setuptools.package-data]
+"chessme.books" = ["sources.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

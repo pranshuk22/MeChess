@@ -40,14 +40,16 @@ UA = {"User-Agent": "MeChess-opening-explorer (research; CC0 Lichess database)"}
 DEFAULT_BANDS = (0, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 4000)
 DEFAULT_MAX_PLY = 24
 DEFAULT_MAX_PER_BAND = 1_000_000                             # exact counting: a band stops collecting when it has this many games
-MASK24 = (1 << 24) - 1
+FIELD_BITS = 32                                              # games / White wins / draws each get this many bits of one packed integer
+FIELD_MASK = (1 << FIELD_BITS) - 1
+LAYOUT = 2                                                   # packed-count layout of saved checkpoints (1: 24-bit fields, which overflowed at 16.7 million games)
 TOP_PLY = 12                                                 # "top games" (a link to the highest-rated game) are kept for the first this many plies
 _ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 _SITE = re.compile(r"lichess\.org/([A-Za-z0-9]{8})(?:$|[/?#])")
 EVAL_CLAMP = 1000                                            # centipawns: mates count as +-10 pawns
 _MOVENUM = re.compile(r"\d+\.+")
 _TAG = re.compile(r'\[(\w+) "([^"]*)"\]')
-_SAN = re.compile(r"(?:\d+\.+\s*)?([A-Za-z][A-Za-z0-9+#=\-]*)(?:\s*\$\d+)*(?:\s*\{([^}]*)\})?")
+_SAN = re.compile(r"(?:\d+\.+\s*)?([A-Za-z][A-Za-z0-9+#=\-]*)[!?]*(?:\s*\$\d+)*(?:\s*\{([^}]*)\})?")
 _EVAL = re.compile(r"\[%eval (#?-?\d+(?:\.\d+)?)\]")
 _CLK = re.compile(r"\[%clk (\d+):(\d\d):(\d\d(?:\.\d+)?)\]")
 _LAST_MOVE_NO = re.compile(r"(\d+)\.")
@@ -76,18 +78,30 @@ def unmove16(m):
 
 
 def pack(result_white, avg_rating=0):
-    """One game's contribution: 1 game, +1 White win in bits 24.., +1 draw in bits 48.., its average rating (summed) from bit 72."""
-    return 1 + ((1 << 24) if result_white == 1.0 else 0) + ((1 << 48) if result_white == 0.5 else 0) + (int(avg_rating) << 72)
+    """One game's contribution: 1 game, +1 White win in the second field, +1 draw in the third, its average rating (summed) above them."""
+    return (1 + ((1 << FIELD_BITS) if result_white == 1.0 else 0) + ((1 << (2 * FIELD_BITS)) if result_white == 0.5 else 0)
+            + (int(avg_rating) << (3 * FIELD_BITS)))
 
 
 def unpack(v):
-    g, w, d = v & MASK24, (v >> 24) & MASK24, (v >> 48) & MASK24
+    g, w, d = v & FIELD_MASK, (v >> FIELD_BITS) & FIELD_MASK, (v >> (2 * FIELD_BITS)) & FIELD_MASK
     return g, w, d, g - w - d
 
 
+def rating_sum_of(v):
+    return v >> (3 * FIELD_BITS)
+
+
 def avg_rating_of(v):
-    g = v & MASK24
-    return (v >> 72) / g if g else 0.0
+    g = v & FIELD_MASK
+    return rating_sum_of(v) / g if g else 0.0
+
+
+def repack_v1(v):
+    """A packed count of checkpoint layout 1 (24-bit fields) in the current layout."""
+    m = (1 << 24) - 1
+    g, w, d, r = v & m, (v >> 24) & m, (v >> 48) & m, v >> 72
+    return g | (w << FIELD_BITS) | (d << (2 * FIELD_BITS)) | (r << (3 * FIELD_BITS))
 
 
 def gid_to_int(game_id):
@@ -337,7 +351,7 @@ class Counts:
         threshold = 1
         while self.size() > max_entries and threshold < 50:
             for t, ev, tp in zip(self.tables, self.evals, self.top):
-                for k in [k for k, v in t.items() if (v & MASK24) <= threshold]:
+                for k in [k for k, v in t.items() if (v & FIELD_MASK) <= threshold]:
                     del t[k]
                     ev.pop(k, None)
                     tp.pop(k, None)
@@ -353,7 +367,7 @@ def save_state(path, counts, games_scanned, config=None):
         pickle.dump({"tables": counts.tables, "games": counts.games, "held_out": counts.held_out, "scanned": games_scanned,
                      "evals": counts.evals, "clock": counts.clock, "stats": counts.stats, "config": config,
                      "speed_games": counts.speed_games, "population": counts.population, "rating_hist": counts.rating_hist,
-                     "window_end": counts.window_end, "pruned_below": counts.pruned_below, "top": counts.top}, f, protocol=4)
+                     "window_end": counts.window_end, "pruned_below": counts.pruned_below, "top": counts.top, "layout": LAYOUT}, f, protocol=4)
     tmp.replace(path)
 
 
@@ -361,6 +375,10 @@ def load_state(path):
     with gzip.open(path, "rb") as f:
         st = pickle.load(f)
     c = Counts(len(st["tables"]))
+    if st.get("layout", 1) != LAYOUT:                         # a checkpoint of the old 24-bit layout: convert, never misread
+        if st.get("layout", 1) != 1:
+            raise ValueError(f"{path}: unknown checkpoint layout {st.get('layout')}")
+        st["tables"] = [{k: repack_v1(v) for k, v in t.items()} for t in st["tables"]]
     c.tables, c.games, c.held_out, c.scanned = st["tables"], st["games"], st["held_out"], st["scanned"]
     c.evals, c.clock, c.stats = st["evals"], st["clock"], st["stats"]
     c.config = st.get("config")
@@ -527,7 +545,7 @@ def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, open
                 m = k & 0xFFFF
                 en, es = counts.evals[b].get(k, (0, 0))
                 tp = counts.top[b].get(k)
-                batch.append((b, signed64(k >> 16), m, unmove16(m).uci(), g, w, d, bl, v >> 72, en, es,
+                batch.append((b, signed64(k >> 16), m, unmove16(m).uci(), g, w, d, bl, rating_sum_of(v), en, es,
                               int_to_gid(tp & ((1 << 48) - 1)) if tp else None, (tp >> 48) if tp else None))
         db.executemany("INSERT INTO moves VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", batch)
         rows += len(batch)
@@ -537,7 +555,7 @@ def to_sqlite(counts, path, edges, *, min_games=5, min_frac=0.0, meta=None, open
         for k, v in table.items():
             pk = k >> 16
             if signed64(pk) in stored:
-                totals[pk] = totals.get(pk, 0) + (v & MASK24)
+                totals[pk] = totals.get(pk, 0) + (v & FIELD_MASK)
         db.executemany("INSERT INTO positions VALUES (?,?,?)", [(b, signed64(pk), n) for pk, n in totals.items()])
         del totals, stored
     db.executemany("INSERT INTO openings VALUES (?,?,?)", list(openings))

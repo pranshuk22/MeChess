@@ -64,3 +64,14 @@ def test_effective_data_section_only_with_config():
     assert "Effective training data" in text
     assert "Games kept after rating floors / excluded time classes: **4** of 4 usable" in text
     assert "Total my moves kept" in text
+
+
+def test_audit_survives_empty_input_and_games_without_a_rating():
+    """Regression: `min()` over a list holding None raised TypeError, and an empty game list raised ValueError on min(dates)."""
+    assert "Games ingested: **0**" in audit.build([])
+    cfg = {"filters": {"recency": {"half_life_days": 100, "min_weight": 0.1}, "time_class_weights": {"blitz": 1.0}}}   # no rating floor at all
+    unrated = dict(ROWS[0], my_rating=None, game_id="norating")
+    text = audit.build([unrated, dict(ROWS[0], game_id="rated")], cfg)
+    assert "Effective training data" in text and "Rating ranges kept" in text
+    only_unrated = audit.build([unrated], cfg)
+    assert "none (no ratings)" in only_unrated

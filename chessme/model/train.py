@@ -62,6 +62,16 @@ def phase_of(data, idx):
     return ply, heavy.sum(axis=1)
 
 
+def set_train_mode(model, freeze_body):
+    """`model.train()`, except that a frozen body stays in eval mode: clearing `requires_grad` alone does not stop BatchNorm from updating its
+    running mean / variance on every training batch, which silently changes the "frozen" body (and the BN-folded weights the engine loads)."""
+    model.train()
+    if freeze_body:
+        for name, child in model.named_children():
+            if not name.startswith(("p_", "v_")):
+                child.eval()
+
+
 @torch.no_grad()
 def evaluate(model, data, device, batch_size=2048, limit=None):
     """Legal-masked accuracy of the policy on a shard that carries `legal` arrays.
@@ -143,6 +153,7 @@ def train(train_data, val_data, net_cfg, cfg, out_dir, log=print):
     total = cfg.max_steps or max(1, int(cfg.epochs * steps_per_epoch))
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    (out / "history.jsonl").write_text("")                          # this run's history only: appending mixed the curves of different runs in one folder
     log(f"{num_parameters(model):,} parameters | {n:,} training samples | {total} steps of {cfg.batch_size} on {device}")
 
     history, best, since_best, step, t0 = [], float("inf"), 0, 0, time.time()
@@ -158,7 +169,7 @@ def train(train_data, val_data, net_cfg, cfg, out_dir, log=print):
         pos += cfg.batch_size
         for g in opt.param_groups:
             g["lr"] = lr_at(step, total, cfg)
-        model.train()
+        set_train_mode(model, cfg.freeze_body)
         x = to_planes(train_data, idx, device)
         target = torch.from_numpy(train_data["move"][idx].astype(np.int64)).to(device)
         result = torch.from_numpy(train_data["result"][idx].astype(np.int64)).to(device)
@@ -183,9 +194,12 @@ def train(train_data, val_data, net_cfg, cfg, out_dir, log=print):
             run_loss = run_acc = torch.zeros((), device=device)
             run_cnt = 0
             if val_data is not None:
-                v = evaluate(model, val_data, device, limit=cfg.eval_samples)["all"]
-                rec.update(val_nll=v["nll"], val_top1=v["top1"], val_top3=v["top3"])
-                improved = v["nll"] < best
+                v = evaluate(model, val_data, device, limit=cfg.eval_samples).get("all")
+                if v is None:                                       # an empty validation shard: nothing to compare, keep the latest model
+                    improved = True
+                else:
+                    rec.update(val_nll=v["nll"], val_top1=v["top1"], val_top3=v["top3"])
+                    improved = v["nll"] < best
             else:
                 improved = True
             if improved:

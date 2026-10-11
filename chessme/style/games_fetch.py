@@ -120,6 +120,13 @@ def run(cohort_dir, out_dir, *, n_games=50, min_games=30, want=80, pause=1.0, ge
                 log(f"  [{time.time() - t0:5.0f}s] {i}/{len(todo)}: only {len(sel)} eligible games, kept as short")
             else:
                 recs = [r for r in (game_record(t, c, e) for t, c, e in sel) if r is not None]
+                if len(recs) < min_games:                    # some of the games could not be processed: fewer than wanted is a short player, not a crash
+                    write_player(out / "games" / f"{pid}.json.gz", {"pid": pid, "short": True, "n": len(recs), "games": []})
+                    stats["short"] += 1
+                    log(f"  [{time.time() - t0:5.0f}s] {i}/{len(todo)}: only {len(recs)} of {len(sel)} games could be processed, kept as short")
+                    if pause:
+                        time.sleep(pause)
+                    continue
                 rating = sorted(g["elo"] for g in recs)[len(recs) // 2]
                 write_player(out / "games" / f"{pid}.json.gz", {"pid": pid, "short": False, "rating": rating, "n": len(recs),
                                                                  "names": list(G.FEATURE_NAMES), "games": recs})

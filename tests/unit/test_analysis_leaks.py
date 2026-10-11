@@ -131,3 +131,12 @@ def test_load_results_reads_the_analyse_output_directory(tmp_path):
     (d / "00002-b.json").write_text(json.dumps({"player_color": "black", "headers": {"ECO": "B00"}, "moves": []}))
     results = LK.load_results(tmp_path)
     assert [k for k, _ in results] == ["00001-a", "00002-b"]
+
+
+def test_the_halves_alternate_through_time_whatever_the_keys_are():
+    """Keys are game ids now (no longer ordered by date), so the split-half must order by the date in the headers."""
+    from chessme.analysis import leaks as L
+    results = [(k, {"headers": {"UTCDate": d, "UTCTime": "12:00:00"}, "moves": []})
+               for k, d in (("zz", "2026.01.01"), ("aa", "2026.01.02"), ("mm", "2026.01.03"), ("bb", "2026.01.04"))]
+    a, b = L.split_halves(results)
+    assert [k for k, _ in a] == ["zz", "mm"] and [k for k, _ in b] == ["aa", "bb"]

@@ -104,8 +104,7 @@ def test_forced_move_is_never_great():
 
 def test_game_key_and_side_of():
     g = chess.pgn.read_game(io.StringIO('[White "Alice"]\n[Black "Bob"]\n[Site "https://lichess.org/AbCd1234"]\n\n1. e4 *'))
-    assert R.game_key(g, 7) == "00007-AbCd1234"
-    assert R.game_key(game("1. e4"), 3) == "00003"
+    assert R.game_key(g) == R.game_key(g, 7) == "AbCd1234"
     assert R.side_of(g, "alice") == "white" and R.side_of(g, "BOB") == "black" and R.side_of(g, "carol") is None and R.side_of(g, None) is None
 
 
@@ -132,3 +131,14 @@ def test_engine_search_reads_multipv_lines_from_an_engine():
     b = chess.Board(); b.push_uci("g1f3")
     assert search(b)[0].move == "e2e4" and eng.last == (chess.STARTING_FEN, ["g1f3"], 1234)
     assert "setoption name MultiPV value 3" in eng.sent
+
+
+def test_game_keys_do_not_depend_on_the_position_in_the_file():
+    """Regression: keys were '<index>-<id>', and `report-select` writes the newest game first, so adding one game renamed all the others:
+    every game was analysed again and counted twice in the reports."""
+    a = chess.pgn.read_game(io.StringIO('[White "A"]\n[Black "B"]\n[Date "2026.01.01"]\n[Site "?"]\n\n1. e4 e5 *'))
+    b = chess.pgn.read_game(io.StringIO('[White "A"]\n[Black "B"]\n[Date "2026.01.02"]\n[Site "?"]\n\n1. e4 e5 *'))
+    c = chess.pgn.read_game(io.StringIO('[White "A"]\n[Black "B"]\n[Date "2026.01.01"]\n[Site "?"]\n\n1. d4 d5 *'))
+    keys = [R.game_key(g) for g in (a, b, c)]
+    assert len(set(keys)) == 3 and all(k.startswith("g") for k in keys)                # same players, other date / other moves: different games
+    assert R.game_key(a) == R.game_key(chess.pgn.read_game(io.StringIO(str(a))))        # and the same game always gets the same key

@@ -20,7 +20,7 @@ MIN_BUCKETS_TO_COMPARE = 3  # a correlation over fewer points is not meaningful;
 
 
 def load_results(out_dir):
-    """[(key, result), ...] for every analysed game under `out_dir/games/`, sorted by key (oldest-looking first)."""
+    """[(key, result), ...] for every analysed game under `out_dir/games/`, sorted by key."""
     games = Path(out_dir) / "games"
     return [(p.stem, json.loads(p.read_text())) for p in sorted(games.glob("*.json"))]
 
@@ -51,9 +51,15 @@ def player_moves(results, by):
     return rows
 
 
+def _when(kr):
+    """Sort key of a result: when the game was played (so the halves alternate through time), then its key."""
+    h = kr[1].get("headers") or {}
+    return (h.get("UTCDate") or h.get("Date") or "", h.get("UTCTime") or "", kr[0])
+
+
 def split_halves(results):
-    """(A, B): alternate games (by key order) go to each half, so both cover the whole period analysed."""
-    ordered = sorted(results, key=lambda kr: kr[0])
+    """(A, B): alternate games (in the order they were played) go to each half, so both cover the whole period analysed."""
+    ordered = sorted(results, key=_when)
     return ordered[0::2], ordered[1::2]
 
 

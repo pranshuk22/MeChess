@@ -84,3 +84,22 @@ def test_move_accuracy_matches_lichess_endpoints():
     assert move_accuracy(0.5, 0.6) == 100.0                       # gaining points is not penalised
     assert move_accuracy(0.5, 0.4) == pytest.approx(103.1668 * 2.71828 ** (-0.4354415) - 3.1669 + 1, abs=0.01)
     assert move_accuracy(1.0, 0.0) == pytest.approx(0.0, abs=2.0) or move_accuracy(1.0, 0.0) < 3
+
+
+def test_accuracy_clamps_the_score_like_lichess_but_classification_does_not():
+    """Regression: accuracy used a +-10000 cp clamp, so throwing away +3000 -> +1000 cost accuracy here but not on Lichess (which clamps at 1000)."""
+    import io
+
+    import chess.pgn
+
+    from chessme.analysis import runner as R
+    assert C.win_prob(3000, cap=C.LICHESS_CP_CAP) == C.win_prob(1000, cap=C.LICHESS_CP_CAP)
+    assert C.win_prob(3000) > C.win_prob(1000)                                  # the expected-points scale itself is unchanged
+
+    class Ln:
+        def __init__(self, move, cp):
+            self.move, self.cp, self.pv = move, cp, []
+    game = chess.pgn.read_game(io.StringIO('[Result "*"]\n\n1. e4 *'))
+    searches = iter([[Ln("d2d4", 3000)], [Ln("e7e5", -1000)]])                  # White had +3000, e4 leaves +1000: a big drop on the raw scale
+    res = R.analyse_game(game, lambda b: next(searches))
+    assert res["moves"][0]["accuracy"] == 100.0 and res["moves"][0]["loss"] > 0.0

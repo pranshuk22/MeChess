@@ -135,6 +135,19 @@ def test_a_stuck_task_raises_instead_of_hanging():
     assert time.time() - t0 < 30
 
 
+def _nap(x):
+    import time as _t
+    _t.sleep(1.0)
+    return x
+
+
+def test_time_spent_waiting_in_the_queue_does_not_count_towards_the_timeout():
+    """Regression: the clock started at submission, so with tasks queued behind busy workers a healthy pool raised TaskTimeout."""
+    from chessme.jobs import JobControl, run_pool
+    out = list(run_pool(_nap, range(5), 1, JobControl("t", control_dir="/nonexistent-control"), in_flight=5, task_timeout=3.5))
+    assert sorted(out) == list(range(5))                                   # five seconds of work in all, no task ran longer than ~1 s
+
+
 def test_a_worker_that_dies_is_detected_by_the_timeout():
     from chessme.jobs import JobControl, TaskTimeout, run_pool
     with pytest.raises(TaskTimeout):

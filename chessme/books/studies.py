@@ -1,8 +1,10 @@
 """Lichess studies through the public API (annotated games by users): one request at a time, 60 s wait on HTTP 429, no token.
 
 Study content is user-generated; use it for research and learning and do not redistribute it. The exported files stay local; the
-folder names carry no usernames."""
+folder names carry no usernames - and, because the names are salted with a random value kept next to the files, they cannot be recovered by hashing
+candidate usernames either."""
 import hashlib
+import secrets
 import time
 import urllib.error
 import urllib.request
@@ -31,15 +33,24 @@ def _get(url, tries=3, sleep=time.sleep, opener=None):
     return None
 
 
+def _salt(out):
+    """The random salt of this export folder (created on first use, kept in `<out>/.salt`)."""
+    path = out / ".salt"
+    if not path.exists():
+        path.write_text(secrets.token_hex(16))
+    return path.read_text().strip()
+
+
 def run(out_dir, users=(), study_ids=(), *, pause=2.0, sleep=time.sleep, opener=None, log=print):
-    """Export every user's public studies and every listed study to `<out>/<sha8>.pgn` (finished ones are skipped).
+    """Export every user's public studies and every listed study to `<out>/<salted hash>.pgn` (finished ones are skipped).
     Returns {"done", "empty", "failed"}."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    salt = _salt(out)
     stats = {"done": 0, "empty": 0, "failed": 0}
     todo = [(u, BY_USER.format(user=u)) for u in users] + [(s, BY_ID.format(sid=s)) for s in study_ids]
     for key, url in todo:
-        path = out / f"{hashlib.sha1(key.encode()).hexdigest()[:8]}.pgn"
+        path = out / f"{hashlib.sha256((salt + key).encode()).hexdigest()[:12]}.pgn"
         if path.exists():
             stats["done"] += 1
             continue

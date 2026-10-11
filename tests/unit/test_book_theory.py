@@ -115,3 +115,20 @@ def test_extension_ignores_rare_moves(tmp_path):
     g = [("e2e4 e7e5 g1f3 b8c6 f1c4 g8f6".split(), "white", 1.0)] * 5
     _, s = TH.build(lines(tmp_path), g, extend_min_games=15)
     assert s["extension_moves"] == 0
+
+
+def test_a_move_that_always_lost_scores_zero_not_a_neutral_half(tmp_path):
+    """Regression: `... and score[k][u] else 500` treated a total score of 0.0 (every game lost) as 'no result known'."""
+    losing = [("e2e4 e7e5 g1f3 b8c6 f1c4".split(), "white", 0.0)] * 6              # the player (White) lost all six
+    entries, _ = TH.build(lines(tmp_path), losing, extend_min_games=0)
+    by_move = {e.uci(): e.score_permille for e in entries}
+    assert by_move["f1c4"] == 0
+    unknown, _ = TH.build(lines(tmp_path), [("e2e4 e7e5 g1f3 b8c6 f1c4".split(), None, None)] * 6, extend_min_games=0)
+    assert {e.uci(): e.score_permille for e in unknown}["f1c4"] == 500             # no result at all: neutral
+
+
+def test_the_report_names_the_extension_thresholds_that_were_used(tmp_path):
+    """Regression: the report said '15 times and 8%' whatever extend_min_games / extend_min_share were."""
+    entries, stats = TH.build(lines(tmp_path), games(40, 10), extend_min_games=7, extend_min_share=0.2)
+    text = TH.render(stats)
+    assert "at least 7 times and 20%" in text

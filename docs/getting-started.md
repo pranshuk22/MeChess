@@ -24,13 +24,14 @@ make -C engine                  # -> engine/build/chessme-engine, build/perft, b
 `make -C engine CXX=g++` selects another compiler. The binary is found at
 `engine/build/chessme-engine` by default; every command that needs an engine has an `--engine` option.
 
-Optionally `pip install -e .` gives you a `chessme` command; otherwise use `.venv/bin/python -m chessme`.
+Optionally `pip install -e .` gives you a `chessme` command; otherwise use `.venv/bin/python -m chessme`. The project folder (where `configs/`,
+`profiles/`, `data/` and `engine/build/` live) is the checkout the package sits in; for any other layout, `cd` into it or set `CHESSME_ROOT`.
 
 ## Check that it works
 
 ```bash
-make test        # C++ unit tests, quick perft, Python unit tests: a few seconds
-make test-all    # also the verified perft suite and the Python integration tests (about 1.5 minutes)
+make test        # C++ unit tests, quick perft, Python unit tests: a couple of minutes
+make test-all    # also the verified perft suite and the Python integration tests (about 5 minutes)
 make test-deep   # the deep perft suite (about 600 million nodes)
 ```
 

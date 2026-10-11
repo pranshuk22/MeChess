@@ -35,10 +35,11 @@ say "smoke test ok (the first move came from the book)"
 say "3/4 strength of the personal configuration -> $CAL_OUT"
 WATCH_OUT=data/calibration/mechess_abs.log tools/watch.sh 3000 $PY -u -m chessme calibrate --table data/calibration/table_v3.json \
   --dial 1000 1200 1300 1400 1500 1600 1700 1800 2100 2400 2600 --prior "style=$STYLE_OUT" --book "$BOOKS" --movetime 100 --se 35 \
-  --min-games 60 --max-games 300 --concurrency 3 --out "$CAL_OUT"
+  --min-games 60 --max-games 300 --concurrency 3 --out "$CAL_OUT" || { say "STOP: step failed (exit $?), see its log"; exit 1; }
 WATCH_OUT=data/calibration/mechess_link.log tools/watch.sh 3000 $PY -u -m chessme calibrate-link --calibration "$CAL_OUT" \
-  --table data/calibration/table_v3.json --prior "style=$STYLE_OUT" --book "$BOOKS" --link-pairs 100 --concurrency 3
+  --table data/calibration/table_v3.json --prior "style=$STYLE_OUT" --book "$BOOKS" --link-pairs 100 --concurrency 3 || { say "STOP: step failed (exit $?), see its log"; exit 1; }
 [ -f "$CAL_OUT" ] || { say "STOP: no calibration written"; exit 1; }
+[ "$CAL_OUT" -nt "$STYLE_OUT" ] || { say "STOP: $CAL_OUT is older than this run's style model (a leftover from an earlier run)"; exit 1; }
 
 say "4/4 bot engine script"
 E=bot/lichess-bot/engines

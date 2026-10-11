@@ -124,7 +124,7 @@ class TaskTimeout(RuntimeError):
 def run_pool(fn, tasks, workers, ctl, *, on_result=None, in_flight=None, task_timeout=None):
     """Run `fn(task)` in worker processes, with at most `in_flight` tasks queued (default 2 x workers), checking `ctl` before each
     submission so a pause holds the *submissions* and a stop lets the running tasks finish. Yields results as they complete.
-    Stopped is raised after the in-flight tasks have been collected. With `task_timeout` (seconds), a task that has been running longer than that
+    Stopped is raised after the in-flight tasks have been collected. With `task_timeout` (seconds), a task that has been running (not merely queued) longer than that
     raises TaskTimeout instead of waiting forever (the pool is terminated)."""
     in_flight = in_flight or workers * 2
     tasks = list(tasks)
@@ -140,22 +140,28 @@ def run_pool(fn, tasks, workers, ctl, *, on_result=None, in_flight=None, task_ti
                     stopped = e
                     break
                 pending.append(pool.apply_async(fn, (tasks[i],)))
-                started[id(pending[-1])] = (time.time(), tasks[i])
+                started[id(pending[-1])] = [None, tasks[i]]               # the clock starts when a worker can have picked the task up (below)
                 i += 1
             if not pending:
                 break
             done = [p for p in pending if p.ready()]
+            if task_timeout:
+                now = time.time()
+                for p in pending[:workers]:                           # only the oldest `workers` tasks can be running; the rest are still queued
+                    if started[id(p)][0] is None:
+                        started[id(p)][0] = now
             if not done:
                 if task_timeout:
                     now = time.time()
-                    for p in pending:
+                    for p in pending[:workers]:
                         t0, task = started[id(p)]
-                        if now - t0 > task_timeout:
+                        if t0 is not None and now - t0 > task_timeout:
                             raise TaskTimeout(f"a task ran for more than {task_timeout:.0f} s without finishing (a worker is stuck or died): {str(task)[:120]}")
                 time.sleep(0.05)
                 continue
             for p in done:
                 pending.remove(p)
+                started.pop(id(p), None)
                 r = p.get()
                 if on_result:
                     on_result(r)

@@ -123,3 +123,16 @@ def test_clock_agreement_beats_answering_at_once_on_matching_behaviour():
     s = res["blitz"]
     assert s["ks_model"] < s["ks_instant"] and s["ks_model"] < 0.3 and abs(s["real_mean"] - s["model_mean"]) < 0.25 * s["real_mean"]
     assert "blitz" in AG.render_clock(res)
+
+
+def test_when_every_cell_is_sparse_the_largest_one_is_used():
+    """Regression: the fallback was an arbitrary first cell of the dict."""
+    m = CK.ClockModel({"bullet|0|0": [0.9] * 3, "blitz|1|1": [0.05] * 12, "rapid|2|0": [0.5] * 5})
+    assert m._cell("classical", 3, True) == [0.05] * 12
+    assert CK.ClockModel({})._cell("blitz", 0, False) == [0.0]
+
+
+def test_time_classes_agree_with_ingest_at_the_bullet_boundary():
+    from chessme.ingest import normalize
+    for base, inc in ((60, 0), (120, 0), (120, 1), (60, 2), (179, 0), (180, 0), (240, 2)):
+        assert CK.time_class(base, inc) == normalize.time_class_from_tc(f"{base}+{inc}")

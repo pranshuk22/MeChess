@@ -204,7 +204,7 @@ def test_fine_tuning_starts_from_a_checkpoint_and_can_freeze_the_body(tmp_path):
     train.train(new_data, new_data, TINY, cfg(max_steps=60, init_from=str(tmp_path / "base" / "last.pt"), freeze_body=True,
                                               lr=1e-3), tmp_path / "ft", log=lambda s: None)
     after = net.load_checkpoint(tmp_path / "ft" / "last.pt")[0].state_dict()
-    body = [k for k in before if k.startswith(("stem", "tower")) and "running" not in k and "num_batches" not in k]
+    body = [k for k in before if k.startswith(("stem", "tower"))]       # includes the BatchNorm running statistics and counters
     heads = [k for k in before if k.startswith(("p_", "v_")) and "running" not in k and "num_batches" not in k]
     assert all(torch.equal(before[k], after[k]) for k in body)          # frozen: unchanged
     assert any(not torch.equal(before[k], after[k]) for k in heads)     # heads adapted
@@ -236,3 +236,22 @@ def test_evaluating_an_empty_shard_is_harmless():
     empty = {k: v[:0] for k, v in data.items()}
     assert train.evaluate(net.MeNet(TINY), empty, torch.device("cpu")) == {}
     assert "(no positions)" in train.format_eval({}, "nothing")
+
+
+def test_a_frozen_body_keeps_its_batchnorm_statistics_in_eval_mode():
+    """Regression: freeze_body only cleared requires_grad, so BatchNorm kept updating its running mean / variance in the 'frozen' body."""
+    model = net.MeNet(TINY)
+    train.set_train_mode(model, freeze_body=True)
+    assert not model.stem.training and not model.tower.training and model.p_qk.training and model.v_conv.training
+    train.set_train_mode(model, freeze_body=False)
+    assert model.stem.training and model.tower.training
+
+
+def test_training_with_an_empty_validation_shard_and_a_repeated_output_folder(tmp_path):
+    data = dataset(random_positions(80, 31), lowest)
+    empty = {k: v[:0] for k, v in data.items()}
+    train.train(data, empty, TINY, cfg(max_steps=50), tmp_path, log=lambda s: None)                 # used to raise KeyError: 'all'
+    first = (tmp_path / "history.jsonl").read_text().splitlines()
+    train.train(data, data, TINY, cfg(max_steps=50), tmp_path, log=lambda s: None)
+    second = (tmp_path / "history.jsonl").read_text().splitlines()
+    assert len(first) == 1 and len(second) == 1                    # the second run did not append to the first one's history

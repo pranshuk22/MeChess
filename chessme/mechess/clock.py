@@ -13,6 +13,7 @@ import numpy as np
 
 import chess
 
+from ..ingest.normalize import time_class_of
 from ..style.gamefeatures import parse_time_control
 
 MIN_CELL = 30
@@ -22,8 +23,7 @@ STAGES = ((10, 0), (20, 1), (40, 2))               # my move index (half-moves p
 
 def time_class(base, inc):
     """Lichess time classes from the estimated duration base + 40 * increment (seconds)."""
-    t = base + 40 * inc
-    return "ultrabullet" if t <= 29 else "bullet" if t < 180 else "blitz" if t < 480 else "rapid" if t < 1500 else "classical"
+    return time_class_of(base, inc)
 
 
 def stage(ply):
@@ -54,7 +54,7 @@ class ClockModel:
             c = self.cells.get(key)
             if c and len(c) >= MIN_CELL:
                 return c
-        return next(iter(self.cells.values()), [0.0])
+        return max(self.cells.values(), key=len, default=[0.0])           # nothing is dense enough: the largest cell has the most evidence
 
     def fraction(self, tc, ply, sim, rng):
         c = self._cell(tc, stage(ply), sim)

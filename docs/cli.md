@@ -39,6 +39,7 @@ Details, scale caveats and costs: [calibration.md](calibration.md). `mechess --c
 | `book` | Build `book.bin` (position graph of your repertoire) and a readable report; `--sanity-engine` checks lines with an engine |
 | `theory-book --out FILE` | Build an opening book of known theory for both colours from the CC0 Lichess opening names (`--download` fetches them), weighted by what players in a rating band play (`--games COHORT --band LO HI`, or `--pgn FILES`). Popular moves beyond the names are added when played often enough. `mechess --book DIR` picks the band of the target Elo from files named `theory_LO_HI.bin` |
 | `explorer-build` | Build an opening explorer (SQLite) and a theory book per rating band from a Lichess database dump, streamed (`--source URL`, `--sample-every N`, `--max-scan N`); resumable; `--check` tests the source in seconds |
+| `explorer-range-scan` | The same outputs from a partitioned scan of the dump: it cuts the `.pgn.zst` into byte windows (`--parts`), scans `--workers` of them at once over HTTP range requests and saves each window, so a run is resumable window by window and a dropped connection costs one window, not a restart from byte 0. Needs a server that answers `Range` with `206` (checked on every response). `--max-entries` caps each window's table and `--max-merged-entries` the merged one (the rarest entries go first and are reported) |
 | `explorer-query DB` | Look a position up in the explorer: the moves played there at a rating with games, share, average rating, engine evaluation and the White / draw / Black bar (`--fen`, `--rating`) |
 | `explorer-rebuild STATE` | Rebuild `explorer.db`, the books and the report from a saved checkpoint with other thresholds (`--db-min-games`, `--book-min-games`, `--eval-margin`, `--max-ply`), without streaming again |
 
@@ -127,7 +128,7 @@ See [language-model.md](language-model.md). Every step is resumable and can be p
 | Command | What it does |
 |---|---|
 | `books-preflight` | Check dependencies, disk, every download URL and the GPU before a long run (exit code 1 on failure); `--need-gpu`, `--backend transformer --model NAME` |
-| `books-learn` | Everything in one command: the public-domain books, concept-line pairs, the annotated-game sources, Stack Exchange and Wikipedia prose, a report (`--steps`, `--limit-per-source` for a trial, `--slim` to drop the raw downloads) |
+| `books-learn` | Everything in one command: the public-domain books, concept-line pairs, the annotated-game sources, Stack Exchange and Wikipedia prose, a report (`--steps`, `--limit-per-source` for a trial, `--slim` to drop the raw downloads; `books-nlp-train --slim` only removes the links to the Kaggle inputs and the dry-run folder, never a real data folder) |
 | `books-fetch` | Only the books: download the texts listed in `chessme/books/sources.json` and extract game lines and concept counts |
 | `books-studies` | Export public Lichess studies by author or study id (one request at a time, waits a minute after HTTP 429) |
 | `books-pdf` | Read PDFs you own (text layer) with the book reader; a scan is reported as needing OCR |
