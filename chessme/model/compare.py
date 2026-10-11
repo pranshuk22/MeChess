@@ -28,6 +28,11 @@ class EvalItem:
     platform: int = 0
     ply: int = 0
     moves: tuple = ()  # UCI moves from the standard start position that lead to `fen` (empty = unknown)
+    clock: float = float("nan")  # the mover's seconds left before the move (NaN = unknown); the scorers below ignore it
+    opp_clock: float = float("nan")
+    base: int = 0  # time control in seconds (0 = unknown)
+    inc: int = 0
+    game: str = ""  # the game the position comes from (for cluster statistics)
 
     @property
     def has_history(self):
