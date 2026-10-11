@@ -49,6 +49,8 @@ TEST(Position, RejectsMalformedFenAndKeepsState) {
       "4k3/8/8/8/8/8/4R3/4K3 w - - 0 1",                                   // side not to move is in check
       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNRR w KQkq - 0 1",         // rank too long
       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR/8 w KQkq - 0 1",        // too many ranks
+      "P3k3/8/8/8/8/8/8/4K3 w - - 0 1",                                    // white pawn on the 8th rank
+      "4k3/8/8/8/8/8/8/p3K3 w - - 0 1",                                    // black pawn on the 1st rank
   };
   for (const char* f : bad) {
     CHECK(!p.set_fen(f));
@@ -227,4 +229,40 @@ TEST(Position, AttackedSquares) {
   CHECK(p.attacked(make_square(3, 0), BLACK));     // d1 attacked by the c3 knight
   CHECK(p.attacked(make_square(4, 0), BLACK) == false);  // e1: knight on c3 does not hit e1
   CHECK(p.attacked(make_square(4, 1), BLACK));     // e2 is hit by the knight
+}
+
+// Regression: castling rights and an en-passant square that the board cannot back up used to be accepted, and then
+// castling "moved" an empty square and an en-passant "capture" removed a pawn that was not there.
+TEST(Position, CastlingRightsWithoutKingOrRookAreDropped) {
+  Position p;
+  CHECK(p.set_fen("4k3/8/8/8/8/8/8/4K3 w KQkq - 0 1"));
+  CHECK_EQ(int(p.castling()), 0);
+  MoveList list;
+  generate_legal(p, list);
+  CHECK_EQ(list.count, 5);  // king moves only
+
+  CHECK(p.set_fen("r3k2r/8/8/8/8/8/8/R3K1N1 w KQkq - 0 1"));  // white king-side rook missing, the rest in place
+  CHECK_EQ(int(p.castling()), int(WHITE_OOO | BLACK_OO | BLACK_OOO));
+  CHECK(p.set_fen("r3k2r/8/8/8/8/8/8/4K2R b Kq - 0 1"));  // white rook on a1 missing: only the rights the board backs up stay
+  CHECK_EQ(int(p.castling()), int(WHITE_OO | BLACK_OOO));
+  CHECK(p.set_fen("r3k2r/8/8/8/8/8/8/R2K3R w KQkq - 0 1"));  // king off its home square
+  CHECK_EQ(int(p.castling()), int(BLACK_OO | BLACK_OOO));
+}
+
+TEST(Position, ImpossibleEnPassantSquareIsDropped) {
+  Position p;
+  // No pawn that could have just made the double step.
+  CHECK(p.set_fen("4k3/8/8/8/8/8/3P4/4K3 w - e3 0 1"));
+  CHECK_EQ(int(p.ep_square()), int(SQ_NONE));
+  MoveList list;
+  generate_legal(p, list);
+  CHECK_EQ(list.count, 6);
+  // Wrong rank for the side to move.
+  CHECK(p.set_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d3 0 1"));
+  CHECK_EQ(int(p.ep_square()), int(SQ_NONE));
+  // A real one is kept.
+  CHECK(p.set_fen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1"));
+  CHECK_EQ(int(p.ep_square()), int(make_square(3, 5)));
+  CHECK(p.set_fen("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"));
+  CHECK_EQ(int(p.ep_square()), int(make_square(4, 2)));
 }

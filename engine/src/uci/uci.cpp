@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <new>
 
 #include "../eval/eval.h"
 #include "../movegen/movegen.h"
@@ -40,7 +41,9 @@ Limits Uci::make_limits(const GoParams& go, Color stm) {
   }
   const int my_time = stm == WHITE ? go.wtime : go.btime;
   const int inc = stm == WHITE ? go.winc : go.binc;
-  if (my_time >= 0 && !go.infinite && go.depth == 0) {
+  // A depth (or node) limit does not switch the clock off: the search stops at whichever limit comes first, so a
+  // depth-limited `go` that also carries wtime/btime still cannot lose on time.
+  if (my_time >= 0 && !go.infinite) {
     const int moves_left = go.movestogo > 0 ? go.movestogo + 1 : 30;
     int64_t alloc = my_time / moves_left + inc * 3 / 4;
     alloc = std::min<int64_t>(alloc, my_time / 2);
@@ -165,7 +168,14 @@ void Uci::cmd_setoption(std::istringstream& is) {
   while (is >> tok) value += (value.empty() ? "" : " ") + tok;
   if (name == "Hash") {
     int mb = std::atoi(value.c_str());
-    if (mb >= 1 && mb <= 4096) searcher_.set_hash_mb(size_t(mb));
+    if (mb >= 1 && mb <= 4096) {
+      try {
+        searcher_.set_hash_mb(size_t(mb));
+      } catch (const std::bad_alloc&) {
+        send("info string Hash error: cannot allocate " + value + " MB");
+        searcher_.set_hash_mb(16);
+      }
+    }
   } else if (name == "Clear Hash") {
     searcher_.clear();
   } else if (name == "MultiPV") {
@@ -200,11 +210,11 @@ void Uci::cmd_setoption(std::istringstream& is) {
       }
     }
   } else if (name == "MeRating") {
-    me_rating_ = std::atoi(value.c_str());
+    me_rating_ = std::max(400, std::min(3000, std::atoi(value.c_str())));
   } else if (name == "MeOppRating") {
-    me_opp_rating_ = std::atoi(value.c_str());
+    me_opp_rating_ = std::max(0, std::min(3000, std::atoi(value.c_str())));
   } else if (name == "MePlatform") {
-    me_platform_ = std::atoi(value.c_str());
+    me_platform_ = std::max(0, std::min(1, std::atoi(value.c_str())));
   } else if (name == "BookMaxPly") {
     book_max_ply_ = std::max(0, std::atoi(value.c_str()));
   } else if (name == "BookTemperature") {

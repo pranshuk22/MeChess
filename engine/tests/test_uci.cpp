@@ -144,3 +144,26 @@ TEST(Uci, MultiPvBestmoveIsTheFirstLinesMove) {
   CHECK(contains(out, "multipv 1 score mate 1"));
   CHECK(contains(out, "bestmove d1d8"));
 }
+
+// Regression: a `go depth N` that also carried the clock ignored the clock entirely.
+TEST(Uci, DepthLimitedGoStillCarriesTheClock) {
+  Uci::GoParams g;
+  g.depth = 12; g.wtime = 2000; g.btime = 2000;
+  Limits l = Uci::make_limits(g, WHITE);
+  CHECK_EQ(l.depth, 12);
+  CHECK(l.hard_ms >= 1 && l.hard_ms < 2000);
+}
+
+TEST(Uci, DepthWithoutClockHasNoTimeLimit) {
+  Uci::GoParams g;
+  g.depth = 6;
+  Limits l = Uci::make_limits(g, WHITE);
+  CHECK_EQ(l.hard_ms, int64_t(0));
+}
+
+TEST(Uci, MeOptionsAreClamped) {
+  // Out-of-range values must not reach the network input planes or the policy code: the session just has to survive.
+  std::string out = session("setoption name MeRating value 999999\nsetoption name MeOppRating value -5\n"
+                            "setoption name MePlatform value 7\nposition startpos\nmenet\nisready\n");
+  CHECK(contains(out, "readyok"));
+}

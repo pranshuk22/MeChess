@@ -1,6 +1,6 @@
 # Fallback build without CMake.
 #   make            build engine, perft, unit tests into build/
-#   make test       run unit tests + perft suite (fast, a few seconds)
+#   make test       run unit tests + perft suite (fast: a few seconds)
 #   make test-verify  perft suite with hash/unmake verification at every node (~1 min)
 #   make test-deep  also run the deep perft suite
 CXX ?= clang++

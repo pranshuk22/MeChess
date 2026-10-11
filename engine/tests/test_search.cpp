@@ -343,3 +343,32 @@ TEST(MultiPv, LinesAreSortedBestFirstEvenWhenSearchNoiseDisagreesWithTheOrderThe
   for (size_t i = 1; i < r.lines.size(); ++i) CHECK(r.lines[i].score <= r.lines[i - 1].score);
   CHECK(r.best_move == r.lines[0].move && r.score == r.lines[0].score);
 }
+
+// Regression: the fifty-move draw was applied before checkmate, so a mate that brings the clock to 100 was scored as 0.
+TEST(Search, MateOnTheFiftyMoveClockIsStillMate) {
+  SearchResult r = run("7k/5Q2/6K1/8/8/8/8/8 w - - 99 80", 4);
+  CHECK_EQ(best(r), std::string("f7g7"));
+  CHECK_EQ(r.score, MATE - 1);
+}
+
+TEST(Search, FiftyMoveClockStillDrawsWithoutMate) {
+  // No capture, pawn move or mate in one exists, so every move reaches 100 half-moves and the game is drawn.
+  SearchResult r = run("7k/8/5K2/8/8/8/8/1Q6 w - - 99 80", 4);
+  CHECK_EQ(r.score, 0);
+}
+
+// Regression: with MultiPV exclusions the root stored the best of the *remaining* moves in the table.
+TEST(Search, MultiPvKeepsTheBestMoveFirstAcrossIterations) {
+  Position p;
+  CHECK(p.set_fen("r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3"));
+  Searcher s(4);
+  std::atomic<bool> stop{false};
+  Limits one, many;
+  one.depth = many.depth = 5;
+  many.multipv = 4;
+  SearchResult a = s.search(p, one, stop);
+  s.clear();
+  SearchResult b = s.search(p, many, stop);
+  CHECK_EQ(b.lines.size(), size_t(4));
+  CHECK_EQ(move_to_uci(b.lines[0].move), move_to_uci(a.best_move));
+}

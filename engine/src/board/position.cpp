@@ -141,6 +141,8 @@ bool Position::set_fen(const std::string& fen) {
   }
   if (rank != 0 || file != 8) return false;
   if (popcount(p.pieces(WHITE, KING)) != 1 || popcount(p.pieces(BLACK, KING)) != 1) return false;
+  // Pawns cannot stand on their own first or last rank (move generation would step off the board).
+  if ((p.pieces(WHITE, PAWN) | p.pieces(BLACK, PAWN)) & (RANK_1 | RANK_8)) return false;
 
   if (side == "w") p.side_ = WHITE;
   else if (side == "b") p.side_ = BLACK;
@@ -158,12 +160,31 @@ bool Position::set_fen(const std::string& fen) {
       }
     }
   }
+  // A castling right only means something while the king and that rook stand on their home squares; a FEN that
+  // claims otherwise would let castling "move" an empty square and corrupt the bitboards. Drop such rights.
+  auto home = [&](Square s, Piece pc) { return p.board_[s] == pc; };
+  if (!home(4, make_piece(WHITE, KING))) p.castling_ &= ~(WHITE_OO | WHITE_OOO);
+  if (!home(7, make_piece(WHITE, ROOK))) p.castling_ &= ~WHITE_OO;
+  if (!home(0, make_piece(WHITE, ROOK))) p.castling_ &= ~WHITE_OOO;
+  if (!home(60, make_piece(BLACK, KING))) p.castling_ &= ~(BLACK_OO | BLACK_OOO);
+  if (!home(63, make_piece(BLACK, ROOK))) p.castling_ &= ~BLACK_OO;
+  if (!home(56, make_piece(BLACK, ROOK))) p.castling_ &= ~BLACK_OOO;
+
   p.ep_ = SQ_NONE;
   if (ep != "-") {
     if (ep.size() != 2 || ep[0] < 'a' || ep[0] > 'h' || ep[1] < '1' || ep[1] > '8') return false;
-    p.ep_ = make_square(ep[0] - 'a', ep[1] - '1');
+    const Square target = make_square(ep[0] - 'a', ep[1] - '1');
+    // Keep the square only if a pawn really just made the double step: target on the 6th rank (White to move) or the
+    // 3rd (Black to move), empty, with the enemy pawn in front of it and the pawn's origin square empty.
+    const bool white_to_move = p.side_ == WHITE;
+    if (rank_of(target) == (white_to_move ? 5 : 2)) {
+      const Square pawn_sq = target + (white_to_move ? -8 : 8), origin = target + (white_to_move ? 8 : -8);
+      if (p.board_[target] == NO_PIECE && p.board_[origin] == NO_PIECE &&
+          p.board_[pawn_sq] == make_piece(~p.side_, PAWN))
+        p.ep_ = target;
+    }
   }
-  p.halfmove_ = half;
+  p.halfmove_ = half < 0 ? 0 : half;
   p.fullmove_ = full < 1 ? 1 : full;
   // The side NOT to move must not be in check (illegal position).
   if (p.attacked(p.king_square(~p.side_), p.side_)) return false;

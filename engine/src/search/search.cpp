@@ -31,6 +31,15 @@ int64_t now_ns() {
 
 constexpr int HISTORY_MAX = 16384;
 
+// The fifty-move rule claims a draw only if the side to move is not checkmated: a mate delivered by the move that
+// brings the clock to 100 half-moves still wins. (Checkmate = in check with no legal move.)
+bool is_checkmated(Position& pos) {
+  if (!pos.in_check()) return false;
+  MoveList legal;
+  generate_legal(pos, legal);
+  return legal.count == 0;
+}
+
 }  // namespace
 
 Searcher::Searcher(size_t hash_mb) {
@@ -110,7 +119,8 @@ int Searcher::qsearch(int alpha, int beta, int ply) {
   Position& pos = *pos_;
   pv_len_[ply] = ply;
 
-  if (pos.is_repetition() || pos.halfmove_clock() >= 100 || pos.insufficient_material()) return 0;
+  if (pos.halfmove_clock() >= 100) return is_checkmated(pos) ? -MATE + ply : 0;
+  if (pos.is_repetition() || pos.insufficient_material()) return 0;
   if (ply >= MAX_PLY - 1) return evaluate(pos);
 
   const bool in_check = pos.in_check();
@@ -174,7 +184,8 @@ int Searcher::negamax(int depth, int alpha, int beta, int ply, bool allow_null) 
   if (stopped_) return 0;
 
   if (!root) {
-    if (pos.is_repetition() || pos.halfmove_clock() >= 100 || pos.insufficient_material()) return 0;
+    if (pos.halfmove_clock() >= 100) return is_checkmated(pos) ? -MATE + ply : 0;
+    if (pos.is_repetition() || pos.insufficient_material()) return 0;
     if (ply >= MAX_PLY - 1) return evaluate(pos);
     // Mate-distance pruning: can't do better than mating now, or worse than being mated now.
     alpha = std::max(alpha, -MATE + ply);
@@ -301,6 +312,10 @@ int Searcher::negamax(int depth, int alpha, int beta, int ply, bool allow_null) 
   }
 
   if (legal == 0) return in_check ? -MATE + ply : 0;
+
+  // With MultiPV exclusions the root's "best" is only the best of the remaining moves: storing it would make the
+  // next iteration try that (worst) move first.
+  if (root && n_excluded_) return best;
 
   slot.key = key;
   slot.move = best_move.v;

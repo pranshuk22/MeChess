@@ -113,7 +113,10 @@ bool MeNet::load(const std::string& path, std::string* error) {
        read_floats(f, n.under_b_, ME_POLICY - 4096);
   if (!ok) return fail("network file is truncated");
   if (f.peek() != std::char_traits<char>::eof()) return fail("network file has trailing bytes");
-  for (const auto* v : {&n.stem_.w, &n.qk_w_, &n.bias_, &n.under_w_})
+  std::vector<const std::vector<float>*> tensors = {&n.stem_.w, &n.stem_.b, &n.qk_w_, &n.qk_b_, &n.bias_, &n.under_w_, &n.under_b_};
+  for (int i = 0; i < blocks; ++i)
+    for (const auto* v : {&n.c1_[i].w, &n.c1_[i].b, &n.c2_[i].w, &n.c2_[i].b}) tensors.push_back(v);
+  for (const auto* v : tensors)
     for (float x : *v)
       if (!std::isfinite(x)) return fail("network file contains non-finite weights");
   *this = std::move(n);

@@ -216,6 +216,30 @@ TEST(MeNet, RejectsBadFiles) {
   CHECK(!net.loaded());  // failed loads never leave a half-loaded network
 }
 
+// Regression: only some tensors were checked for NaN / Inf; a bad value in a residual block or a bias slipped through.
+TEST(MeNet, NonFiniteValuesAreRejectedInEveryTensor) {
+  const size_t C = 4, stem = C * ME_PLANES * 9 + C;
+  struct Spot { const char* what; size_t at; };
+  NetFile probe(1, 4, 2);
+  const Spot spots[] = {
+      {"stem bias", C * ME_PLANES * 9 + 1},
+      {"block conv1 weight", stem + 3},
+      {"block conv2 bias", stem + (C * C * 9 + C) + C * C * 9 + 1},
+      {"qk bias", probe.off_qk_b + 1},
+      {"under-promotion bias", probe.off_under_b + 2},
+  };
+  for (const Spot& sp : spots) {
+    for (float bad : {std::nanf(""), INFINITY}) {
+      NetFile nf(1, 4, 2);
+      nf.f[sp.at] = bad;
+      MeNet net;
+      std::string err;
+      CHECK(!net.load(write_file("nonfinite.bin", nf.bytes()), &err));
+      CHECK(err.find("non-finite") != std::string::npos);
+    }
+  }
+}
+
 TEST(MeNet, FailedLoadKeepsThePreviousNetwork) {
   NetFile nf(1, 4, 2);
   MeNet net;
