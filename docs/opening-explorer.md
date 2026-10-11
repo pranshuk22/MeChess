@@ -37,7 +37,7 @@ Players' names and dates are never stored, only public game ids, ratings and cou
 ```bash
 python -m chessme explorer-build --check                       # read 300 games: tests the URL, decompression and parsing in seconds
 python -m chessme explorer-build --out data/explorer           # the long run (resumable)
-python -m chessme explorer-range-scan --out data/explorer      # the same, as parallel byte windows (resumable window by window; see docs/cli.md)
+python -m chessme explorer-range-scan                          # the same, as parallel byte windows into data/explorer_range (resumable; see docs/cli.md)
 python -m chessme explorer-query data/explorer/explorer.db --rating 1500 --fen "<FEN>"
 python -m chessme explorer-rebuild data/explorer/state.pkl.gz --book-min-games 10   # other thresholds, no streaming
 python -m chessme theory-book --download --out data/book/theory_1500_1800.bin --games data/style/cohort2 --band 1500 1800

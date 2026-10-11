@@ -88,7 +88,7 @@ in memory at the peak. On a RAM-tight laptop this is the step most likely to be 
 **Fix:** merge incrementally (load one window, add it, drop it), prune the merged counts against a cap, and pass the merged
 `Counts` straight to the output writer instead of pickling and reloading.
 
-**Fixed: `merge_windows` loads and merges one window at a time into a table capped by the new `--max-merged-entries`; the CLI drops the merged counts before `rebuild` reloads the checkpoint. Tests: `test_merge_windows_*`.**
+**Fixed, then superseded by the plan.md 8u work: windows are saved as key slices and merged one slice at a time (peak memory is one slice, `--slices`), exactly; the CLI drops the merged counts before `rebuild` reloads the checkpoint. Tests: `test_the_sliced_merge_*`, `test_run_scans_a_local_dump_*`.**
 
 ---
 
@@ -131,7 +131,7 @@ Each window prunes its own rare entries (count at most *t* in that window). Afte
 most `pruned_below` games may be missing", because `pruned_below` is merged with `max`. Rare moves are also biased downward
 systematically. **Fix:** report the summed bound, or skip pruning inside windows and prune once after merging.
 
-**Fixed: the per-window bounds are summed when merging (and the merge-level prune adds its own). Test: `test_merge_windows_matches_merge_counts_and_adds_up_the_pruning_bounds`.**
+**Fixed: the per-window bounds are summed when merging (and the merge-level prune adds its own). Superseded: windows are no longer pruned at all (they stop the scan past `--max-entries`); the merge records what it drops in `pruned_below`. Tests: `test_a_window_over_max_entries_*`, `test_a_move_seen_once_in_every_window_survives_the_merge`.**
 
 ### 7. Engine: inconsistent FENs corrupt the board
 `engine/src/board/position.cpp:149-165` (`set_fen`), `engine/src/movegen/movegen.cpp:62, 75-87`.
