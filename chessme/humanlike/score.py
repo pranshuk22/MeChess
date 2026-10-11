@@ -6,6 +6,7 @@ the sum of squared probabilities (the chance that two independent samples from t
 their probabilities (enough to study sampled play: the rest of the mass is `1 - sum(topk_p)`)."""
 import hashlib
 import json
+import multiprocessing
 from pathlib import Path
 
 import numpy as np
@@ -40,6 +41,40 @@ def score_items(scorer, items, chunk=256, progress=None):
             progress(min(start + chunk, n), n)
     out["top1"] = out["rank"] == 1
     return out
+
+
+_WORKER = {}
+
+
+def _init_worker(kwargs):
+    import torch
+    if kwargs.get("device", "cpu") == "cpu":
+        torch.set_num_threads(1)                      # one process per core: do not let each of them start a thread per core
+    from .models import make_scorer
+    _WORKER["scorer"] = make_scorer(**kwargs)
+
+
+def _score_chunk(items):
+    scorer = _WORKER["scorer"]
+    return score_items(scorer, items), scorer.name
+
+
+def score_items_parallel(scorer_kwargs, items, workers=1, chunk_items=4000, progress=None):
+    """`score_items` split over `workers` processes (each loads its own copy of the model). `scorer_kwargs` are the arguments of
+    `models.make_scorer`. Returns (scores, scorer name); the rows are in the order of `items`, identical for any number of workers."""
+    from .models import make_scorer
+    if workers <= 1:
+        scorer = make_scorer(**scorer_kwargs)
+        return score_items(scorer, items, progress=progress), scorer.name
+    chunks = [items[i:i + chunk_items] for i in range(0, len(items), chunk_items)]
+    parts, name, done = [], None, 0
+    with multiprocessing.get_context("spawn").Pool(workers, initializer=_init_worker, initargs=(scorer_kwargs,)) as pool:
+        for scores, name in pool.imap(_score_chunk, chunks):
+            parts.append(scores)
+            done += len(scores["p"])
+            if progress:
+                progress(done, len(items))
+    return {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}, name
 
 
 def positions_hash(positions):

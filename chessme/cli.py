@@ -1313,21 +1313,6 @@ def cmd_humanlike_allie(args):
         print(f"{m['positions']:,} positions; the papers report {A.PUBLISHED_POSITIONS:,}" + (" (exact match)" if m["positions"] == A.PUBLISHED_POSITIONS else " (DIFFERENT)"))
 
 
-def _humanlike_scorer(args):
-    from .model import compare
-    kind, _, arg = args.scorer.partition("=")
-    extra = [args.extra_path] if args.extra_path else []
-    if kind == "maia3":
-        size = arg.replace("+history", "")
-        return compare.Maia3Scorer(args.maia3_repo, Path(args.weights_dir) / f"maia3-{size}.pt", size, use_history=arg.endswith("+history"),
-                                   extra_paths=extra, batch_size=args.batch)
-    if kind == "maia2":
-        return compare.Maia2Scorer(args.maia2_repo, Path(args.weights_dir) / f"{arg}_model.pt", extra_paths=extra, batch_size=args.batch)
-    if kind == "ours":
-        return compare.OursScorer(arg, batch_size=args.batch)
-    raise SystemExit(f"unknown scorer {args.scorer!r} (use maia3=5m|23m|79m[+history], maia2=blitz|rapid, ours=CHECKPOINT)")
-
-
 def cmd_humanlike_score(args):
     import numpy as np
 
@@ -1339,13 +1324,16 @@ def cmd_humanlike_score(args):
     if args.limit and args.limit < len(positions):
         index = np.sort(np.random.default_rng(args.seed).permutation(len(positions))[:args.limit])
     chosen = [positions[i] for i in index]
-    scorer = _humanlike_scorer(args)
+    del positions
+    kwargs = dict(spec=args.scorer, maia3_repo=args.maia3_repo, maia2_repo=args.maia2_repo, weights_dir=args.weights_dir,
+                  extra_path=args.extra_path, device=args.device, batch=args.batch)
     t0 = time.time()
-    scores = S.score_items(scorer, T.to_items(chosen), progress=lambda d, n: print(f"  {d:,}/{n:,}  {time.time() - t0:.0f}s", flush=True) if d % 5000 < 512 or d == n else None)
+    scores, name = S.score_items_parallel(kwargs, T.to_items(chosen), workers=args.workers, chunk_items=args.chunk,
+                                          progress=lambda d, n: print(f"  {d:,}/{n:,}  {time.time() - t0:.0f}s", flush=True) if d % 20000 < args.chunk or d == n else None)
     scores["index"] = index
-    S.save_scores(args.out, scores, scorer.name, manifest["sha256"], {"positions_sha": S.positions_hash(chosen), "scorer_spec": args.scorer,
-                                                                     "seconds": round(time.time() - t0, 1)})
-    print(f"{scorer.name}: {len(chosen):,} positions in {time.time() - t0:.0f}s -> {args.out}")
+    S.save_scores(args.out, scores, name, manifest["sha256"], {"positions_sha": S.positions_hash(chosen), "scorer_spec": args.scorer,
+                                                              "seconds": round(time.time() - t0, 1), "device": args.device, "workers": args.workers})
+    print(f"{name}: {len(chosen):,} positions in {time.time() - t0:.0f}s -> {args.out}")
 
 
 def cmd_humanlike_report(args):
@@ -1930,6 +1918,8 @@ def main():
     hs.add_argument("--maia3-repo"); hs.add_argument("--maia2-repo"); hs.add_argument("--weights-dir"); hs.add_argument("--extra-path")
     hs.add_argument("--limit", type=int, help="score a random subset (seeded); every model to be compared must use the same --limit and --seed")
     hs.add_argument("--seed", type=int, default=1); hs.add_argument("--batch", type=int, default=64); hs.add_argument("--out", required=True)
+    hs.add_argument("--device", default="cpu", help="cpu or cuda"); hs.add_argument("--workers", type=int, default=1, help="processes (each loads the model); the cost is mostly Python-side board encoding")
+    hs.add_argument("--chunk", type=int, default=4000, help="positions handed to a worker at a time")
     hs.set_defaults(func=cmd_humanlike_score)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and the paired difference of the first two")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
