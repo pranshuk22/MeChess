@@ -1366,8 +1366,8 @@ def cmd_humanlike_report(args):
         for by in ("rating", "phase"):
             lines += [R.table(R.strata(scores, arr, masks["comparable"], by, n_boot=args.boot), f"### {name}: comparable positions by {by}"), ""]
         lines += [R.table(R.strata(scores, arr, masks["full"], "clock", n_boot=args.boot), f"### {name}: all positions by the mover's clock"), ""]
-    if len(runs) >= 2:
-        (na, sa, _), (nb, sb, _) = runs[0], runs[1]
+    for na, sa, _ in runs[1:]:
+        nb, sb = runs[0][0], runs[0][1]
         lines += [f"## {na} minus {nb} (paired, same positions)", "",
                   R.comparison_table({k: R.compare(sa, sb, arr, m, n_boot=args.boot) for k, m in masks.items()}), ""]
     text = "\n".join(lines)
@@ -1921,7 +1921,7 @@ def main():
     hs.add_argument("--device", default="cpu", help="cpu or cuda"); hs.add_argument("--workers", type=int, default=1, help="processes (each loads the model); the cost is mostly Python-side board encoding")
     hs.add_argument("--chunk", type=int, default=4000, help="positions handed to a worker at a time")
     hs.set_defaults(func=cmd_humanlike_score)
-    hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and the paired difference of the first two")
+    hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")
     hr.add_argument("--drop-forced", action="store_true", help="also leave out positions with a single legal move")

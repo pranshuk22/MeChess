@@ -1,6 +1,6 @@
 # Running on Kaggle
 
-Five notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
+Seven notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
 Each notebook is an **adapter**: it clones the repository, installs a few packages and runs `chessme` commands, nothing else. All the logic
 (resuming from earlier output, linking inputs, checkpoints, time budgets) is in the repository, tested, and runs the same on a laptop; the
 Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data-dir`, `--resume-glob` and `--slim` flags.
@@ -12,6 +12,8 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
 | `notebooks/3_opening_explorer_cpu.ipynb` | **None** | streams a Lichess database month (CC0) and builds the opening explorer for every rating range, a theory book per band and a report ([details](opening-explorer.md)) | hours; checkpointed, with a time budget |
 | `notebooks/4_label_comments_gpu.ipynb` | **GPU** | `chessme books-nlp-label`: labels every annotated move's comment with the trained model (concepts, verdict, who stands better) and writes a report; trial on 2,000 moves first | needs the outputs of notebooks 1 and 2 as inputs; the GPU part is short (measured on a laptop CPU with 4 threads: about 115 short comments per second, so a few hundred thousand comments take under an hour even without a GPU; longer comments are slower) |
 | `notebooks/5_opening_explorer_rangescan_cpu.ipynb` | **None** | the same explorer as notebook 3, built by `explorer-range-scan`: the dump is cut into about 700 byte windows scanned four at a time over range requests and added up exactly (no 17-minute reconnect problem; [details](opening-explorer.md)) | hours (about 3 to 6 expected); the windows (about 31 GB) live in `/kaggle/temp`, only the merged result is output |
+| `notebooks/6_humanlike_testset_cpu.ipynb` | **None** | builds the two test sets of the human-likeness study: ours (24 windows of a month after Maia-3's training data, balanced over rating) and the Allie set with the published filter | about 2 hours on 4 cores (parsing clocked games is the cost) |
+| `notebooks/7_humanlike_score_gpu.ipynb` | **GPU** | downloads Maia-3 (code and 5M / 23M / 79M weights, external) and scores them on both sets, then writes the reports | needs notebook 6's output as an input; board encoding in Python is the bottleneck, so four worker processes share the GPU |
 
 ## How to run
 
