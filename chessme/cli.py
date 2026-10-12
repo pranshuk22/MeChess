@@ -1378,6 +1378,41 @@ def cmd_humanlike_report(args):
     print(text)
 
 
+def cmd_humanlike_ceiling(args):
+    import numpy as np
+
+    from .humanlike import ceiling as C
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    lines = [f"# Ceiling from repeated positions: {Path(args.testset).name}", "",
+             "Positions of the first 24 plies, compared with the opening explorer's exact counts for the game's rating band (leave-one-out: the "
+             "position's own game is removed from the counts). The oracle predicts the most played move (top-1) or samples a move from the counts "
+             "(sampled match); no model can systematically beat it on a position that many players face. Exact except that moves played fewer than the "
+             "band's floor of times are not listed, which only widens the oracle's sampled-match range.", ""]
+    runs = []
+    for path in args.scores:
+        scores, meta = S.load_scores(path)
+        if meta["testset_sha256"] != manifest["sha256"]:
+            raise SystemExit(f"{path} was computed on another test set")
+        chosen = T.read_testset(args.testset, scores["index"])
+        runs.append((meta["model"], scores, chosen))
+    positions = runs[0][2]
+    look = C.lookup(args.explorer, positions)
+    orc = C.oracle(look)
+    arr = R.position_arrays(positions)
+    early = np.array([p.ply < C.MAX_PLY for p in positions])
+    lines += [f"{int(early.sum()):,} of {len(positions):,} positions are in the first {C.MAX_PLY} plies; {int(orc['ok'].sum()):,} of them were seen by at least one other game in their band "
+              f"(the rest are rarer than the explorer's floor).", ""]
+    for name, scores, _ in runs:
+        lines += [C.render(C.table(scores, arr, orc, n_boot=args.boot), f"## {name}"), ""]
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -1923,6 +1958,10 @@ def main():
     hs.add_argument("--device", default="cpu", help="cpu or cuda"); hs.add_argument("--workers", type=int, default=1, help="processes (each loads the model); the cost is mostly Python-side board encoding")
     hs.add_argument("--chunk", type=int, default=4000, help="positions handed to a worker at a time")
     hs.set_defaults(func=cmd_humanlike_score)
+    hc = sub.add_parser("humanlike-ceiling", help="how much room there is above a model on positions many players have faced: the explorer's counts as an oracle (leave-one-out)")
+    hc.add_argument("--testset", required=True); hc.add_argument("--scores", nargs="+", required=True)
+    hc.add_argument("--explorer", default="data/explorer/explorer.db"); hc.add_argument("--boot", type=int, default=500); hc.add_argument("--out", default="data/humanlike/ceiling.md")
+    hc.set_defaults(func=cmd_humanlike_ceiling)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")
