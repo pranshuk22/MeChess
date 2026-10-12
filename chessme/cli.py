@@ -1490,6 +1490,72 @@ def cmd_humanlike_errors(args):
     print(text)
 
 
+def cmd_humanlike_adapter(args):
+    import numpy as np
+
+    from .humanlike import adapter as A
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    if meta["testset_sha256"] != manifest["sha256"]:
+        raise SystemExit("the scores were computed on another test set")
+    positions = T.read_testset(args.testset, scores["index"])
+    arr = R.position_arrays(positions)
+    x_all, sl = A.features(arr, scores), A.slots(scores)
+    train, val, test = A.game_split(arr["gid"], seed=args.seed)
+    print(f"{train.sum():,} training, {val.sum():,} validation, {test.sum():,} test positions (split by game)", flush=True)
+    regime_cols = [A.FEATURES.index(n) for n in ("under 10 s", "under 30 s")]
+    rating_cols = [A.FEATURES.index(n) for n in ("mover rating", "opponent rating")]
+    variants = {"frozen model": None,
+                "wrapper: one temperature": ("tau", [A.FEATURES.index("ply")], np.zeros_like(x_all[:, :1])),
+                "wrapper: temperature by clock regime and rating": ("tau", regime_cols + rating_cols, None),
+                "adapter: clock features, temperature only": ("tau", None, None),
+                "adapter: all features, temperature + tail + slot biases": ("full", None, None)}
+    fitted = {}
+    for name, spec in variants.items():
+        if spec is None:
+            continue
+        mode, cols, override = spec
+        x = override if override is not None else (x_all[:, cols] if cols else x_all)
+        print(f"fitting {name}", flush=True)
+        net, mean, std = A.fit(x, sl, train, val, epochs=args.epochs, mode=mode, log=lambda m: None)
+        fitted[name] = (A.apply(net, mean, std, x, sl), (net, mean, std, cols, override is not None))
+    masks = {k: v & test for k, v in R.masks(arr).items()}
+    lines = [f"# Adapter on a frozen {meta['model']} ({Path(args.testset).name})", "",
+             f"Trained on {int(train.sum()):,} positions, early-stopped on {int(val.sum()):,}, evaluated on {int(test.sum()):,} positions of games the adapter never saw. "
+             "Every variant gives the probability of the human's actual move, so NLL values are comparable with the frozen model's. "
+             "Differences are variant minus frozen model on identical positions, with 95% game-level intervals.", ""]
+    base = {k: scores[k] for k in ("p", "top1", "conf", "rank", "entropy", "sq_sum")}
+    for name, (out, _) in [("frozen model", (base, None))] + list(fitted.items()):
+        rows = {k: R.summarize(out, arr, m, n_boot=args.boot) for k, m in masks.items()}
+        lines += [R.table(rows, f"## {name}"), ""]
+        if name != "frozen model":
+            lines += [R.comparison_table({k: R.compare(out, base, arr, m, n_boot=args.boot) for k, m in masks.items()}, f"### {name} minus frozen model (paired)"), ""]
+        lines += [R.matched_table(R.matched_overconfidence(out, arr, masks["full"], n_boot=min(args.boot, 200)), f"### {name}: confidence - accuracy by clock, raw and matched"), ""]
+    if args.eval_testset:
+        m2 = json.loads(Path(str(args.eval_testset) + ".manifest.json").read_text())
+        s2, meta2 = S.load_scores(args.eval_scores)
+        if meta2["testset_sha256"] != m2["sha256"] or meta2["model"] != meta["model"]:
+            raise SystemExit("the evaluation scores belong to another test set or model")
+        del positions, arr
+        p2 = T.read_testset(args.eval_testset, s2["index"])
+        a2 = R.position_arrays(p2)
+        x2, sl2 = A.features(a2, s2), A.slots(s2)
+        base2 = {k: s2[k] for k in ("p", "top1", "conf", "rank", "entropy", "sq_sum")}
+        full2 = np.ones(len(p2), dtype=bool)
+        lines += [f"## Independent check on {Path(args.eval_testset).name} (other games; the published Maia-3 / Allie filter: every position has at least 30 s on both clocks)", ""]
+        for name, (_, (net, mean, std, cols, const)) in fitted.items():
+            x = np.zeros_like(x2[:, :1]) if const else (x2[:, cols] if cols else x2)
+            out2 = A.apply(net, mean, std, x, sl2)
+            lines += [R.comparison_table({"all positions": R.compare(out2, base2, a2, full2, n_boot=args.boot)}, f"### {name} minus frozen model"), ""]
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -2049,6 +2115,12 @@ def main():
     he.add_argument("--testset", required=True); he.add_argument("--scores", required=True); he.add_argument("--judged", required=True)
     he.add_argument("--boot", type=int, default=500); he.add_argument("--out", default="data/humanlike/errors.md")
     he.set_defaults(func=cmd_humanlike_errors)
+    ha = sub.add_parser("humanlike-adapter", help="train a small adapter (clock, ratings, the model's confidence) on a frozen model's stored top moves and compare it with the frozen model and with calibration wrappers on games it never saw")
+    ha.add_argument("--testset", required=True); ha.add_argument("--scores", required=True)
+    ha.add_argument("--eval-testset"); ha.add_argument("--eval-scores")
+    ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0)
+    ha.add_argument("--out", default="data/humanlike/adapter.md")
+    ha.set_defaults(func=cmd_humanlike_adapter)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")

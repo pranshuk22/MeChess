@@ -47,6 +47,7 @@ Details, scale caveats and costs: [calibration.md](calibration.md). `mechess --c
 | `humanlike-ceiling` | How much room there is above a model on positions many players have faced: the opening explorer's exact counts as an oracle (leave-one-out, by how often the position was seen) compared with the model's top-1 and sampled match |
 | `humanlike-judge` | Stockfish losses (expected points given away, pinned node budget) of the human's move and the model's most probable moves, on a sample of a scored test set per clock regime |
 | `humanlike-errors` | Error profile (axis A3): the errors a model would make when sampling its moves against the errors humans made, per clock regime, with sharpened / flattened positive controls and a human-vs-human noise floor |
+| `humanlike-adapter` | Train a small adapter (clock, ratings, the model's confidence) on a frozen model's stored top moves and compare it with the frozen model and with calibration wrappers on games it never saw (and on an independent test set) |
 | `explorer-query DB` | Look a position up in the explorer: the moves played there at a rating with games, share, average rating, engine evaluation and the White / draw / Black bar (`--fen`, `--rating`) |
 | `explorer-rebuild STATE` | Rebuild `explorer.db`, the books and the report from a saved checkpoint with other thresholds (`--db-min-games`, `--book-min-games`, `--eval-margin`, `--max-ply`), without streaming again |
 

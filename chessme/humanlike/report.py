@@ -12,7 +12,8 @@ def position_arrays(positions):
     n = len(positions)
     a = {"gid": np.array([p.gid for p in positions]), "ply": np.array([p.ply for p in positions]),
          "me": np.array([p.me for p in positions]), "opp": np.array([p.opp for p in positions]),
-         "clock": np.array([p.clock for p in positions], dtype=np.float64),
+         "clock": np.array([p.clock for p in positions], dtype=np.float64), "opp_clock": np.array([p.opp_clock for p in positions], dtype=np.float64),
+         "base": np.array([p.base for p in positions]), "inc": np.array([p.inc for p in positions]),
          "after_low": np.array([p.after_low for p in positions], dtype=bool), "late": np.array([p.late for p in positions], dtype=bool),
          "n_legal": np.array([p.n_legal for p in positions]), "heavy": np.array([heavy_pieces(p.fen) for p in positions])}
     a["game_rating"] = (a["me"] + a["opp"]) / 2.0

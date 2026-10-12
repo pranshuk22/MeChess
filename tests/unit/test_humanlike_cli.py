@@ -86,3 +86,17 @@ def test_judge_and_errors_commands(tmp_path, monkeypatch, testset):
     run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--limit", 40, "--seed", 2, "--out", tmp_path / "other.npz")
     with pytest.raises(SystemExit, match="another test set or model|do not match"):
         run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "other.npz", "--judged", tmp_path / "j.npz", "--out", out)
+
+
+def test_adapter_command_trains_and_compares_variants(tmp_path, monkeypatch, testset):
+    torch.manual_seed(1)
+    ck = tmp_path / "n.pt"
+    net.save_checkpoint(ck, net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--out", tmp_path / "s.npz")
+    out = tmp_path / "adapter.md"
+    run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--eval-testset", testset, "--eval-scores", tmp_path / "s.npz",
+        "--epochs", 2, "--boot", 30, "--out", out)
+    text = out.read_text()
+    for name in ("frozen model", "wrapper: one temperature", "wrapper: temperature by clock regime and rating", "adapter: all features", "Independent check"):
+        assert name in text
+    assert "minus frozen model (paired)" in text
