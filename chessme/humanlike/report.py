@@ -81,6 +81,39 @@ def compare(scores_a, scores_b, arr, mask, n_boot=1000, seed=0, alpha=0.05):
     return res
 
 
+def difficulty_strata(arr):
+    """A key per position for matching difficulty: how many legal moves there are (bucketed) and the phase of the game."""
+    legal = np.digitize(arr["n_legal"], [11, 21, 31, 41])
+    return np.char.add(np.char.add(legal.astype(str), "-"), M.phase_of(arr["ply"], arr["heavy"]).astype(str))
+
+
+def matched_overconfidence(scores, arr, mask, reference="30s+", n_boot=300, seed=0, min_n=200):
+    """Confidence minus accuracy per clock regime, raw and reweighted to the reference regime's mix of difficulty (legal-move count bucket x
+    game phase). Low-clock positions are not like others (fewer legal moves, later in the game), so only the matched number says whether
+    time pressure itself changes the model's calibration. Returns {regime: {'n', 'raw', 'matched'}} (each a (mean, lo, hi))."""
+    over = scores["conf"] - scores["top1"].astype(float)
+    regime = M.clock_regime(arr["clock"])
+    keys = difficulty_strata(arr)
+    target = mask & (regime == reference)
+    out = {}
+    for r in M.CLOCK_REGIMES:
+        src = mask & (regime == r)
+        if src.sum() < min_n or target.sum() < min_n:
+            continue
+        raw = M.cluster_bootstrap_mean(over, arr["gid"], n_boot=n_boot, seed=seed, mask=src)[:3]
+        matched = M.matched_cluster_bootstrap(over, arr["gid"], keys, src, target, n_boot=n_boot, seed=seed)[:3]
+        out[r] = {"n": int(src.sum()), "raw": raw, "matched": matched}
+    return out
+
+
+def matched_table(rows, title=""):
+    lines = [title] if title else []
+    lines += ["| clock | positions | confidence - accuracy, raw (points) | matched to the 30s+ difficulty mix (points) |", "|---|---|---|---|"]
+    for label, r in rows.items():
+        lines.append(f"| {label} | {r['n']:,} | {_ci(r['raw'], 100, 1)} | {_ci(r['matched'], 100, 1)} |")
+    return "\n".join(lines)
+
+
 # ---- text ----------------------------------------------------------------------------------------------------------------
 
 def _ci(t, scale=1.0, digits=2):

@@ -127,3 +127,41 @@ def test_a_better_model_is_detected_by_the_paired_comparison(positions, items):
     same = R.compare(bad, bad, arr, R.masks(arr)["full"], n_boot=100)
     assert same["top1"][:3] == (0.0, 0.0, 0.0) and same["nll"][0] == 0.0
     assert "| full |" in R.comparison_table({"full": r})
+
+
+def test_matched_mean_removes_a_difficulty_confound():
+    from chessme.humanlike import metrics as M
+    rng = np.random.default_rng(0)
+    n = 6000
+    gid = np.arange(n) // 4
+    low = np.zeros(n, dtype=bool)
+    low[: n // 2] = True
+    hard = np.where(low, rng.random(n) < 0.1, rng.random(n) < 0.6)       # low-clock positions are mostly easy, ample-clock ones mostly hard
+    values = np.where(hard, 0.10, 0.0)                                   # the value depends ONLY on difficulty, not on the clock
+    strata = np.where(hard, "hard", "easy")
+    raw = M.cluster_bootstrap_mean(values, gid, n_boot=50, mask=low)[0]
+    ref = M.cluster_bootstrap_mean(values, gid, n_boot=50, mask=~low)[0]
+    assert raw < ref - 0.03                                              # the raw difference exists
+    matched = M.matched_cluster_bootstrap(values, gid, strata, low, ~low, n_boot=50)
+    assert matched[0] == pytest.approx(ref, abs=0.01)                    # reweighted to the same mix: the difference is gone
+    assert matched[1] <= matched[0] <= matched[2]
+
+
+def test_matched_mean_uses_only_the_common_support():
+    from chessme.humanlike import metrics as M
+    values = np.array([1.0, 1.0, 5.0, 3.0, 3.0])
+    gid = np.arange(5)
+    strata = np.array(["a", "a", "b", "a", "c"])
+    src = np.array([True, True, True, False, False])
+    tgt = np.array([False, False, False, True, True])                    # target has a and c, source has a and b: only 'a' is shared
+    assert M.matched_cluster_bootstrap(values, gid, strata, src, tgt, n_boot=10)[0] == pytest.approx(1.0)
+    none = M.matched_cluster_bootstrap(values, gid, np.array(list("bbbcc")), src, tgt, n_boot=10)
+    assert np.isnan(none[0])
+
+
+def test_matched_overconfidence_table(positions, items):
+    arr = R.position_arrays(positions)
+    s = S.score_items(FixedScorer(0.9), items)
+    rows = R.matched_overconfidence(s, arr, R.masks(arr)["full"], n_boot=30, min_n=1)
+    assert "30s+" in rows and rows["30s+"]["matched"][0] == pytest.approx(rows["30s+"]["raw"][0], abs=1e-9)   # the reference matches itself
+    assert "| 30s+ |" in R.matched_table(rows)

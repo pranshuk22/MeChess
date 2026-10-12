@@ -106,6 +106,31 @@ def paired_cluster_bootstrap(values_a, values_b, groups, n_boot=2000, seed=0, ma
     return _boot(s, n, n_boot, seed, alpha)
 
 
+def matched_cluster_bootstrap(values, groups, strata, source, target, n_boot=2000, seed=0, alpha=0.05):
+    """Mean of `values` over the `source` positions, reweighted so that they have the same distribution over `strata` as the `target`
+    positions (direct standardisation). Use it to ask whether a difference between two subsets (e.g. low clock vs ample clock) survives
+    when both have the same mix of position difficulty. Strata that are empty in `source` are dropped from the target as well, so the
+    comparison is over the common support. Returns (mean, lo, hi, effective weight, n_groups) with a game-level bootstrap interval."""
+    values = np.asarray(values, dtype=np.float64)
+    strata = np.asarray(strata)
+    source, target = np.asarray(source, dtype=bool), np.asarray(target, dtype=bool)
+    keys, inv = np.unique(strata, return_inverse=True)
+    n_src = np.bincount(inv[source], minlength=len(keys)).astype(np.float64)
+    n_tgt = np.bincount(inv[target], minlength=len(keys)).astype(np.float64)
+    common = (n_src > 0) & (n_tgt > 0)
+    if not common.any():
+        return float("nan"), float("nan"), float("nan"), 0, 0
+    share_tgt = np.where(common, n_tgt, 0.0)
+    share_tgt /= share_tgt.sum()
+    ratio = np.where(common, share_tgt / np.maximum(n_src, 1.0), 0.0)         # weight of one source position of each stratum
+    w = np.where(source, ratio[inv], 0.0)
+    _, gi = np.unique(np.asarray(groups), return_inverse=True)
+    s = np.bincount(gi, weights=w * values, minlength=gi.max() + 1)
+    n = np.bincount(gi, weights=w, minlength=gi.max() + 1)
+    keep = n > 0
+    return _boot(s[keep], n[keep], n_boot, seed, alpha)
+
+
 def _boot(s, n, n_boot, seed, alpha=0.05):
     g = len(s)
     if g == 0:

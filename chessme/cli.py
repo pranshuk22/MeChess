@@ -1366,6 +1366,8 @@ def cmd_humanlike_report(args):
         for by in ("rating", "phase"):
             lines += [R.table(R.strata(scores, arr, masks["comparable"], by, n_boot=args.boot), f"### {name}: comparable positions by {by}"), ""]
         lines += [R.table(R.strata(scores, arr, masks["full"], "clock", n_boot=args.boot), f"### {name}: all positions by the mover's clock"), ""]
+        lines += [R.matched_table(R.matched_overconfidence(scores, arr, masks["full"], n_boot=args.boot),
+                                  f"### {name}: overconfidence by clock, raw and matched for difficulty (legal-move count and game phase)"), ""]
     for na, sa, _ in runs[1:]:
         nb, sb = runs[0][0], runs[0][1]
         lines += [f"## {na} minus {nb} (paired, same positions)", "",
