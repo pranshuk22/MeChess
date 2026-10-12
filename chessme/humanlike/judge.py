@@ -80,12 +80,12 @@ def _task(args):
     return judge_position(_ENGINE["e"], fen, human, cands, nc, nr)
 
 
-def judge_positions(items, *, engine_path=None, workers=1, nodes_child=10_000, nodes_root=20_000, hash_mb=16, progress=None, engine=None):
-    """`items` = [(fen, human uci, [candidate ucis; '' = none])]. Returns arrays best_cp, human_cp, cand_cp (n x K, NaN where there is no candidate).
+def judge_positions(items, *, engine_path=None, workers=1, nodes_child=10_000, nodes_root=20_000, hash_mb=16, progress=None, engine=None, k=K_CAND):
+    """`items` = [(fen, human uci, [candidate ucis; '' = none])]. Returns arrays best_cp, human_cp, cand_cp (n x k, NaN where there is no candidate); at most `k` candidates per position are judged.
     Pass `engine` (an object with `analyse`) to run in-process; otherwise `workers` Stockfish processes are started from `engine_path`."""
     n = len(items)
-    best, human, cand = np.zeros(n), np.zeros(n), np.full((n, K_CAND), np.nan)
-    tasks = [(f, h, list(c)[:K_CAND] + [""] * (K_CAND - len(c)), nodes_child, nodes_root) for f, h, c in items]
+    best, human, cand = np.zeros(n), np.zeros(n), np.full((n, k), np.nan)
+    tasks = [(f, h, list(c)[:k] + [""] * (k - len(c[:k])), nodes_child, nodes_root) for f, h, c in items]
     if engine is not None:
         results = (judge_position(engine, *t[:3], t[3], t[4]) for t in tasks)
     else:

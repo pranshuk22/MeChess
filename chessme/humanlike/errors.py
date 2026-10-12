@@ -17,8 +17,10 @@ THRESHOLDS = {"error (loss > 0.10)": 0.10, "blunder (loss > 0.20)": 0.20}
 GOOD = 0.02                      # a candidate within this much of the best counts as a good move (position difficulty = how few there are)
 
 
-def prepare(scores, judged, k=J.K_CAND):
-    """Candidate probabilities (renormalised) and losses, and the human's loss, aligned with the positions."""
+def prepare(scores, judged, k=None):
+    """Candidate probabilities (renormalised) and losses, and the human's loss, aligned with the positions. `k` = the number of judged candidates (default: as many
+    as the judged file has)."""
+    k = judged["cand_cp"].shape[1] if k is None else k
     pc = scores["topk_p"][:, :k].astype(np.float64)
     cand_loss = J.losses(judged["best_cp"], judged["cand_cp"][:, :k])
     human_loss = J.losses(judged["best_cp"], judged["human_cp"])
@@ -40,10 +42,11 @@ def tempered(p, tau):
     return q / np.maximum(s, 1e-300)
 
 
-def tail_stats(prep, rank, regime, k=J.K_CAND):
+def tail_stats(prep, rank, regime, k=None):
     """What the humans' moves outside the judged candidates (rank > k) cost, per clock regime: {regime: {measure: value}}. The model's own probability
     mass outside those candidates is real (it plays such moves about as often as humans do), and those moves are much worse than the judged ones, so the
     model's expected values must include it; this uses the humans' loss for the moves they played there as the stand-in for what the model's tail moves cost."""
+    k = prep["cand_loss"].shape[1] if k is None else k
     out = {}
     for r in sorted(set(regime)):
         sel = (regime == r) & (rank > k) & ~np.isnan(prep["human_loss"])

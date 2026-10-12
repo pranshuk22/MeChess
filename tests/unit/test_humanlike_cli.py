@@ -81,6 +81,12 @@ def test_judge_and_errors_commands(tmp_path, monkeypatch, testset):
         "--nodes-child", 200, "--nodes-root", 400, "--out", tmp_path / "j.npz")
     out = tmp_path / "errors.md"
     run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--boot", 30, "--out", out)
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", "--per-regime", 12, "--min-ply", 1, "--workers", 1, "--candidates", 12,
+        "--nodes-child", 100, "--nodes-root", 100, "--out", tmp_path / "j12.npz")
+    import numpy as np
+    assert np.load(tmp_path / "j12.npz")["cand_cp"].shape[1] == 12
+    run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j12.npz", "--boot", 20, "--out", tmp_path / "e12.md")
+    assert "12 most probable moves" in (tmp_path / "e12.md").read_text()
     text = out.read_text()
     assert "positive control: sharpened" in text and "mean loss" in text and "clock 30s+" in text and "blunder" in text
     ad = tmp_path / "adapter_j.md"

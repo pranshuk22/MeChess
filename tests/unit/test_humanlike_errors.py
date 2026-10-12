@@ -161,3 +161,16 @@ def test_the_engine_pool_returns_and_leaves_no_engine_behind():
             "    print('done', len(r['best_cp']))\n")
     r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, cwd=Path(__file__).resolve().parents[2])
     assert r.returncode == 0 and "done 6" in r.stdout, r.stderr[-500:]
+
+
+def test_more_candidates_can_be_judged_and_the_analysis_follows_their_number():
+    eng = MaterialEngine()
+    items = [(FEN, "e1e2", ["d2d5", "e1e2", "d2d3", "d2d4", "e1f1"])]
+    r = J.judge_positions(items, engine=eng, k=5)
+    assert r["cand_cp"].shape == (1, 5) and not np.isnan(r["cand_cp"]).any()
+    assert J.judge_positions(items, engine=eng, k=3)["cand_cp"].shape == (1, 3)                 # fewer than offered: only the first k are judged
+    scores = {"topk_p": np.array([[0.4, 0.3, 0.1, 0.1, 0.05] + [0.0] * 11], dtype=np.float32)}
+    prep = E.prepare(scores, r)
+    assert prep["cand_loss"].shape == (1, 5) and prep["tail"][0] == pytest.approx(0.05, abs=1e-6)     # the mass beyond the judged five
+    stats = E.tail_stats({**prep, "human_loss": np.full(30, 0.5), "cand_loss": np.zeros((30, 5))}, np.full(30, 9), np.array(["<10s"] * 30))
+    assert stats["<10s"]["mean loss"] == 0.5                                                      # 'outside' is rank > 5 here, from the file's own width

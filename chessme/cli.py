@@ -1437,14 +1437,14 @@ def cmd_humanlike_judge(args):
         ok = np.flatnonzero((regime == name) & (arr["ply"] >= args.min_ply) & (arr["n_legal"] >= 2) & in_split)
         rows += sorted(rng.choice(ok, size=min(args.per_regime, len(ok)), replace=False).tolist())
     rows = np.array(sorted(rows))
-    items = [(positions[i].fen, positions[i].played, [m for m in scores["topk_move"][i, :J.K_CAND] if m]) for i in rows]
+    items = [(positions[i].fen, positions[i].played, [m for m in scores["topk_move"][i, :args.candidates] if m]) for i in rows]
     t0 = time.time()
-    judged = J.judge_positions(items, engine_path=args.engine, workers=args.workers, nodes_child=args.nodes_child, nodes_root=args.nodes_root,
+    judged = J.judge_positions(items, engine_path=args.engine, workers=args.workers, nodes_child=args.nodes_child, nodes_root=args.nodes_root, k=args.candidates,
                                progress=lambda d, n: print(f"  {d:,}/{n:,} positions judged ({time.time() - t0:.0f}s)", flush=True))
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, rows=rows, meta=np.array(json.dumps({"model": meta["model"], "testset_sha256": manifest["sha256"], "nodes_child": args.nodes_child,
-                                                                  "nodes_root": args.nodes_root, "seed": args.seed, "per_regime": args.per_regime, "split": args.split, "split_seed": args.split_seed,
+                                                                  "nodes_root": args.nodes_root, "candidates": args.candidates, "seed": args.seed, "per_regime": args.per_regime, "split": args.split, "split_seed": args.split_seed,
                                                                   "positions_sha": S.positions_hash([positions[i] for i in rows])})), **judged)
     print(f"judged {len(rows):,} positions of {meta['model']} in {time.time() - t0:.0f}s -> {out}")
 
@@ -1478,7 +1478,7 @@ def cmd_humanlike_errors(args):
     tail = E.tail_arrays(stats, regime)
     lines = [f"# Error profile (axis A3): {meta['model']}", "",
              f"{len(rows):,} positions of {Path(args.testset).name}, judged by Stockfish at {jmeta['nodes_child']:,} nodes per candidate ({jmeta['nodes_root']:,} at the root). "
-             f"Loss = expected points the move gives away (0-1, Lichess curve); values below are x100. The model's probabilities are over its {E.J.K_CAND} most probable moves "
+             f"Loss = expected points the move gives away (0-1, Lichess curve); values below are x100. The model's probabilities are over its {prep['cand_loss'].shape[1]} most probable moves "
              f"(mean share outside them: {100 * float(prep['tail'].mean()):.1f}%). **model - humans** = the model's expected value minus what the humans did, "
              "paired by position, 95% game-level interval; **gap / noise floor** = that gap divided by the standard deviation of the humans' mean loss between two random halves of the games. "
              "The mass the model puts outside the judged moves is added back at the cost of the moves the humans played outside them (per clock regime: "
@@ -1542,7 +1542,7 @@ def cmd_humanlike_adapter(args):
             raise SystemExit("the judged training file belongs to another test set or model")
         if test[trows].any():
             raise SystemExit("the judged training sample contains positions of test games: judge it with --split trainval and the same split seed")
-        k_j = J.K_CAND
+        k_j = tj["cand_cp"].shape[1]
         c_loss, h_loss = J.losses(tj["best_cp"], tj["cand_cp"][:, :k_j]), J.losses(tj["best_cp"], tj["human_cp"])
         regime_tr = M.clock_regime(arr["clock"][trows])
         beh = A.behaviour_data(trows, c_loss, h_loss, regime_tr, train[trows], scores["rank"][trows])
@@ -1577,14 +1577,15 @@ def cmd_humanlike_adapter(args):
             judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
         if jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
             raise SystemExit("the judged file belongs to another test set or model")
+        k_judged = judged["cand_cp"].shape[1]
         keep = test[jrows]                                               # only judged positions from games the adapter never saw
         sub_judged = {k: v[keep] for k, v in judged.items()}
         regime = M.clock_regime(arr["clock"][jrows])[keep]
         sub_arr = {k: v[jrows][keep] for k, v in arr.items()}
         jmasks = {"all judged test positions": np.ones(int(keep.sum()), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
         lines += [f"## Sampled-play errors of the adapted models (axis A3) on the {int(keep.sum()):,} judged positions from test games", "",
-                  "Same engine losses as `humanlike-errors`. Each model's probabilities over the frozen model's 8 judged candidates are renormalised; the mass it puts OUTSIDE "
-                  "those 8 moves is added back at the cost of the moves humans played outside them (per regime, from other games when a judged training sample is given) and "
+                  f"Same engine losses as `humanlike-errors`. Each model's probabilities over the frozen model's {k_judged} judged candidates are renormalised; the mass it puts OUTSIDE "
+                  f"those {k_judged} moves is added back at the cost of the moves humans played outside them (per regime, from other games when a judged training sample is given) and "
                   "reported below each table.", ""]
         if beh is not None:                                              # the tail stand-in comes from other games than the ones evaluated
             tprep = E.prepare({"topk_p": scores["topk_p"][trows][:, :A.K]}, {"best_cp": tj["best_cp"], "human_cp": tj["human_cp"], "cand_cp": tj["cand_cp"]})
@@ -1599,8 +1600,8 @@ def cmd_humanlike_adapter(args):
                 tstats_here = tstats
             tail = E.tail_arrays(tstats_here, regime)
             cmp_rows = {k: E.compare(prep, sub_arr, m, n_boot=args.boot, tail=tail) for k, m in jmasks.items()}
-            unj = {k: float(1.0 - np.asarray(out["probs"])[jrows][keep][m][:, :E.J.K_CAND].sum(axis=1).mean()) for k, m in jmasks.items()}
-            lines += [E.render(cmp_rows, title=f"### {name}"), "", "Mass outside the 8 judged candidates: " + ", ".join(f"{k} {100 * v:.1f}%" for k, v in unj.items()), ""]
+            unj = {k: float(1.0 - np.asarray(out["probs"])[jrows][keep][m][:, :k_judged].sum(axis=1).mean()) for k, m in jmasks.items()}
+            lines += [E.render(cmp_rows, title=f"### {name}"), "", f"Mass outside the {k_judged} judged candidates: " + ", ".join(f"{k} {100 * v:.1f}%" for k, v in unj.items()), ""]
             diff_rows = [(k, d, v) for k, m in jmasks.items() if k != "all judged test positions" for d, v in E.by_difficulty(prep, sub_arr, m, tail=tail).items()]
             lines += ["Error rate (loss > 0.10) by the number of good moves (humans / model, %): " + "; ".join(f"{k} {d} good: {100 * v['human']:.1f} / {100 * v['model']:.1f}" for k, d, v in diff_rows), ""]
     if args.eval_testset:
@@ -2178,7 +2179,7 @@ def main():
     hj.add_argument("--testset", required=True); hj.add_argument("--scores", required=True); hj.add_argument("--out", default="data/humanlike/judged.npz")
     hj.add_argument("--per-regime", type=int, default=4000); hj.add_argument("--min-ply", type=int, default=10); hj.add_argument("--seed", type=int, default=0)
     hj.add_argument("--workers", type=int, default=3); hj.add_argument("--engine"); hj.add_argument("--nodes-child", type=int, default=10000)
-    hj.add_argument("--nodes-root", type=int, default=20000)
+    hj.add_argument("--nodes-root", type=int, default=20000); hj.add_argument("--candidates", type=int, default=8, choices=range(1, 17), metavar="1-16", help="how many of the model's most probable moves are judged next to the human's")
     hj.add_argument("--split", choices=("all", "train", "val", "test", "trainval"), default="all", help="judge only positions of games in this part of the adapter's game split")
     hj.add_argument("--split-seed", type=int, default=0)
     hj.set_defaults(func=cmd_humanlike_judge)
