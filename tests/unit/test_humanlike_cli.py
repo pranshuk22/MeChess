@@ -103,3 +103,24 @@ def test_adapter_command_trains_and_compares_variants(tmp_path, monkeypatch, tes
     for name in ("frozen model", "wrapper: one temperature", "wrapper: temperature by clock regime and rating", "adapter: all features", "Independent check"):
         assert name in text
     assert "minus frozen model (paired)" in text
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_judge_command_can_be_restricted_to_a_game_split(tmp_path, monkeypatch, testset):
+    import numpy as np
+    from chessme.humanlike import adapter as A
+    from chessme.humanlike import score as S
+    from chessme.humanlike import testset as T
+    torch.manual_seed(1)
+    ck = tmp_path / "n.pt"
+    net.save_checkpoint(ck, net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--out", tmp_path / "s.npz")
+    scores, _ = S.load_scores(tmp_path / "s.npz")
+    gids = np.array([p.gid for p in T.read_testset(testset, scores["index"])])
+    train, _, test = A.game_split(gids)
+    assert train.any() and test.any()
+    for split, expected in (("train", train), ("test", test)):
+        run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", "--per-regime", 1000, "--min-ply", 1, "--workers", 1,
+            "--nodes-child", 100, "--nodes-root", 100, "--split", split, "--out", tmp_path / f"j_{split}.npz")
+        rows = np.load(tmp_path / f"j_{split}.npz")["rows"]
+        assert len(rows) > 0 and expected[rows].all()                            # every judged position is from a game of that split

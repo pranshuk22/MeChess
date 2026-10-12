@@ -1429,9 +1429,12 @@ def cmd_humanlike_judge(args):
     arr = R.position_arrays(positions)
     regime = M.clock_regime(arr["clock"])
     rng = np.random.default_rng(args.seed)
+    from .humanlike import adapter as A
+    train_m, val_m, test_m = A.game_split(arr["gid"], seed=args.split_seed)          # the same split `humanlike-adapter` uses
+    in_split = {"all": np.ones(len(regime), dtype=bool), "train": train_m, "val": val_m, "test": test_m, "trainval": train_m | val_m}[args.split]
     rows = []
     for name in ("30s+", "10-30s", "<10s"):
-        ok = np.flatnonzero((regime == name) & (arr["ply"] >= args.min_ply) & (arr["n_legal"] >= 2))
+        ok = np.flatnonzero((regime == name) & (arr["ply"] >= args.min_ply) & (arr["n_legal"] >= 2) & in_split)
         rows += sorted(rng.choice(ok, size=min(args.per_regime, len(ok)), replace=False).tolist())
     rows = np.array(sorted(rows))
     items = [(positions[i].fen, positions[i].played, [m for m in scores["topk_move"][i, :J.K_CAND] if m]) for i in rows]
@@ -1441,7 +1444,7 @@ def cmd_humanlike_judge(args):
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(out, rows=rows, meta=np.array(json.dumps({"model": meta["model"], "testset_sha256": manifest["sha256"], "nodes_child": args.nodes_child,
-                                                                  "nodes_root": args.nodes_root, "seed": args.seed, "per_regime": args.per_regime,
+                                                                  "nodes_root": args.nodes_root, "seed": args.seed, "per_regime": args.per_regime, "split": args.split, "split_seed": args.split_seed,
                                                                   "positions_sha": S.positions_hash([positions[i] for i in rows])})), **judged)
     print(f"judged {len(rows):,} positions of {meta['model']} in {time.time() - t0:.0f}s -> {out}")
 
@@ -2136,6 +2139,8 @@ def main():
     hj.add_argument("--per-regime", type=int, default=4000); hj.add_argument("--min-ply", type=int, default=10); hj.add_argument("--seed", type=int, default=0)
     hj.add_argument("--workers", type=int, default=3); hj.add_argument("--engine"); hj.add_argument("--nodes-child", type=int, default=10000)
     hj.add_argument("--nodes-root", type=int, default=20000)
+    hj.add_argument("--split", choices=("all", "train", "val", "test", "trainval"), default="all", help="judge only positions of games in this part of the adapter's game split")
+    hj.add_argument("--split-seed", type=int, default=0)
     hj.set_defaults(func=cmd_humanlike_judge)
     he = sub.add_parser("humanlike-errors", help="error profile (A3): the errors a model would make when sampling its moves against the errors humans made, with positive controls and a noise floor")
     he.add_argument("--testset", required=True); he.add_argument("--scores", required=True); he.add_argument("--judged", required=True)
