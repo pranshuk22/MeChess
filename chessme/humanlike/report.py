@@ -87,10 +87,11 @@ def difficulty_strata(arr):
     return np.char.add(np.char.add(legal.astype(str), "-"), M.phase_of(arr["ply"], arr["heavy"]).astype(str))
 
 
-def matched_overconfidence(scores, arr, mask, reference="30s+", n_boot=300, seed=0, min_n=200):
+def matched_overconfidence(scores, arr, mask, reference="30s+", n_boot=300, seed=0, min_n=200, min_cell=50):
     """Confidence minus accuracy per clock regime, raw and reweighted to the reference regime's mix of difficulty (legal-move count bucket x
     game phase). Low-clock positions are not like others (fewer legal moves, later in the game), so only the matched number says whether
-    time pressure itself changes the model's calibration. Returns {regime: {'n', 'raw', 'matched'}} (each a (mean, lo, hi))."""
+    time pressure itself changes the model's calibration. Difficulty cells with fewer than `min_cell` positions in either regime are left out
+    ('covered' is the share of the regime's positions in the remaining cells). Returns {regime: {'n', 'covered', 'raw', 'matched'}}."""
     over = scores["conf"] - scores["top1"].astype(float)
     regime = M.clock_regime(arr["clock"])
     keys = difficulty_strata(arr)
@@ -101,16 +102,16 @@ def matched_overconfidence(scores, arr, mask, reference="30s+", n_boot=300, seed
         if src.sum() < min_n or target.sum() < min_n:
             continue
         raw = M.cluster_bootstrap_mean(over, arr["gid"], n_boot=n_boot, seed=seed, mask=src)[:3]
-        matched = M.matched_cluster_bootstrap(over, arr["gid"], keys, src, target, n_boot=n_boot, seed=seed)[:3]
-        out[r] = {"n": int(src.sum()), "raw": raw, "matched": matched}
+        matched = M.matched_cluster_bootstrap(over, arr["gid"], keys, src, target, n_boot=n_boot, seed=seed, min_cell=min_cell)[:3]
+        out[r] = {"n": int(src.sum()), "covered": M.common_cells_share(keys, src, target, min_cell), "raw": raw, "matched": matched}
     return out
 
 
 def matched_table(rows, title=""):
     lines = [title] if title else []
-    lines += ["| clock | positions | confidence - accuracy, raw (points) | matched to the 30s+ difficulty mix (points) |", "|---|---|---|---|"]
+    lines += ["| clock | positions | confidence - accuracy, raw (points) | matched to the 30s+ difficulty mix (points) | share of positions matched |", "|---|---|---|---|---|"]
     for label, r in rows.items():
-        lines.append(f"| {label} | {r['n']:,} | {_ci(r['raw'], 100, 1)} | {_ci(r['matched'], 100, 1)} |")
+        lines.append(f"| {label} | {r['n']:,} | {_ci(r['raw'], 100, 1)} | {_ci(r['matched'], 100, 1)} | {100 * r['covered']:.0f}% |")
     return "\n".join(lines)
 
 

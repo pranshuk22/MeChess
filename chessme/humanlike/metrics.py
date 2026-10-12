@@ -106,18 +106,19 @@ def paired_cluster_bootstrap(values_a, values_b, groups, n_boot=2000, seed=0, ma
     return _boot(s, n, n_boot, seed, alpha)
 
 
-def matched_cluster_bootstrap(values, groups, strata, source, target, n_boot=2000, seed=0, alpha=0.05):
+def matched_cluster_bootstrap(values, groups, strata, source, target, n_boot=2000, seed=0, alpha=0.05, min_cell=30):
     """Mean of `values` over the `source` positions, reweighted so that they have the same distribution over `strata` as the `target`
     positions (direct standardisation). Use it to ask whether a difference between two subsets (e.g. low clock vs ample clock) survives
-    when both have the same mix of position difficulty. Strata that are empty in `source` are dropped from the target as well, so the
-    comparison is over the common support. Returns (mean, lo, hi, effective weight, n_groups) with a game-level bootstrap interval."""
+    when both have the same mix of position difficulty. Strata with fewer than `min_cell` positions in either subset are dropped from
+    both (a stratum with a handful of source positions would get a huge weight and make the estimate noise), so the comparison is over
+    the common support; `common_cells_share` tells how much of the source that keeps. Returns (mean, lo, hi, effective weight, n_groups) with a game-level bootstrap interval."""
     values = np.asarray(values, dtype=np.float64)
     strata = np.asarray(strata)
     source, target = np.asarray(source, dtype=bool), np.asarray(target, dtype=bool)
     keys, inv = np.unique(strata, return_inverse=True)
     n_src = np.bincount(inv[source], minlength=len(keys)).astype(np.float64)
     n_tgt = np.bincount(inv[target], minlength=len(keys)).astype(np.float64)
-    common = (n_src > 0) & (n_tgt > 0)
+    common = (n_src >= min_cell) & (n_tgt >= min_cell)
     if not common.any():
         return float("nan"), float("nan"), float("nan"), 0, 0
     share_tgt = np.where(common, n_tgt, 0.0)
@@ -129,6 +130,15 @@ def matched_cluster_bootstrap(values, groups, strata, source, target, n_boot=200
     n = np.bincount(gi, weights=w, minlength=gi.max() + 1)
     keep = n > 0
     return _boot(s[keep], n[keep], n_boot, seed, alpha)
+
+
+def common_cells_share(strata, source, target, min_cell=30):
+    """Share of the `source` positions that lie in strata with at least `min_cell` positions in both subsets (what a matched estimate covers)."""
+    strata, source, target = np.asarray(strata), np.asarray(source, dtype=bool), np.asarray(target, dtype=bool)
+    _, inv = np.unique(strata, return_inverse=True)
+    n_src, n_tgt = np.bincount(inv[source], minlength=inv.max() + 1), np.bincount(inv[target], minlength=inv.max() + 1)
+    ok = (n_src >= min_cell) & (n_tgt >= min_cell)
+    return float(ok[inv[source]].mean()) if source.any() else 0.0
 
 
 def _boot(s, n, n_boot, seed, alpha=0.05):

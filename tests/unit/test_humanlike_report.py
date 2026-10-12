@@ -154,14 +154,32 @@ def test_matched_mean_uses_only_the_common_support():
     strata = np.array(["a", "a", "b", "a", "c"])
     src = np.array([True, True, True, False, False])
     tgt = np.array([False, False, False, True, True])                    # target has a and c, source has a and b: only 'a' is shared
-    assert M.matched_cluster_bootstrap(values, gid, strata, src, tgt, n_boot=10)[0] == pytest.approx(1.0)
-    none = M.matched_cluster_bootstrap(values, gid, np.array(list("bbbcc")), src, tgt, n_boot=10)
+    assert M.matched_cluster_bootstrap(values, gid, strata, src, tgt, n_boot=10, min_cell=1)[0] == pytest.approx(1.0)
+    none = M.matched_cluster_bootstrap(values, gid, np.array(list("bbbcc")), src, tgt, n_boot=10, min_cell=1)
     assert np.isnan(none[0])
 
 
 def test_matched_overconfidence_table(positions, items):
     arr = R.position_arrays(positions)
     s = S.score_items(FixedScorer(0.9), items)
-    rows = R.matched_overconfidence(s, arr, R.masks(arr)["full"], n_boot=30, min_n=1)
+    rows = R.matched_overconfidence(s, arr, R.masks(arr)["full"], n_boot=30, min_n=1, min_cell=1)
     assert "30s+" in rows and rows["30s+"]["matched"][0] == pytest.approx(rows["30s+"]["raw"][0], abs=1e-9)   # the reference matches itself
     assert "| 30s+ |" in R.matched_table(rows)
+
+
+def test_a_tiny_cell_cannot_dominate_the_matched_estimate():
+    from chessme.humanlike import metrics as M
+    n = 2000
+    gid = np.arange(n)
+    strata = np.array(["big"] * (n - 3) + ["tiny"] * 3)
+    source = np.ones(n, dtype=bool)
+    target = np.ones(n, dtype=bool)
+    target[:1000] = False
+    values = np.where(strata == "tiny", 100.0, 1.0)                    # three wild values in a cell the target also has but the source barely does
+    src = np.zeros(n, dtype=bool)
+    src[n - 3:] = True
+    src[:50] = True                                                     # source: 50 'big' and 3 'tiny' positions
+    tgt = np.ones(n, dtype=bool)
+    assert M.matched_cluster_bootstrap(values, gid, strata, src, tgt, n_boot=20, min_cell=30)[0] == pytest.approx(1.0)   # tiny cell ignored
+    assert M.matched_cluster_bootstrap(values, gid, strata, src, tgt, n_boot=20, min_cell=1)[0] > 1.0                   # allowed: it pulls the mean
+    assert M.common_cells_share(strata, src, tgt, min_cell=30) == pytest.approx(50 / 53)
