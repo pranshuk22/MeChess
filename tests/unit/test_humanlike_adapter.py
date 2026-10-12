@@ -100,3 +100,61 @@ def test_a_temperature_only_adapter_cannot_change_the_ranking():
     assert not np.allclose(out["p"], scores["p"])                          # but the probabilities did move
     low = clock < 10
     assert out["conf"][low].mean() < scores["conf"][low].mean()            # flatter under time pressure
+
+
+def judged_synthetic(n=10000, seed=3, low_blunder=0.30):
+    """A calibrated frozen model (the humans' moves ARE drawn from it) whose 8 judged candidates have losses 0, .05, ... .35 and whose humans, in the
+    judged labels, blunder far more often than the model expects when the clock is low (an inconsistency the likelihood cannot see)."""
+    rng = np.random.default_rng(seed)
+    clock = np.where(rng.random(n) < 0.4, rng.uniform(1, 9, n), rng.uniform(40, 150, n))
+    logits = rng.normal(size=(n, 16))
+    logits[:, 0] += 1.5
+    p = np.exp(logits) / np.exp(logits).sum(1, keepdims=True)
+    ps = np.sort(p, axis=1)[:, ::-1]
+    pick = np.array([rng.choice(16, p=row) for row in ps])
+    scores = {"topk_p": ps.astype(np.float32), "p": ps[np.arange(n), pick], "rank": (pick + 1).astype(np.int32), "conf": ps[:, 0],
+              "entropy": -(ps * np.log(ps)).sum(1), "sq_sum": (ps ** 2).sum(1), "top1": pick == 0}
+    cand = np.tile(np.arange(8) * 0.05, (n, 1))
+    human = cand[np.arange(n), np.minimum(pick, 7)].copy()
+    low = clock < 10
+    blunder = low & (rng.random(n) < low_blunder)
+    human[blunder] = 0.4
+    return scores, clock, cand, human, low
+
+
+def test_the_behaviour_term_moves_the_expected_blunder_rate_toward_the_humans():
+    scores, clock, cand, human, low = judged_synthetic()
+    x, sl = A.features(arrays(clock), scores), A.slots(scores)
+    train, val, test = A.game_split(np.arange(len(clock)) // 4)
+    regime = np.where(clock < 10, "<10s", "30s+")
+    beh = A.behaviour_data(np.arange(len(clock)), cand, human, regime, train | val, scores["rank"])
+    assert beh["targets"][A.REGIMES.index("<10s"), 2] > 0.25                   # the humans' blunder share in the labels
+    def expected(out, m=None):
+        """Expected blunder share as the behaviour term computes it: renormalised over the 8 judged moves, the mass outside added back at the tail stand-in."""
+        m = (low if m is None else m) & test
+        p8 = out["probs"][:, :8]
+        outside = 1.0 - p8.sum(1)
+        per_reg = np.where(low, beh["tails"][A.REGIMES.index("<10s"), 2], beh["tails"][A.REGIMES.index("30s+"), 2])
+        return float(((1 - outside) * (p8 / p8.sum(1, keepdims=True) * (cand > A.BLUNDER)).sum(1) + outside * per_reg)[m].mean())
+    nets = {}
+    for lam in (0.0, 30.0):
+        nets[lam] = A.fit(x, sl, train, val, epochs=12, lr=5e-3, behaviour=beh, lam=lam, log=lambda *a: None)
+    out0, out1 = (A.apply(*nets[l], x, sl) for l in (0.0, 30.0))
+    assert expected(out1) > expected(out0) + 0.05                               # pulled toward the humans' 30% blunders
+    assert abs(expected(out1, ~low) - expected(out0, ~low)) < 0.03              # the ample-clock behaviour stays near the humans'
+    assert abs(expected(out1) - beh["targets"][A.REGIMES.index("<10s"), 2]) < abs(expected(out0) - beh["targets"][A.REGIMES.index("<10s"), 2])
+    nll = lambda out: float(-np.log(out["p"][test]).mean())
+    assert nll(out1) > nll(out0) - 1e-6                                          # the price is paid in likelihood, as it must be here
+
+
+def test_the_behaviour_loss_is_zero_when_the_model_matches_the_targets():
+    import torch
+    cl = torch.tensor([[0.0, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3]] * 4)
+    valid = torch.ones(4, 8)
+    log_slots = torch.log(torch.full((4, 17), 1 / 17))
+    q = torch.full((8,), 1 / 8)
+    targets = torch.tensor([[float((q * cl[0]).sum()), float((q * (cl[0] > A.ERROR)).sum()), float((q * (cl[0] > A.BLUNDER)).sum())]] * 3)
+    reg = torch.zeros(4, dtype=torch.long)
+    assert float(A._behaviour_loss(log_slots, cl, valid, reg, targets)) == pytest.approx(0.0, abs=1e-9)
+    off = targets * 2
+    assert float(A._behaviour_loss(log_slots, cl, valid, reg, off)) > 0.1

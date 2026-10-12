@@ -40,12 +40,35 @@ def tempered(p, tau):
     return q / np.maximum(s, 1e-300)
 
 
-def model_values(prep, tau=1.0):
-    """Per position: the model's expected loss and its probability of an error / blunder, under temperature tau."""
+def tail_stats(prep, rank, regime, k=J.K_CAND):
+    """What the humans' moves outside the judged candidates (rank > k) cost, per clock regime: {regime: {measure: value}}. The model's own probability
+    mass outside those candidates is real (it plays such moves about as often as humans do), and those moves are much worse than the judged ones, so the
+    model's expected values must include it; this uses the humans' loss for the moves they played there as the stand-in for what the model's tail moves cost."""
+    out = {}
+    for r in sorted(set(regime)):
+        sel = (regime == r) & (rank > k) & ~np.isnan(prep["human_loss"])
+        if sel.sum() >= 20:
+            h = prep["human_loss"][sel]
+            out[r] = {"mean loss": float(h.mean()), **{name: float((h > thr).mean()) for name, thr in THRESHOLDS.items()}}
+    return out
+
+
+def tail_arrays(stats, regime):
+    """Per-position arrays of the tail stand-ins for `model_values` (regimes without enough data get NaN: no correction possible)."""
+    names = ["mean loss", *THRESHOLDS]
+    return {name: np.array([stats.get(r, {}).get(name, np.nan) for r in regime]) for name in names}
+
+
+def model_values(prep, tau=1.0, tail=None):
+    """Per position: the model's expected loss and its probability of an error / blunder, under temperature tau. Probabilities are renormalised over the
+    judged candidates; with `tail` (see `tail_arrays`) the mass outside them is added back at the tail stand-in value instead of being dropped."""
     q = tempered(prep["p"], tau)
     out = {"mean loss": (q * prep["cand_loss"]).sum(axis=1)}
     for name, thr in THRESHOLDS.items():
         out[name] = (q * (prep["cand_loss"] > thr)).sum(axis=1)
+    if tail is not None:
+        t = np.clip(prep["tail"], 0.0, 1.0)
+        out = {k: (1.0 - t) * v + t * tail[k] for k, v in out.items()}
     return out
 
 
@@ -56,9 +79,9 @@ def human_values(prep):
     return out
 
 
-def compare(prep, arr, mask, tau=1.0, n_boot=500, seed=0):
+def compare(prep, arr, mask, tau=1.0, n_boot=500, seed=0, tail=None):
     """Per measure: (human mean, model mean, model - human with a game-level interval) on the masked positions."""
-    mv, hv = model_values(prep, tau), human_values(prep)
+    mv, hv = model_values(prep, tau, tail), human_values(prep)
     out = {}
     for name in mv:
         h = M.cluster_bootstrap_mean(hv[name], arr["gid"], n_boot=n_boot, seed=seed, mask=mask)
@@ -85,10 +108,10 @@ def null_halves(prep, arr, mask, n_split=200, seed=0):
     return float(np.std(diffs)) if diffs else float("nan")
 
 
-def by_difficulty(prep, arr, mask, tau=1.0, bins=((1, 1), (2, 2), (3, 4), (5, 8))):
+def by_difficulty(prep, arr, mask, tau=1.0, bins=((1, 1), (2, 2), (3, 4), (5, 8)), tail=None):
     """Error rate (loss > 0.10) of humans and of the model against the number of good candidate moves: both should fall as good moves become
     plentiful, at the same rate."""
-    mv, hv = model_values(prep, tau)["error (loss > 0.10)"], human_values(prep)["error (loss > 0.10)"]
+    mv, hv = model_values(prep, tau, tail)["error (loss > 0.10)"], human_values(prep)["error (loss > 0.10)"]
     out = {}
     for lo, hi in bins:
         sel = np.asarray(mask, dtype=bool) & (prep["n_good"] >= lo) & (prep["n_good"] <= hi)

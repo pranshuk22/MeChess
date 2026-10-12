@@ -1474,18 +1474,23 @@ def cmd_humanlike_errors(args):
     regime = M.clock_regime(arr["clock"])
     masks = {"all judged positions": np.ones(len(rows), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
     floor = {k: E.null_halves(prep, arr, m) for k, m in masks.items()}
+    stats = E.tail_stats(prep, sub["rank"], regime)
+    tail = E.tail_arrays(stats, regime)
     lines = [f"# Error profile (axis A3): {meta['model']}", "",
              f"{len(rows):,} positions of {Path(args.testset).name}, judged by Stockfish at {jmeta['nodes_child']:,} nodes per candidate ({jmeta['nodes_root']:,} at the root). "
              f"Loss = expected points the move gives away (0-1, Lichess curve); values below are x100. The model's probabilities are over its {E.J.K_CAND} most probable moves "
              f"(mean share outside them: {100 * float(prep['tail'].mean()):.1f}%). **model - humans** = the model's expected value minus what the humans did, "
-             "paired by position, 95% game-level interval; **gap / noise floor** = that gap divided by the standard deviation of the humans' mean loss between two random halves of the games.", ""]
+             "paired by position, 95% game-level interval; **gap / noise floor** = that gap divided by the standard deviation of the humans' mean loss between two random halves of the games. "
+             "The mass the model puts outside the judged moves is added back at the cost of the moves the humans played outside them (per clock regime: "
+             + "; ".join(f"{r}: mean loss {100 * v['mean loss']:.1f}, blunder rate {100 * v['blunder (loss > 0.20)']:.0f}%" for r, v in stats.items()) + ").", ""]
     for tau, label in ((1.0, "the model as is (temperature 1)"), (0.5, "positive control: sharpened (temperature 0.5)"), (2.0, "positive control: flattened (temperature 2)")):
-        rows_t = {k: E.compare(prep, arr, m, tau=tau, n_boot=args.boot) for k, m in masks.items()}
+        rows_t = {k: E.compare(prep, arr, m, tau=tau, n_boot=args.boot, tail=tail) for k, m in masks.items()}
         lines += [E.render(rows_t, floor, f"## {label}"), ""]
+    lines += [E.render({k: E.compare(prep, arr, m, n_boot=args.boot) for k, m in masks.items()}, title="## sensitivity: the model's mass outside the judged moves dropped (probabilities renormalised over the judged moves)"), ""]
     lines += ["## Error rate (loss > 0.10) against the number of good candidate moves (within 0.02 of the best)", "",
               "| clock | good moves | positions | humans % | model % |", "|---|---|---|---|---|"]
     for k, m in masks.items():
-        for d, v in E.by_difficulty(prep, arr, m).items():
+        for d, v in E.by_difficulty(prep, arr, m, tail=tail).items():
             lines.append(f"| {k} | {d} | {v['n']:,} | {100 * v['human']:.1f} | {100 * v['model']:.1f} |")
     text = "\n".join(lines)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
@@ -1526,6 +1531,28 @@ def cmd_humanlike_adapter(args):
         print(f"fitting {name}", flush=True)
         net, mean, std = A.fit(x, sl, train, val, epochs=args.epochs, mode=mode, log=lambda m: None)
         fitted[name] = (A.apply(net, mean, std, x, sl), (net, mean, std, cols, override is not None))
+    beh, train_losses = None, None
+    if args.judged_train:
+        from .humanlike import errors as E
+        from .humanlike import judge as J
+        with np.load(args.judged_train, allow_pickle=False) as z:
+            tmeta = json.loads(str(z["meta"]))
+            trows, tj = z["rows"], {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+        if tmeta["testset_sha256"] != manifest["sha256"] or tmeta["model"] != meta["model"]:
+            raise SystemExit("the judged training file belongs to another test set or model")
+        if test[trows].any():
+            raise SystemExit("the judged training sample contains positions of test games: judge it with --split trainval and the same split seed")
+        k_j = J.K_CAND
+        c_loss, h_loss = J.losses(tj["best_cp"], tj["cand_cp"][:, :k_j]), J.losses(tj["best_cp"], tj["human_cp"])
+        regime_tr = M.clock_regime(arr["clock"][trows])
+        beh = A.behaviour_data(trows, c_loss, h_loss, regime_tr, train[trows], scores["rank"][trows])
+        train_losses = (c_loss, h_loss, regime_tr)
+        print(f"behaviour term on {len(trows):,} judged positions (human targets by regime, in the order {A.REGIMES}: {beh['targets'].round(3).tolist()})", flush=True)
+        for lam in (float(v) for v in args.lambdas.split(",")):
+            name = f"behaviour-matched adapter (lambda={lam:g})"
+            print(f"fitting {name}", flush=True)
+            net, mean, std = A.fit(x_all, sl, train, val, epochs=args.epochs, mode="full", behaviour=beh, lam=lam, log=lambda m: None)
+            fitted[name] = (A.apply(net, mean, std, x_all, sl), (net, mean, std, None, False))
     masks = {k: v & test for k, v in R.masks(arr).items()}
     lines = [f"# Adapter on a frozen {meta['model']} ({Path(args.testset).name})", "",
              f"Trained on {int(train.sum()):,} positions, early-stopped on {int(val.sum()):,}, evaluated on {int(test.sum()):,} positions of games the adapter never saw. "
@@ -1556,11 +1583,22 @@ def cmd_humanlike_adapter(args):
         sub_arr = {k: v[jrows][keep] for k, v in arr.items()}
         jmasks = {"all judged test positions": np.ones(int(keep.sum()), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
         lines += [f"## Sampled-play errors of the adapted models (axis A3) on the {int(keep.sum()):,} judged positions from test games", "",
-                  "Same engine losses as `humanlike-errors`. Each model's probabilities over the frozen model's 8 judged candidates are renormalised; the mass an adapted "
-                  "model puts OUTSIDE those 8 moves (ranks 9+ and the tail) is not judged and is reported in the last column.", ""]
+                  "Same engine losses as `humanlike-errors`. Each model's probabilities over the frozen model's 8 judged candidates are renormalised; the mass it puts OUTSIDE "
+                  "those 8 moves is added back at the cost of the moves humans played outside them (per regime, from other games when a judged training sample is given) and "
+                  "reported below each table.", ""]
+        if beh is not None:                                              # the tail stand-in comes from other games than the ones evaluated
+            tprep = E.prepare({"topk_p": scores["topk_p"][trows][:, :A.K]}, {"best_cp": tj["best_cp"], "human_cp": tj["human_cp"], "cand_cp": tj["cand_cp"]})
+            tstats = E.tail_stats(tprep, scores["rank"][trows], train_losses[2])
+        else:
+            tstats = None
         for name, out in [("frozen model", {"probs": scores["topk_p"][:, :A.K]})] + [(n, o) for n, (o, _) in fitted.items()]:
             prep = E.prepare({"topk_p": np.asarray(out["probs"])[jrows][keep]}, sub_judged)
-            cmp_rows = {k: E.compare(prep, sub_arr, m, n_boot=args.boot) for k, m in jmasks.items()}
+            if tstats is None:
+                tstats_here = E.tail_stats(prep, scores["rank"][jrows][keep], regime)
+            else:
+                tstats_here = tstats
+            tail = E.tail_arrays(tstats_here, regime)
+            cmp_rows = {k: E.compare(prep, sub_arr, m, n_boot=args.boot, tail=tail) for k, m in jmasks.items()}
             unj = {k: float(1.0 - np.asarray(out["probs"])[jrows][keep][m][:, :E.J.K_CAND].sum(axis=1).mean()) for k, m in jmasks.items()}
             lines += [E.render(cmp_rows, title=f"### {name}"), "", "Mass outside the 8 judged candidates: " + ", ".join(f"{k} {100 * v:.1f}%" for k, v in unj.items()), ""]
     if args.eval_testset:
@@ -2149,6 +2187,8 @@ def main():
     ha = sub.add_parser("humanlike-adapter", help="train a small adapter (clock, ratings, the model's confidence) on a frozen model's stored top moves and compare it with the frozen model and with calibration wrappers on games it never saw")
     ha.add_argument("--testset", required=True); ha.add_argument("--scores", required=True)
     ha.add_argument("--eval-testset"); ha.add_argument("--eval-scores"); ha.add_argument("--judged", help="judged positions (humanlike-judge) for the sampled-play error check")
+    ha.add_argument("--judged-train", help="judged positions of the TRAINING games (humanlike-judge --split trainval): adds the behaviour-matched adapters")
+    ha.add_argument("--lambdas", default="1,3,10", help="weights of the behaviour term to try")
     ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0)
     ha.add_argument("--out", default="data/humanlike/adapter.md")
     ha.set_defaults(func=cmd_humanlike_adapter)

@@ -72,35 +72,107 @@ def log_prob_of_played(log_slots, target, log_within):
     return log_slots.gather(1, target.unsqueeze(1)).squeeze(1) + log_within
 
 
-def fit(x, sl, train, val, epochs=30, batch=4096, lr=3e-3, hidden=32, seed=0, weight_decay=1e-4, mode="full", log=print):
-    """Train on the positions `train` (boolean mask), keep the epoch with the best validation NLL (`val` mask). Returns (network, mean, std)."""
+REGIMES = ("30s+", "10-30s", "<10s")
+MEASURES = ("mean loss", "error", "blunder")
+ERROR, BLUNDER = 0.10, 0.20
+
+
+def behaviour_data(rows, cand_loss, human_loss, regime, train_rows_mask, human_rank):
+    """The judged positions the behaviour term is computed on. `rows` index the score arrays, `cand_loss` (m x 8) are the engine losses of the model's 8 most
+    probable moves (NaN where not judged), `human_loss` (m,) of the human's move, `regime` (m,) one of REGIMES. Per regime the human targets are the mean loss,
+    the share of errors (loss > 0.10) and of blunders (loss > 0.20), taken over the training rows only. `human_rank` is the rank the frozen model gave the
+    human's move: the moves the humans played outside the judged candidates (rank > number judged) give the stand-in cost of the model's own probability mass
+    outside them (`tails`, per regime), which the behaviour term adds back instead of dropping it."""
+    valid = ~np.isnan(cand_loss)
+    reg = np.array([REGIMES.index(r) for r in regime])
+    n_judged = cand_loss.shape[1]
+    targets = np.zeros((len(REGIMES), len(MEASURES)))
+    tails = np.zeros((len(REGIMES), len(MEASURES)))
+    for k in range(len(REGIMES)):
+        sel = train_rows_mask & (reg == k)
+        if sel.any():
+            h = human_loss[sel]
+            targets[k] = [h.mean(), (h > ERROR).mean(), (h > BLUNDER).mean()]
+            out = sel & (np.asarray(human_rank) > n_judged)
+            if out.sum() >= 20:
+                t = human_loss[out]
+                tails[k] = [t.mean(), (t > ERROR).mean(), (t > BLUNDER).mean()]
+            else:
+                tails[k] = targets[k]
+    return {"rows": np.asarray(rows), "cand_loss": np.nan_to_num(cand_loss).astype(np.float32), "valid": valid, "reg": reg, "targets": targets, "tails": tails,
+            "train": np.asarray(train_rows_mask, dtype=bool)}
+
+
+def _behaviour_loss(log_slots, cl, valid, reg, targets, tails=None):
+    """Squared relative gap, per clock regime, between the model's expected mean loss / error rate / blunder rate and the humans'. Probabilities are
+    renormalised over the judged candidates, as in the evaluation, and the mass outside them is added back at the stand-in cost `tails` (per regime)."""
+    import torch
+    full = torch.exp(log_slots[:, :cl.shape[1]]) * valid
+    outside = (1.0 - full.sum(1)).clamp(0.0, 1.0)
+    q = full / full.sum(1, keepdim=True).clamp_min(1e-9)
+    vals = torch.stack([(q * cl).sum(1), (q * (cl > ERROR)).sum(1), (q * (cl > BLUNDER)).sum(1)], dim=1)
+    if tails is not None:
+        vals = (1.0 - outside).unsqueeze(1) * vals + outside.unsqueeze(1) * tails[reg]
+    total, count = vals.new_zeros(()), 0
+    for k in range(len(REGIMES)):
+        m = reg == k
+        if m.any():
+            tgt = targets[k].clamp_min(1e-3)
+            total = total + (((vals[m].mean(0) - targets[k]) / tgt) ** 2).sum()
+            count += 1
+    return total / max(count, 1)
+
+
+def fit(x, sl, train, val, epochs=30, batch=4096, lr=3e-3, hidden=32, seed=0, weight_decay=1e-4, mode="full", behaviour=None, lam=0.0, log=print):
+    """Train on the positions `train` (boolean mask), keep the epoch with the best validation objective (`val` mask). The objective is the NLL of the
+    human's move, plus `lam` times the behaviour term when `behaviour` (see `behaviour_data`) is given: on judged positions, the model's expected loss and
+    error / blunder rates, regime by regime, are pulled toward what the humans did. Returns (network, mean, std)."""
     import torch
     torch.manual_seed(seed)
     mean, std = x[train].mean(0), x[train].std(0) + 1e-6
-    t = lambda a, m: torch.from_numpy(np.ascontiguousarray(a[m]))
     xs = torch.from_numpy(((x - mean) / std).astype(np.float32))
     lp, lt, tg, lw = (torch.from_numpy(np.ascontiguousarray(sl[k])) for k in ("logp", "log_tail", "target", "log_within"))
     tr, va = torch.from_numpy(np.flatnonzero(train)), torch.from_numpy(np.flatnonzero(val))
     net = Adapter(x.shape[1], hidden, mode)
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=weight_decay)
     best, best_state = float("inf"), None
+    use_b = behaviour is not None and lam > 0
+    if use_b:
+        brows = torch.from_numpy(behaviour["rows"])
+        bcl, bvalid = torch.from_numpy(behaviour["cand_loss"]), torch.from_numpy(behaviour["valid"].astype(np.float32))
+        breg, btar = torch.from_numpy(behaviour["reg"]), torch.from_numpy(behaviour["targets"].astype(np.float32))
+        btail = torch.from_numpy(behaviour["tails"].astype(np.float32))
+        btrain = np.flatnonzero(behaviour["train"])
+        bval = np.flatnonzero(~behaviour["train"])
+        by_reg = [btrain[behaviour["reg"][btrain] == k] for k in range(len(REGIMES))]
 
     def nll(idx):
         return -log_prob_of_played(net(xs[idx], lp[idx], lt[idx]), tg[idx], lw[idx]).mean()
+
+    def b_loss(sel):
+        sel = torch.from_numpy(np.asarray(sel))
+        r = brows[sel]
+        return _behaviour_loss(net(xs[r], lp[r], lt[r]), bcl[sel], bvalid[sel], breg[sel], btar, btail)
     for epoch in range(epochs):
         perm = tr[torch.randperm(len(tr))]
         net.train()
         for i in range(0, len(perm), batch):
-            idx = perm[i:i + batch]
             opt.zero_grad()
-            nll(idx).backward()
+            loss = nll(perm[i:i + batch])
+            if use_b:                                                # a regime-balanced batch of judged positions
+                per = max(batch // (2 * len(REGIMES)), 1)
+                pick = np.concatenate([np.random.default_rng(seed * 100003 + epoch * 1009 + i).choice(g, size=min(per, len(g)), replace=False) for g in by_reg if len(g)])
+                loss = loss + lam * b_loss(pick)
+            loss.backward()
             opt.step()
         net.eval()
         with torch.no_grad():
             v = float(nll(va))
+            if use_b and len(bval):
+                v = v + lam * float(b_loss(bval))
         if v < best:
             best, best_state = v, {k: p.clone() for k, p in net.state_dict().items()}
-        log(f"  epoch {epoch + 1}: validation NLL {v:.4f} (best {best:.4f})")
+        log(f"  epoch {epoch + 1}: validation objective {v:.4f} (best {best:.4f})")
     net.load_state_dict(best_state)
     return net, mean, std
 

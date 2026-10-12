@@ -119,3 +119,26 @@ def test_prepare_renormalises_over_judged_candidates():
     prep = E.prepare(scores, judged)
     assert prep["mass"][0] == pytest.approx(0.8) and prep["tail"][0] == pytest.approx(1 - 0.95, abs=1e-6)     # only two candidates were judged
     assert E.tempered(prep["p"], 1.0).sum() == pytest.approx(1.0) and prep["n_good"][0] == 1
+
+
+def test_the_models_mass_outside_the_judged_moves_is_added_back_at_the_humans_tail_cost():
+    n = 100
+    prep = {"p": np.tile([0.5, 0.4, 0, 0], (n, 1)), "cand_loss": np.tile([0.0, 0.3, 0, 0], (n, 1)), "human_loss": np.where(np.arange(n) < 50, 0.5, 0.0),
+            "mass": np.ones(n), "tail": np.full(n, 0.2), "n_good": np.ones(n, int)}
+    rank = np.where(np.arange(n) < 50, 20, 1)                                  # half of the humans played outside the judged moves, at loss 0.5
+    regime = np.array(["<10s"] * n)
+    stats = E.tail_stats(prep, rank, regime, k=4)
+    assert stats["<10s"]["mean loss"] == pytest.approx(0.5) and stats["<10s"]["blunder (loss > 0.20)"] == 1.0
+    plain = E.model_values(prep)
+    fixed = E.model_values(prep, tail=E.tail_arrays(stats, regime))
+    q_blunder = 0.4 / 0.9                                                      # renormalised: the 0.3-loss move is a blunder
+    assert plain["blunder (loss > 0.20)"][0] == pytest.approx(q_blunder)
+    assert fixed["blunder (loss > 0.20)"][0] == pytest.approx(0.8 * q_blunder + 0.2 * 1.0)
+    assert fixed["mean loss"][0] == pytest.approx(0.8 * (0.4 / 0.9 * 0.3) + 0.2 * 0.5)
+    assert E.tail_stats(prep, rank, regime, k=4) and E.tail_stats(prep, np.ones(n, int), regime, k=4) == {}      # too few tail moves: no correction
+
+
+def test_a_regime_without_tail_data_gets_no_correction():
+    prep = {"p": np.array([[1.0, 0, 0, 0]]), "cand_loss": np.zeros((1, 4)), "human_loss": np.array([0.0]), "mass": np.ones(1), "tail": np.array([0.1]), "n_good": np.ones(1, int)}
+    arrays_ = E.tail_arrays({}, np.array(["30s+"]))
+    assert np.isnan(E.model_values(prep, tail=arrays_)["mean loss"][0])         # NaN, visibly: never a silent zero
