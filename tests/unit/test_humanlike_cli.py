@@ -83,6 +83,9 @@ def test_judge_and_errors_commands(tmp_path, monkeypatch, testset):
     run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--boot", 30, "--out", out)
     text = out.read_text()
     assert "positive control: sharpened" in text and "mean loss" in text and "clock 30s+" in text and "blunder" in text
+    ad = tmp_path / "adapter_j.md"
+    run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--epochs", 1, "--boot", 20, "--out", ad)
+    assert "Sampled-play errors of the adapted models" in ad.read_text() and "Mass outside the 8 judged candidates" in ad.read_text()
     run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--limit", 40, "--seed", 2, "--out", tmp_path / "other.npz")
     with pytest.raises(SystemExit, match="another test set or model|do not match"):
         run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "other.npz", "--judged", tmp_path / "j.npz", "--out", out)

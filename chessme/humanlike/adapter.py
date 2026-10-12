@@ -119,7 +119,7 @@ def apply(net, mean, std, x, sl):
     rank = np.where(target < K, 1 + (log_slots[:, :K] > log_slots[np.arange(len(target)), np.minimum(target, K - 1)][:, None]).sum(axis=1), K + 1)
     probs = np.exp(log_slots[:, :K])
     return {"p": p, "top1": (top_slot == target), "conf": probs.max(axis=1), "rank": rank.astype(np.int32), "entropy": -(probs * log_slots[:, :K]).sum(axis=1),
-            "sq_sum": (probs ** 2).sum(axis=1), "tail": np.exp(log_slots[:, K])}
+            "sq_sum": (probs ** 2).sum(axis=1), "tail": np.exp(log_slots[:, K]), "probs": probs.astype(np.float32)}
 
 
 def game_split(gids, seed=0, val=0.1, test=0.2):

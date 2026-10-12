@@ -1494,6 +1494,7 @@ def cmd_humanlike_adapter(args):
     import numpy as np
 
     from .humanlike import adapter as A
+    from .humanlike import metrics as M
     from .humanlike import report as R
     from .humanlike import score as S
     from .humanlike import testset as T
@@ -1538,6 +1539,27 @@ def cmd_humanlike_adapter(args):
     if full_name in fitted and wrap_name in fitted:
         lines += [R.comparison_table({k: R.compare(fitted[full_name][0], fitted[wrap_name][0], arr, m, n_boot=args.boot) for k, m in masks.items()},
                                      f"## {full_name} minus {wrap_name} (paired): what the adapter adds over the best calibration wrapper"), ""]
+    if args.judged:
+        from .humanlike import errors as E
+        with np.load(args.judged, allow_pickle=False) as z:
+            jmeta = json.loads(str(z["meta"]))
+            jrows = z["rows"]
+            judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+        if jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+            raise SystemExit("the judged file belongs to another test set or model")
+        keep = test[jrows]                                               # only judged positions from games the adapter never saw
+        sub_judged = {k: v[keep] for k, v in judged.items()}
+        regime = M.clock_regime(arr["clock"][jrows])[keep]
+        sub_arr = {k: v[jrows][keep] for k, v in arr.items()}
+        jmasks = {"all judged test positions": np.ones(int(keep.sum()), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
+        lines += [f"## Sampled-play errors of the adapted models (axis A3) on the {int(keep.sum()):,} judged positions from test games", "",
+                  "Same engine losses as `humanlike-errors`. Each model's probabilities over the frozen model's 8 judged candidates are renormalised; the mass an adapted "
+                  "model puts OUTSIDE those 8 moves (ranks 9+ and the tail) is not judged and is reported in the last column.", ""]
+        for name, out in [("frozen model", {"probs": scores["topk_p"][:, :A.K]})] + [(n, o) for n, (o, _) in fitted.items()]:
+            prep = E.prepare({"topk_p": np.asarray(out["probs"])[jrows][keep]}, sub_judged)
+            cmp_rows = {k: E.compare(prep, sub_arr, m, n_boot=args.boot) for k, m in jmasks.items()}
+            unj = {k: float(1.0 - np.asarray(out["probs"])[jrows][keep][m][:, :E.J.K_CAND].sum(axis=1).mean()) for k, m in jmasks.items()}
+            lines += [E.render(cmp_rows, title=f"### {name}"), "", "Mass outside the 8 judged candidates: " + ", ".join(f"{k} {100 * v:.1f}%" for k, v in unj.items()), ""]
     if args.eval_testset:
         m2 = json.loads(Path(str(args.eval_testset) + ".manifest.json").read_text())
         s2, meta2 = S.load_scores(args.eval_scores)
@@ -2121,7 +2143,7 @@ def main():
     he.set_defaults(func=cmd_humanlike_errors)
     ha = sub.add_parser("humanlike-adapter", help="train a small adapter (clock, ratings, the model's confidence) on a frozen model's stored top moves and compare it with the frozen model and with calibration wrappers on games it never saw")
     ha.add_argument("--testset", required=True); ha.add_argument("--scores", required=True)
-    ha.add_argument("--eval-testset"); ha.add_argument("--eval-scores")
+    ha.add_argument("--eval-testset"); ha.add_argument("--eval-scores"); ha.add_argument("--judged", help="judged positions (humanlike-judge) for the sampled-play error check")
     ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0)
     ha.add_argument("--out", default="data/humanlike/adapter.md")
     ha.set_defaults(func=cmd_humanlike_adapter)
