@@ -1534,6 +1534,10 @@ def cmd_humanlike_adapter(args):
         if name != "frozen model":
             lines += [R.comparison_table({k: R.compare(out, base, arr, m, n_boot=args.boot) for k, m in masks.items()}, f"### {name} minus frozen model (paired)"), ""]
         lines += [R.matched_table(R.matched_overconfidence(out, arr, masks["full"], n_boot=min(args.boot, 200)), f"### {name}: confidence - accuracy by clock, raw and matched"), ""]
+    full_name, wrap_name = "adapter: all features, temperature + tail + slot biases", "wrapper: temperature by clock regime and rating"
+    if full_name in fitted and wrap_name in fitted:
+        lines += [R.comparison_table({k: R.compare(fitted[full_name][0], fitted[wrap_name][0], arr, m, n_boot=args.boot) for k, m in masks.items()},
+                                     f"## {full_name} minus {wrap_name} (paired): what the adapter adds over the best calibration wrapper"), ""]
     if args.eval_testset:
         m2 = json.loads(Path(str(args.eval_testset) + ".manifest.json").read_text())
         s2, meta2 = S.load_scores(args.eval_scores)
