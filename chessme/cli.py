@@ -1601,6 +1601,8 @@ def cmd_humanlike_adapter(args):
             cmp_rows = {k: E.compare(prep, sub_arr, m, n_boot=args.boot, tail=tail) for k, m in jmasks.items()}
             unj = {k: float(1.0 - np.asarray(out["probs"])[jrows][keep][m][:, :E.J.K_CAND].sum(axis=1).mean()) for k, m in jmasks.items()}
             lines += [E.render(cmp_rows, title=f"### {name}"), "", "Mass outside the 8 judged candidates: " + ", ".join(f"{k} {100 * v:.1f}%" for k, v in unj.items()), ""]
+            diff_rows = [(k, d, v) for k, m in jmasks.items() if k != "all judged test positions" for d, v in E.by_difficulty(prep, sub_arr, m, tail=tail).items()]
+            lines += ["Error rate (loss > 0.10) by the number of good moves (humans / model, %): " + "; ".join(f"{k} {d} good: {100 * v['human']:.1f} / {100 * v['model']:.1f}" for k, d, v in diff_rows), ""]
     if args.eval_testset:
         m2 = json.loads(Path(str(args.eval_testset) + ".manifest.json").read_text())
         s2, meta2 = S.load_scores(args.eval_scores)
