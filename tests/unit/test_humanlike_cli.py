@@ -1,5 +1,6 @@
 """The three humanlike commands, end to end: a synthetic multi-frame dump -> test set -> two tiny networks scored -> report."""
 import json
+import shutil
 import sys
 
 import pytest
@@ -68,3 +69,20 @@ def test_report_refuses_scores_from_different_subsets_and_other_test_sets(tmp_pa
 def test_unknown_scorer_is_reported(tmp_path, monkeypatch, testset):
     with pytest.raises(SystemExit, match="unknown scorer"):
         run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", "gpt=4", "--out", tmp_path / "x.npz")
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_judge_and_errors_commands(tmp_path, monkeypatch, testset):
+    torch.manual_seed(1)
+    ck = tmp_path / "n.pt"
+    net.save_checkpoint(ck, net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--limit", 40, "--seed", 1, "--out", tmp_path / "s.npz")
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", "--per-regime", 12, "--min-ply", 1, "--workers", 1,
+        "--nodes-child", 200, "--nodes-root", 400, "--out", tmp_path / "j.npz")
+    out = tmp_path / "errors.md"
+    run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--boot", 30, "--out", out)
+    text = out.read_text()
+    assert "positive control: sharpened" in text and "mean loss" in text and "clock 30s+" in text and "blunder" in text
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--limit", 40, "--seed", 2, "--out", tmp_path / "other.npz")
+    with pytest.raises(SystemExit, match="another test set or model|do not match"):
+        run(monkeypatch, "humanlike-errors", "--testset", testset, "--scores", tmp_path / "other.npz", "--judged", tmp_path / "j.npz", "--out", out)

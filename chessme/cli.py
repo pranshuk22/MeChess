@@ -1413,6 +1413,83 @@ def cmd_humanlike_ceiling(args):
     print(text)
 
 
+def cmd_humanlike_judge(args):
+    import numpy as np
+
+    from .humanlike import judge as J
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    if meta["testset_sha256"] != manifest["sha256"]:
+        raise SystemExit("the scores were computed on another test set")
+    positions = T.read_testset(args.testset, scores["index"])
+    arr = R.position_arrays(positions)
+    regime = M.clock_regime(arr["clock"])
+    rng = np.random.default_rng(args.seed)
+    rows = []
+    for name in ("30s+", "10-30s", "<10s"):
+        ok = np.flatnonzero((regime == name) & (arr["ply"] >= args.min_ply) & (arr["n_legal"] >= 2))
+        rows += sorted(rng.choice(ok, size=min(args.per_regime, len(ok)), replace=False).tolist())
+    rows = np.array(sorted(rows))
+    items = [(positions[i].fen, positions[i].played, [m for m in scores["topk_move"][i, :J.K_CAND] if m]) for i in rows]
+    t0 = time.time()
+    judged = J.judge_positions(items, engine_path=args.engine, workers=args.workers, nodes_child=args.nodes_child, nodes_root=args.nodes_root,
+                               progress=lambda d, n: print(f"  {d:,}/{n:,} positions judged ({time.time() - t0:.0f}s)", flush=True))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(out, rows=rows, meta=np.array(json.dumps({"model": meta["model"], "testset_sha256": manifest["sha256"], "nodes_child": args.nodes_child,
+                                                                  "nodes_root": args.nodes_root, "seed": args.seed, "per_regime": args.per_regime,
+                                                                  "positions_sha": S.positions_hash([positions[i] for i in rows])})), **judged)
+    print(f"judged {len(rows):,} positions of {meta['model']} in {time.time() - t0:.0f}s -> {out}")
+
+
+def cmd_humanlike_errors(args):
+    import numpy as np
+
+    from .humanlike import errors as E
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    with np.load(args.judged, allow_pickle=False) as z:
+        jmeta = json.loads(str(z["meta"]))
+        rows = z["rows"]
+        judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+    if jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+        raise SystemExit("the judged file belongs to another test set or model")
+    chosen = T.read_testset(args.testset, scores["index"][rows])
+    if S.positions_hash(chosen) != jmeta["positions_sha"]:
+        raise SystemExit("the positions do not match the judged file")
+    sub = {k: v[rows] for k, v in scores.items() if k != "index"}
+    arr = R.position_arrays(chosen)
+    prep = E.prepare(sub, judged)
+    regime = M.clock_regime(arr["clock"])
+    masks = {"all judged positions": np.ones(len(rows), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
+    floor = {k: E.null_halves(prep, arr, m) for k, m in masks.items()}
+    lines = [f"# Error profile (axis A3): {meta['model']}", "",
+             f"{len(rows):,} positions of {Path(args.testset).name}, judged by Stockfish at {jmeta['nodes_child']:,} nodes per candidate ({jmeta['nodes_root']:,} at the root). "
+             f"Loss = expected points the move gives away (0-1, Lichess curve); values below are x100. The model's probabilities are over its {E.J.K_CAND} most probable moves "
+             f"(mean share outside them: {100 * float(prep['tail'].mean()):.1f}%). **model - humans** = the model's expected value minus what the humans did, "
+             "paired by position, 95% game-level interval; **gap / noise floor** = that gap divided by the standard deviation of the humans' mean loss between two random halves of the games.", ""]
+    for tau, label in ((1.0, "the model as is (temperature 1)"), (0.5, "positive control: sharpened (temperature 0.5)"), (2.0, "positive control: flattened (temperature 2)")):
+        rows_t = {k: E.compare(prep, arr, m, tau=tau, n_boot=args.boot) for k, m in masks.items()}
+        lines += [E.render(rows_t, floor, f"## {label}"), ""]
+    lines += ["## Error rate (loss > 0.10) against the number of good candidate moves (within 0.02 of the best)", "",
+              "| clock | good moves | positions | humans % | model % |", "|---|---|---|---|---|"]
+    for k, m in masks.items():
+        for d, v in E.by_difficulty(prep, arr, m).items():
+            lines.append(f"| {k} | {d} | {v['n']:,} | {100 * v['human']:.1f} | {100 * v['model']:.1f} |")
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -1962,6 +2039,16 @@ def main():
     hc.add_argument("--testset", required=True); hc.add_argument("--scores", nargs="+", required=True)
     hc.add_argument("--explorer", default="data/explorer/explorer.db"); hc.add_argument("--boot", type=int, default=500); hc.add_argument("--out", default="data/humanlike/ceiling.md")
     hc.set_defaults(func=cmd_humanlike_ceiling)
+    hj = sub.add_parser("humanlike-judge", help="Stockfish losses of the human's move and the model's most probable moves on a sample of a scored test set, per clock regime")
+    hj.add_argument("--testset", required=True); hj.add_argument("--scores", required=True); hj.add_argument("--out", default="data/humanlike/judged.npz")
+    hj.add_argument("--per-regime", type=int, default=4000); hj.add_argument("--min-ply", type=int, default=10); hj.add_argument("--seed", type=int, default=0)
+    hj.add_argument("--workers", type=int, default=3); hj.add_argument("--engine"); hj.add_argument("--nodes-child", type=int, default=10000)
+    hj.add_argument("--nodes-root", type=int, default=20000)
+    hj.set_defaults(func=cmd_humanlike_judge)
+    he = sub.add_parser("humanlike-errors", help="error profile (A3): the errors a model would make when sampling its moves against the errors humans made, with positive controls and a noise floor")
+    he.add_argument("--testset", required=True); he.add_argument("--scores", required=True); he.add_argument("--judged", required=True)
+    he.add_argument("--boot", type=int, default=500); he.add_argument("--out", default="data/humanlike/errors.md")
+    he.set_defaults(func=cmd_humanlike_errors)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")
