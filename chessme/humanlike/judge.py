@@ -6,7 +6,6 @@ Losses are in expected points of the mover (0 to 1, the Lichess win-probability 
 pinned by a node budget, so the numbers are reproducible. Each candidate is judged by searching the position AFTER the move (sign flipped);
 the best move is the largest of the root search and the candidates, so a loss is never negative."""
 import multiprocessing
-import multiprocessing.util
 import shutil
 
 import numpy as np
@@ -74,7 +73,6 @@ def _init(path, hash_mb):
     import chess.engine
     _ENGINE["e"] = chess.engine.SimpleEngine.popen_uci(path)
     _ENGINE["e"].configure({"Hash": hash_mb, "Threads": 1})
-    multiprocessing.util.Finalize(None, _ENGINE["e"].quit, exitpriority=10)       # else the engine's reader thread keeps the worker (and pool.join) alive
 
 
 def _task(args):
@@ -96,11 +94,15 @@ def judge_positions(items, *, engine_path=None, workers=1, nodes_child=10_000, n
             raise SystemExit("Stockfish not found: pass --engine")
         pool = multiprocessing.get_context("spawn").Pool(workers, initializer=_init, initargs=(path, hash_mb))
         results = pool.imap(_task, tasks, chunksize=16)
-    for i, (b, h, c) in enumerate(results):
-        best[i], human[i], cand[i] = b, h, c
-        if progress and (i + 1) % 500 == 0:
-            progress(i + 1, n)
-    if engine is None:
-        pool.close()
-        pool.join()
+    try:
+        for i, (b, h, c) in enumerate(results):
+            best[i], human[i], cand[i] = b, h, c
+            if progress and (i + 1) % 500 == 0:
+                progress(i + 1, n)
+    finally:
+        if engine is None:
+            # terminate, never close()+join(): on Python 3.13 a worker waits for the engine's reader thread before running any exit hook, so join() hangs
+            # forever (it cost a 3.5-hour Kaggle run). The engines see their pipe close and exit by themselves.
+            pool.terminate()
+            pool.join()
     return {"best_cp": best, "human_cp": human, "cand_cp": cand}

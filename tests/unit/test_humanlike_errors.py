@@ -1,3 +1,9 @@
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
 import chess
 import chess.engine
 import numpy as np
@@ -142,3 +148,16 @@ def test_a_regime_without_tail_data_gets_no_correction():
     prep = {"p": np.array([[1.0, 0, 0, 0]]), "cand_loss": np.zeros((1, 4)), "human_loss": np.array([0.0]), "mass": np.ones(1), "tail": np.array([0.1]), "n_good": np.ones(1, int)}
     arrays_ = E.tail_arrays({}, np.array(["30s+"]))
     assert np.isnan(E.model_values(prep, tail=arrays_)["mean loss"][0])         # NaN, visibly: never a silent zero
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_the_engine_pool_returns_and_leaves_no_engine_behind():
+    """Regression: with close()+join() the workers never exited on Python 3.13 (an engine reader thread keeps the worker alive) and a Kaggle run hung
+    for hours after its work was done. Run in a subprocess so that a hang fails the test instead of the suite."""
+    code = ("from chessme.humanlike import judge as J\n"
+            "if __name__ == '__main__':\n"
+            "    items = [('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', 'e2e4', ['e2e4', 'd2d4'])] * 6\n"
+            "    r = J.judge_positions(items, workers=2, nodes_child=100, nodes_root=100)\n"
+            "    print('done', len(r['best_cp']))\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, cwd=Path(__file__).resolve().parents[2])
+    assert r.returncode == 0 and "done 6" in r.stdout, r.stderr[-500:]
