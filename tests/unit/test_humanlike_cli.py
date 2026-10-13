@@ -173,3 +173,69 @@ def test_gamestats_command_compares_generated_games_with_the_real_continuations(
     assert "1 starting positions with the real continuation" in text
     run(monkeypatch, "humanlike-gamestats", "--games", f"model={tmp_path / 'g.jsonl'}")
     assert "| statistic | model |" in capsys.readouterr().out
+
+
+def fake_export(testset_path):
+    """Lichess-export-like games built from the test set itself: every game of the set, in full (history plus the played move)."""
+    import chess
+    from chessme.humanlike import testset as T
+    longest = {}
+    for p in T.iter_testset(testset_path):
+        if p.gid not in longest or p.ply > longest[p.gid].ply:
+            longest[p.gid] = p
+    games = []
+    for gid, p in longest.items():
+        board, sans = chess.Board(), []
+        for u in (p.moves.split() + [p.played]):
+            sans.append(board.san(chess.Move.from_uci(u)))
+            board.push_uci(u)
+        games.append({"id": gid, "status": "resign", "winner": "white", "moves": " ".join(sans), "clocks": [18000 - 100 * i for i in range(len(sans) + 1)],
+                      "clock": {"initial": p.base, "increment": p.inc}, "players": {"white": {"rating": p.me}, "black": {"rating": p.opp}}})
+    return games
+
+
+def test_humangames_command_writes_real_continuations_and_selfplay_can_start_from_them(tmp_path, monkeypatch, testset):
+    import json as _json
+    from chessme.humanlike import lichess_games as LG
+    requested = []
+
+    def fake_fetch(ids, **kw):
+        requested.append(list(ids))
+        wanted = set(ids)
+        return (g for g in fake_export(testset) if g["id"] in wanted)
+    monkeypatch.setattr(LG, "fetch_games", fake_fetch)
+    out = tmp_path / "human.jsonl"
+    run(monkeypatch, "humanlike-humangames", "--testset", testset, "--split", "all", "--games", 12, "--min-start-ply", 8, "--max-start-ply", 11, "--min-clock", 10, "--out", out)
+    recs = [_json.loads(line) for line in out.read_text().splitlines()]
+    manifest = _json.loads((tmp_path / "human.jsonl.manifest.json").read_text())
+    assert 0 < len(recs) <= 12 and manifest["games"] == len(recs) and len(set(r["gid"].split("@")[0] for r in recs)) == len(recs)
+    assert all(r["models"] == {"white": "human", "black": "human"} and r["moves"] for r in recs) and len(requested) == 1 and len(requested[0]) == 12
+    # the same starts, played by a model
+    torch.manual_seed(1)
+    ck = tmp_path / "n.pt"
+    net.save_checkpoint(ck, net.MeNet(TINY))
+    run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--starts-from", out, "--games", 100, "--max-plies", 20, "--min-start-ply", 8,
+        "--max-start-ply", 11, "--min-clock", 10, "--out", tmp_path / "gen.jsonl")
+    gen = [_json.loads(line) for line in (tmp_path / "gen.jsonl").read_text().splitlines()]
+    assert [g["gid"] for g in gen] == [r["gid"] for r in recs] and [g["start"] for g in gen] == [r["start"] for r in recs]
+
+
+def test_humangames_drops_games_that_were_not_returned_or_whose_history_differs(tmp_path, monkeypatch, testset):
+    import json as _json
+    from chessme.humanlike import lichess_games as LG
+
+    def fake_fetch(ids, **kw):
+        games = [g for g in fake_export(testset) if g["id"] in set(ids)]
+        import chess
+        board, sans = chess.Board(), []
+        for _ in games[1]["moves"].split():                                                 # a different (legal) game under the same id
+            m = sorted(board.legal_moves, key=lambda x: x.uci())[1]
+            sans.append(board.san(m))
+            board.push(m)
+        games[1]["moves"] = " ".join(sans)
+        return iter(games[1:])                                                               # and the first is missing
+    monkeypatch.setattr(LG, "fetch_games", fake_fetch)
+    out = tmp_path / "human.jsonl"
+    run(monkeypatch, "humanlike-humangames", "--testset", testset, "--split", "all", "--games", 6, "--min-start-ply", 8, "--max-start-ply", 11, "--min-clock", 10, "--out", out)
+    manifest = _json.loads((tmp_path / "human.jsonl.manifest.json").read_text())
+    assert manifest["dropped"]["not returned"] == 1 and manifest["dropped"]["history differs"] == 1 and manifest["games"] == manifest["chosen"] - 2

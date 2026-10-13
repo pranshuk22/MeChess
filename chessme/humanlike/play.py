@@ -137,6 +137,23 @@ def game_from_position(p, models, gid=None):
     return Game(gid or f"{p.gid}@{p.ply}", board, start, {mover: p.me, other: p.opp}, {mover: float(p.clock), other: float(p.opp_clock)}, p.base, p.inc, models)
 
 
+def is_start_candidate(p, min_ply=8, max_ply=14, min_clock=60.0):
+    """Can a game be started from this test-set position? Early in the game, a real choice to make, and time left on both clocks."""
+    return min_ply <= p.ply <= max_ply and p.n_legal >= 2 and p.clock >= min_clock and p.opp_clock >= min_clock
+
+
+def choose_starts(candidates, n, seed=0):
+    """At most `n` starting positions, at most one per game (a classifier trained on the games must not see a game on both sides of a split), in an
+    order given by a hash of the position, so that the first n of a larger choice are the choice of n."""
+    key = lambda p: hashlib.sha256(f"{seed}:start:{p.gid}:{p.ply}".encode()).digest()
+    seen, out = set(), []
+    for p in sorted(candidates, key=key):
+        if p.gid not in seen:
+            seen.add(p.gid)
+            out.append(p)
+    return out[:n]
+
+
 def _rng(seed, gid, ply):
     return np.random.default_rng(int.from_bytes(hashlib.sha256(f"{seed}:{gid}:{ply}".encode()).digest()[:8], "big"))
 

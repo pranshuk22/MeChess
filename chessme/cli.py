@@ -1654,12 +1654,18 @@ def cmd_humanlike_selfplay(args):
 
     def stream():
         for p in T.iter_testset(args.testset):
-            if args.min_start_ply <= p.ply <= args.max_start_ply and p.n_legal >= 2 and p.clock >= args.min_clock and p.opp_clock >= args.min_clock and in_split(p.gid):
+            if P.is_start_candidate(p, args.min_start_ply, args.max_start_ply, args.min_clock) and in_split(p.gid):
                 candidates.append(p)
             yield p
     tm = P.TimeModel.fit(stream(), seed=args.seed)
     rng = np.random.default_rng(args.seed)
-    chosen = [candidates[i] for i in sorted(rng.choice(len(candidates), size=min(args.games, len(candidates)), replace=False))]
+    if args.starts_from:                                              # the starting positions of an earlier run (or of the human games): same games to compare
+        wanted = [r["gid"] for r in map(json.loads, Path(args.starts_from).read_text().splitlines()) if r.get("gid")]
+        by_key = {f"{p.gid}@{p.ply}": p for p in candidates}
+        chosen = [by_key[k] for k in wanted if k in by_key][:args.games]
+        print(f"{len(chosen):,} of the {len(wanted):,} starting positions of {Path(args.starts_from).name} found among the candidates", flush=True)
+    else:
+        chosen = [candidates[i] for i in sorted(rng.choice(len(candidates), size=min(args.games, len(candidates)), replace=False))]
     del candidates
     kw = dict(maia3_repo=args.maia3_repo, maia2_repo=args.maia2_repo, weights_dir=args.weights_dir, extra_path=args.extra_path, device=args.device, batch=args.batch)
 
@@ -1717,6 +1723,50 @@ def cmd_humanlike_gamestats(args):
     if args.out:
         Path(args.out).write_text(text + "\n")
     print(text)
+
+
+def cmd_humanlike_humangames(args):
+    import numpy as np
+
+    from .humanlike import adapter as _A
+    from .humanlike import gamestats as GS
+    from .humanlike import lichess_games as LG
+    from .humanlike import play as P
+    from .humanlike import testset as T
+    keep_split = {"all": None, "train": 0, "val": 1, "test": 2}[args.split]
+    candidates = [p for p in T.iter_testset(args.testset) if P.is_start_candidate(p, args.min_start_ply, args.max_start_ply, args.min_clock)]
+    if keep_split is not None:
+        gids = np.array(sorted({p.gid for p in candidates}))
+        member = set(gids[_A.game_split(gids, seed=args.split_seed)[keep_split]])
+        candidates = [p for p in candidates if p.gid in member]
+    chosen = P.choose_starts(candidates, args.games, seed=args.seed)
+    print(f"{len(candidates):,} candidate positions; {len(chosen):,} chosen (one per game)", flush=True)
+    games = {g["id"]: g for g in LG.fetch_games([p.gid for p in chosen], pause=args.pause)}
+    dropped = {"not returned": 0, "unreadable": 0, "history differs": 0, "no moves after the start": 0}
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    kept = 0
+    with open(out, "w", encoding="utf-8") as f:
+        for p in chosen:
+            g = games.get(p.gid)
+            if g is None:
+                dropped["not returned"] += 1
+                continue
+            try:
+                rec = GS.real_continuation(g, p.ply, f"{p.gid}@{p.ply}")
+            except (ValueError, KeyError):
+                dropped["unreadable"] += 1
+                continue
+            if rec["start"] != p.moves:
+                dropped["history differs"] += 1
+            elif not rec["moves"]:
+                dropped["no moves after the start"] += 1
+            else:
+                f.write(json.dumps({**rec, "models": {"white": "human", "black": "human"}}, separators=(",", ":")) + "\n")
+                kept += 1
+    manifest = {"games": kept, "chosen": len(chosen), "dropped": dropped, "split": args.split, "seed": args.seed, "testset": Path(args.testset).name}
+    Path(str(out) + ".manifest.json").write_text(json.dumps(manifest, indent=1))
+    print(f"{kept:,} human games from {len(chosen):,} chosen starts -> {out}; dropped {dropped}")
 
 
 def cmd_mechess(args):
@@ -2297,7 +2347,15 @@ def main():
     hp.add_argument("--min-start-ply", type=int, default=8); hp.add_argument("--max-start-ply", type=int, default=14); hp.add_argument("--min-clock", type=float, default=60.0)
     hp.add_argument("--device", default="cpu"); hp.add_argument("--batch", type=int, default=64); hp.add_argument("--play-batch", type=int, default=256)
     hp.add_argument("--split", choices=("all", "train", "val", "test"), default="all", help="start only from games of this part of the adapter's game split"); hp.add_argument("--split-seed", type=int, default=0)
+    hp.add_argument("--starts-from", help="a games file (selfplay or humanlike-humangames output): start from exactly its positions, in its order, instead of choosing at random")
     hp.set_defaults(func=cmd_humanlike_selfplay)
+    hh = sub.add_parser("humanlike-humangames", help="the real continuations (moves, clocks) of starting positions of a test set, fetched by game id from Lichess: the human side of a comparison with generated games")
+    hh.add_argument("--testset", required=True); hh.add_argument("--out", required=True)
+    hh.add_argument("--games", type=int, default=20000); hh.add_argument("--seed", type=int, default=0)
+    hh.add_argument("--min-start-ply", type=int, default=8); hh.add_argument("--max-start-ply", type=int, default=14); hh.add_argument("--min-clock", type=float, default=60.0)
+    hh.add_argument("--split", choices=("all", "train", "val", "test"), default="test"); hh.add_argument("--split-seed", type=int, default=0)
+    hh.add_argument("--pause", type=float, default=5.0, help="seconds between requests")
+    hh.set_defaults(func=cmd_humanlike_humangames)
     hg = sub.add_parser("humanlike-gamestats", help="statistics of generated games (results, endings, length, captures, checks, time use), optionally against the real continuations of the same starting positions")
     hg.add_argument("--games", nargs="+", required=True, help="NAME=FILE of games written by humanlike-selfplay")
     hg.add_argument("--real", help="Lichess games export (ndjson, with clocks and moves) of the games the starting positions come from")

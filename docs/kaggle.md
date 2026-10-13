@@ -1,6 +1,6 @@
 # Running on Kaggle
 
-Nine notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
+Ten notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
 Each notebook is an **adapter**: it clones the repository, installs a few packages and runs `chessme` commands, nothing else. All the logic
 (resuming from earlier output, linking inputs, checkpoints, time budgets) is in the repository, tested, and runs the same on a laptop; the
 Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data-dir`, `--resume-glob` and `--slim` flags.
@@ -16,6 +16,7 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
 | `notebooks/7_humanlike_score_gpu.ipynb` | **GPU** | downloads Maia-3 (code and 5M / 23M / 79M weights, external) and scores them on both sets, then writes the reports | needs notebook 6's output as an input; board encoding in Python is the bottleneck, so four worker processes share the GPU |
 | `notebooks/8_humanlike_judge_cpu.ipynb` | **None** | downloads a pinned Stockfish release (external) and judges the human's move and Maia-3's most probable moves on a test sample and a training sample (disjoint games), then writes the error-profile report | needs notebooks 6 and 7's outputs as inputs; about 7 positions per second per three processes, so a 100k-position run takes hours |
 | `notebooks/9_humanlike_selfplay_gpu.ipynb` | **GPU** | trains the clock adapters on frozen Maia-3 23M (using notebook 8's Stockfish labels) and lets the frozen and the adapted models play games from the positions, clocks and ratings of real test games | needs the outputs of notebooks 6, 7 and 8; about an hour |
+| `notebooks/10_humanlike_humangames_cpu.ipynb` | **None** | `chessme humanlike-humangames`: fetches the real continuation (moves, clocks) of up to 20,000 starting positions of notebook 6's test set from the public Lichess games export, the human side of the comparison with notebook 9's generated games | needs notebook 6's output; Internet on; about ten minutes |
 
 ## How to run
 

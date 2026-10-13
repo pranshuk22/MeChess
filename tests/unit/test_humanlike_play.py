@@ -181,3 +181,24 @@ def test_a_trained_adapter_changes_the_probabilities_and_a_mismatching_file_is_r
     torch.save(d, path)
     with pytest.raises(ValueError, match="other features"):
         A.load_adapter(path)
+
+
+def test_choose_starts_one_per_game_prefix_property_and_determinism():
+    from chessme.humanlike import play as P
+    from types import SimpleNamespace as NS
+    cands = [NS(gid=f"g{i // 3}", ply=8 + i % 3) for i in range(60)]          # 20 games, 3 positions each
+    ten, twenty = P.choose_starts(cands, 10, seed=1), P.choose_starts(cands, 20, seed=1)
+    assert len({p.gid for p in twenty}) == len(twenty) == 20
+    assert [(p.gid, p.ply) for p in twenty[:10]] == [(p.gid, p.ply) for p in ten]
+    assert [(p.gid, p.ply) for p in P.choose_starts(list(reversed(cands)), 10, seed=1)] == [(p.gid, p.ply) for p in ten]
+    assert [(p.gid, p.ply) for p in P.choose_starts(cands, 10, seed=2)] != [(p.gid, p.ply) for p in ten]
+    assert len(P.choose_starts(cands, 99)) == 20
+
+
+def test_is_start_candidate_filters_ply_legal_moves_and_clocks():
+    from chessme.humanlike import play as P
+    from types import SimpleNamespace as NS
+    ok = NS(ply=10, n_legal=20, clock=100.0, opp_clock=90.0)
+    assert P.is_start_candidate(ok)
+    for bad in (dict(ply=7), dict(ply=15), dict(n_legal=1), dict(clock=59.0), dict(opp_clock=10.0)):
+        assert not P.is_start_candidate(NS(**{**ok.__dict__, **bad}))

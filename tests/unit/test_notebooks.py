@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-NOTEBOOKS = sorted(Path("notebooks").glob("*.ipynb"))
+NOTEBOOKS = sorted(Path("notebooks").glob("*.ipynb"), key=lambda p: int(p.name.split("_")[0]))
 CALL = re.compile(r'\*CLI,\s*"([a-z0-9-]+)"(.*?)(?:\)\s*(?:\n|$))', re.S)
 
 
@@ -23,8 +23,8 @@ def help_text(cmd, cache={}):
     return cache[cmd]
 
 
-def test_there_are_nine_notebooks_numbered_in_order():
-    assert [n.name[0] for n in NOTEBOOKS] == ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+def test_there_are_ten_notebooks_numbered_in_order():
+    assert [n.name.split("_")[0] for n in NOTEBOOKS] == [str(i) for i in range(1, 11)]
 
 
 @pytest.mark.parametrize("nb", NOTEBOOKS, ids=lambda p: p.name)
