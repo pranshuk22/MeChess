@@ -48,6 +48,8 @@ Details, scale caveats and costs: [calibration.md](calibration.md). `mechess --c
 | `humanlike-judge` | Stockfish losses (expected points given away, pinned node budget) of the human's move and the model's most probable moves, on a sample of a scored test set per clock regime |
 | `humanlike-errors` | Error profile (axis A3): the errors a model would make when sampling its moves against the errors humans made, per clock regime, with sharpened / flattened positive controls and a human-vs-human noise floor |
 | `humanlike-adapter` | Train a small adapter (clock, ratings, the model's confidence) on a frozen model's stored top moves and compare it with the frozen model and with calibration wrappers on games it never saw (and on an independent test set) |
+| `humanlike-selfplay` | Let a model (optionally with a saved adapter) play both sides from the position, clocks and ratings of real games: moves are sampled from the model's probabilities, thinking time from what humans spent at that clock and ply; writes one JSON record per game |
+| `humanlike-gamestats` | Sanity statistics of generated games (results, endings, length, captures, checks, time use), optionally against the real continuations of the same starting positions (`--real`, a Lichess games export); per-move rows compare the same stretch of each game |
 | `explorer-query DB` | Look a position up in the explorer: the moves played there at a rating with games, share, average rating, engine evaluation and the White / draw / Black bar (`--fen`, `--rating`) |
 | `explorer-rebuild STATE` | Rebuild `explorer.db`, the books and the report from a saved checkpoint with other thresholds (`--db-min-games`, `--book-min-games`, `--eval-margin`, `--max-ply`), without streaming again |
 

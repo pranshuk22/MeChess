@@ -1683,6 +1683,42 @@ def cmd_humanlike_selfplay(args):
           f"terminations {dict(Counter(g.termination for g in games))}")
 
 
+def cmd_humanlike_gamestats(args):
+    from .humanlike import gamestats as GS
+    sets = {}
+    for spec in args.games:
+        name, _, path = spec.partition("=")
+        sets[name] = GS.read_games(path)
+    lines = []
+    if args.real:
+        real_by_id = {}
+        with open(args.real, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    g = json.loads(line)
+                    real_by_id[g["id"]] = g
+        first = next(iter(sets.values()))
+        real = {}
+        for r in first:
+            gid, _, ply = r["gid"].partition("@")
+            if gid in real_by_id and ply.isdigit():
+                real[r["gid"]] = GS.real_continuation(real_by_id[gid], int(ply), r["gid"])
+        keys = [k for k in real if real[k]["moves"]]
+        lines.append(f"{len(keys):,} starting positions with the real continuation. Per-move rows compare the same stretch of each game (the generated games are cut where the real game ended: "
+                     f"humans resign, generated games are played out); how a game ends is only comparable in the whole-game table.\n")
+        by_gid = {name: {r["gid"]: r for r in rs} for name, rs in sets.items()}
+        matched = {"real": GS.summarize([real[k] for k in keys])}
+        for name, rs in by_gid.items():
+            matched[name] = GS.summarize([GS.truncate(rs[k], real[k]["plies"]) for k in keys if k in rs])
+        lines += ["### matched stretches (per-move statistics)", GS.table(matched, per_move_only=True), ""]
+        sets = {"real": [real[k] for k in keys], **sets}
+    lines += ["### whole games", GS.table({name: GS.summarize(rs) for name, rs in sets.items()})]
+    text = "\n".join(lines)
+    if args.out:
+        Path(args.out).write_text(text + "\n")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -2262,6 +2298,11 @@ def main():
     hp.add_argument("--device", default="cpu"); hp.add_argument("--batch", type=int, default=64); hp.add_argument("--play-batch", type=int, default=256)
     hp.add_argument("--split", choices=("all", "train", "val", "test"), default="all", help="start only from games of this part of the adapter's game split"); hp.add_argument("--split-seed", type=int, default=0)
     hp.set_defaults(func=cmd_humanlike_selfplay)
+    hg = sub.add_parser("humanlike-gamestats", help="statistics of generated games (results, endings, length, captures, checks, time use), optionally against the real continuations of the same starting positions")
+    hg.add_argument("--games", nargs="+", required=True, help="NAME=FILE of games written by humanlike-selfplay")
+    hg.add_argument("--real", help="Lichess games export (ndjson, with clocks and moves) of the games the starting positions come from")
+    hg.add_argument("--out")
+    hg.set_defaults(func=cmd_humanlike_gamestats)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")

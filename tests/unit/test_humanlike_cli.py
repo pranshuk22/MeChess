@@ -156,3 +156,20 @@ def test_selfplay_command_plays_games_with_and_without_a_saved_adapter(tmp_path,
     run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--games", 3, "--max-plies", 20, "--min-start-ply", 8, "--max-start-ply", 11,
         "--min-clock", 10, "--out", tmp_path / "g2.jsonl")
     assert len((tmp_path / "g2.jsonl").read_text().splitlines()) == 3
+
+
+def test_gamestats_command_compares_generated_games_with_the_real_continuations(tmp_path, monkeypatch, capsys):
+    import json as _json
+    start, moves = "e2e4 e7e5", "g1f3 b8c6 f1b5 a7a6"
+    rec = {"gid": "abcd1234@2", "white": 1500, "black": 1450, "base": 180, "inc": 0, "start": start, "moves": moves, "spent": [1.0] * 4, "clock_after": [100.0] * 4,
+           "result": "1-0", "termination": "checkmate", "plies": 6}
+    (tmp_path / "g.jsonl").write_text(_json.dumps(rec) + "\n")
+    real = {"id": "abcd1234", "status": "resign", "winner": "white", "moves": "e4 e5 Nf3 Nc6 Bb5", "clocks": [18000, 18000, 17900, 17850, 17700, 17000],
+            "clock": {"initial": 180, "increment": 0}, "players": {"white": {"rating": 1500}, "black": {"rating": 1450}}}
+    (tmp_path / "real.ndjson").write_text(_json.dumps(real) + "\n")
+    run(monkeypatch, "humanlike-gamestats", "--games", f"model={tmp_path / 'g.jsonl'}", "--real", tmp_path / "real.ndjson", "--out", tmp_path / "s.md")
+    text = (tmp_path / "s.md").read_text()
+    assert "matched stretches" in text and "whole games" in text and "| statistic | real | model |" in text
+    assert "1 starting positions with the real continuation" in text
+    run(monkeypatch, "humanlike-gamestats", "--games", f"model={tmp_path / 'g.jsonl'}")
+    assert "| statistic | model |" in capsys.readouterr().out
