@@ -135,3 +135,24 @@ def test_judge_command_can_be_restricted_to_a_game_split(tmp_path, monkeypatch, 
             "--nodes-child", 100, "--nodes-root", 100, "--split", split, "--out", tmp_path / f"j_{split}.npz")
         rows = np.load(tmp_path / f"j_{split}.npz")["rows"]
         assert len(rows) > 0 and expected[rows].all()                            # every judged position is from a game of that split
+
+
+def test_selfplay_command_plays_games_with_and_without_a_saved_adapter(tmp_path, monkeypatch, testset):
+    import json as _json
+    torch.manual_seed(1)
+    ck = tmp_path / "n.pt"
+    net.save_checkpoint(ck, net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--out", tmp_path / "s.npz")
+    run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--epochs", 1, "--boot", 20, "--save-dir", tmp_path / "ad", "--out", tmp_path / "a.md")
+    saved = sorted(p.name for p in (tmp_path / "ad").glob("*.pt"))
+    assert "adapter_all_features_temperature_tail_slot_biases.pt" in saved and all(not n.startswith("wrapper") for n in saved)
+    out = tmp_path / "games.jsonl"
+    run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--black", f"ours={ck}", "--white-adapter",
+        tmp_path / "ad" / "adapter_all_features_temperature_tail_slot_biases.pt", "--games", 5, "--max-plies", 24, "--min-start-ply", 8, "--max-start-ply", 11, "--min-clock", 10,
+        "--out", out)
+    recs = [_json.loads(line) for line in out.read_text().splitlines()]
+    assert len(recs) == 5 and all(r["result"] in ("1-0", "0-1", "1/2-1/2") and r["plies"] <= 24 for r in recs)
+    assert all("adapter" in r["models"]["white"] and "adapter" not in r["models"]["black"] for r in recs)
+    run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--games", 3, "--max-plies", 20, "--min-start-ply", 8, "--max-start-ply", 11,
+        "--min-clock", 10, "--out", tmp_path / "g2.jsonl")
+    assert len((tmp_path / "g2.jsonl").read_text().splitlines()) == 3

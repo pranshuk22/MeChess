@@ -200,3 +200,24 @@ def game_split(gids, seed=0, val=0.1, test=0.2):
     h = np.array([int.from_bytes(hashlib.sha256(f"{seed}:split:{g}".encode()).digest()[:4], "big") / 2.0 ** 32 for g in gids])
     test_m, val_m = h >= 1 - test, (h >= 1 - test - val) & (h < 1 - test)
     return ~(test_m | val_m), val_m, test_m
+
+
+# ---- saving and using a trained adapter ------------------------------------------------------------------------------------------------
+
+def save_adapter(path, net, mean, std, *, hidden, mode="full", meta=None):
+    """Write a trained adapter (weights, feature normalisation, the feature names it expects and free-form `meta`) to one file."""
+    import torch
+    torch.save({"state": net.state_dict(), "mean": np.asarray(mean), "std": np.asarray(std), "hidden": hidden, "mode": mode, "features": list(FEATURES),
+                "meta": meta or {}}, path)
+
+
+def load_adapter(path):
+    """(network, mean, std, meta) from `save_adapter`."""
+    import torch
+    d = torch.load(path, map_location="cpu", weights_only=False)
+    if d["features"] != list(FEATURES):
+        raise ValueError(f"{path} was trained with other features: {d['features']}")
+    net = Adapter(len(FEATURES), d["hidden"], d["mode"])
+    net.load_state_dict(d["state"])
+    net.eval()
+    return net, d["mean"], d["std"], d["meta"]

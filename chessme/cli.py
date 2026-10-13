@@ -1553,6 +1553,14 @@ def cmd_humanlike_adapter(args):
             print(f"fitting {name}", flush=True)
             net, mean, std = A.fit(x_all, sl, train, val, epochs=args.epochs, mode="full", behaviour=beh, lam=lam, log=lambda m: None)
             fitted[name] = (A.apply(net, mean, std, x_all, sl), (net, mean, std, None, False))
+    if args.save_dir:
+        import re as _re
+        Path(args.save_dir).mkdir(parents=True, exist_ok=True)
+        for name, (_, (net, mean, std, cols, const)) in fitted.items():
+            if cols is None and not const:
+                slug = _re.sub(r"[^a-z0-9.]+", "_", name.lower()).strip("_")
+                A.save_adapter(Path(args.save_dir) / f"{slug}.pt", net, mean, std, hidden=32, mode="tau" if "temperature only" in name else "full",
+                               meta={"name": name, "base_model": meta["model"], "testset_sha256": manifest["sha256"], "split_seed": args.seed, "epochs": args.epochs})
     masks = {k: v & test for k, v in R.masks(arr).items()}
     lines = [f"# Adapter on a frozen {meta['model']} ({Path(args.testset).name})", "",
              f"Trained on {int(train.sum()):,} positions, early-stopped on {int(val.sum()):,}, evaluated on {int(test.sum()):,} positions of games the adapter never saw. "
@@ -1624,6 +1632,55 @@ def cmd_humanlike_adapter(args):
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text, encoding="utf-8")
     print(text)
+
+
+def cmd_humanlike_selfplay(args):
+    import chess
+    import numpy as np
+
+    from .humanlike import adapter as A
+    from .humanlike import models as MD
+    from .humanlike import play as P
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    print("fitting the time model and choosing the starting positions", flush=True)
+    candidates = []
+
+    from .humanlike import adapter as _A
+    keep_split = {"all": None, "train": 0, "val": 1, "test": 2}[args.split]
+
+    def in_split(gid):
+        return keep_split is None or bool(_A.game_split(np.array([gid]), seed=args.split_seed)[keep_split][0])
+
+    def stream():
+        for p in T.iter_testset(args.testset):
+            if args.min_start_ply <= p.ply <= args.max_start_ply and p.n_legal >= 2 and p.clock >= args.min_clock and p.opp_clock >= args.min_clock and in_split(p.gid):
+                candidates.append(p)
+            yield p
+    tm = P.TimeModel.fit(stream(), seed=args.seed)
+    rng = np.random.default_rng(args.seed)
+    chosen = [candidates[i] for i in sorted(rng.choice(len(candidates), size=min(args.games, len(candidates)), replace=False))]
+    del candidates
+    kw = dict(maia3_repo=args.maia3_repo, maia2_repo=args.maia2_repo, weights_dir=args.weights_dir, extra_path=args.extra_path, device=args.device, batch=args.batch)
+
+    def build(spec, adapter):
+        scorer = MD.make_scorer(spec, **kw)
+        return P.AdaptedScorer(scorer, A.load_adapter(adapter), name=f"{scorer.name} + {Path(adapter).stem}") if adapter else scorer
+    args.black = args.black or args.white
+    white = build(args.white, args.white_adapter)
+    black = white if (args.black == args.white and args.black_adapter == args.white_adapter) else build(args.black, args.black_adapter)
+    games = [P.game_from_position(p, {chess.WHITE: white, chess.BLACK: black}) for p in chosen]
+    t0 = time.time()
+    P.play_games(games, tm, seed=args.seed, max_plies=args.max_plies, batch=args.play_batch,
+                 progress=lambda d, n: print(f"  {d:,}/{n:,} games finished  {time.time() - t0:.0f}s", flush=True))
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with open(out, "w", encoding="utf-8") as f:
+        for g in games:
+            f.write(json.dumps(P.game_record(g), separators=(",", ":")) + "\n")
+    from collections import Counter
+    print(f"{len(games):,} games ({white.name} vs {black.name}) in {time.time() - t0:.0f}s -> {out}; results {dict(Counter(g.result for g in games))}, "
+          f"terminations {dict(Counter(g.termination for g in games))}")
 
 
 def cmd_mechess(args):
@@ -2192,9 +2249,19 @@ def main():
     ha.add_argument("--eval-testset"); ha.add_argument("--eval-scores"); ha.add_argument("--judged", help="judged positions (humanlike-judge) for the sampled-play error check")
     ha.add_argument("--judged-train", help="judged positions of the TRAINING games (humanlike-judge --split trainval): adds the behaviour-matched adapters")
     ha.add_argument("--lambdas", default="1,3,10", help="weights of the behaviour term to try")
+    ha.add_argument("--save-dir", help="write each trained adapter (all-features and behaviour-matched ones) here, to be used by humanlike-selfplay")
     ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0)
     ha.add_argument("--out", default="data/humanlike/adapter.md")
     ha.set_defaults(func=cmd_humanlike_adapter)
+    hp = sub.add_parser("humanlike-selfplay", help="let models play games from the positions, clocks and ratings of real games: moves are sampled from the model's probabilities, thinking time from what humans spent")
+    hp.add_argument("--testset", required=True); hp.add_argument("--out", required=True)
+    hp.add_argument("--white", required=True, help="scorer spec, as for humanlike-score"); hp.add_argument("--black"); hp.add_argument("--white-adapter"); hp.add_argument("--black-adapter")
+    hp.add_argument("--maia3-repo"); hp.add_argument("--maia2-repo"); hp.add_argument("--weights-dir"); hp.add_argument("--extra-path")
+    hp.add_argument("--games", type=int, default=1000); hp.add_argument("--seed", type=int, default=0); hp.add_argument("--max-plies", type=int, default=300)
+    hp.add_argument("--min-start-ply", type=int, default=8); hp.add_argument("--max-start-ply", type=int, default=14); hp.add_argument("--min-clock", type=float, default=60.0)
+    hp.add_argument("--device", default="cpu"); hp.add_argument("--batch", type=int, default=64); hp.add_argument("--play-batch", type=int, default=256)
+    hp.add_argument("--split", choices=("all", "train", "val", "test"), default="all", help="start only from games of this part of the adapter's game split"); hp.add_argument("--split-seed", type=int, default=0)
+    hp.set_defaults(func=cmd_humanlike_selfplay)
     hr = sub.add_parser("humanlike-report", help="tables from score files: per model, by rating / phase / clock, and each later model's paired difference from the first")
     hr.add_argument("--testset", required=True); hr.add_argument("--scores", nargs="+", required=True)
     hr.add_argument("--min-ply", type=int, default=10, help="'comparable' drops the first N plies")
