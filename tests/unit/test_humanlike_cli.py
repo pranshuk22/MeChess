@@ -346,3 +346,25 @@ def test_arena_command_ranks_the_ladder_and_resumes(tmp_path, monkeypatch, capsy
     assert len((tmp_path / "games.jsonl").read_text().splitlines()) == 24
     with pytest.raises(SystemExit, match="unknown player"):
         run(monkeypatch, "humanlike-arena", "--players", "x=gpt:4", "--starts-from", tmp_path / "human.jsonl", "--games-out", tmp_path / "g2.jsonl", "--out", tmp_path / "e2.md")
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_confirm_command_evaluates_saved_adapters_on_a_new_judged_set(tmp_path, monkeypatch, testset):
+    torch.manual_seed(1)
+    net.save_checkpoint(tmp_path / "n.pt", net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={tmp_path / 'n.pt'}", "--out", tmp_path / "s.npz")
+    judge = ["--per-regime", 12, "--min-ply", 1, "--workers", 1, "--candidates", 8, "--nodes-child", 100, "--nodes-root", 100]
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", *judge, "--split", "test", "--out", tmp_path / "j.npz")
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", *judge, "--split", "trainval", "--out", tmp_path / "jt.npz")
+    run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--judged-train", tmp_path / "jt.npz",
+        "--lambdas", "0.1,0.5", "--epochs", 1, "--boot", 20, "--save-dir", tmp_path / "ad", "--out", tmp_path / "adapter.md")
+    assert (tmp_path / "ad" / "behaviour_matched_adapter_lambda_0.1.pt").exists()
+    run(monkeypatch, "humanlike-confirm", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--adapters-dir", tmp_path / "ad", "--lambdas", "0.1,0.5",
+        "--train-testset", testset, "--train-scores", tmp_path / "s.npz", "--judged-train", tmp_path / "jt.npz", "--boot", 20, "--out", tmp_path / "c.md")
+    text = (tmp_path / "c.md").read_text()
+    assert "## Summary" in text and "frozen model" in text and "likelihood adapter" in text and "behaviour-matched adapter (lambda=0.1)" in text and "lambda=0.5" in text
+    assert "blunder gap <10 s" in text and "NLL change" in text
+    with pytest.raises(SystemExit, match="does not match|do not match"):
+        run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={tmp_path / 'n.pt'}", "--limit", 30, "--seed", 9, "--out", tmp_path / "s2.npz")
+        run(monkeypatch, "humanlike-confirm", "--testset", testset, "--scores", tmp_path / "s2.npz", "--judged", tmp_path / "j.npz", "--adapters-dir", tmp_path / "ad",
+            "--train-testset", testset, "--train-scores", tmp_path / "s.npz", "--judged-train", tmp_path / "jt.npz", "--out", tmp_path / "c2.md")

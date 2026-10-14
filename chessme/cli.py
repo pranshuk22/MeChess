@@ -1989,6 +1989,77 @@ def _arena(args, AR, EL, GS, MD, P, pool, ref_pool, chess, json, hashlib, time):
     print(text)
 
 
+def cmd_humanlike_confirm(args):
+    """The confirmation split: trained adapters (not refitted) and the frozen model on a NEW test set, judged by the engine. Nothing is tuned here."""
+    import numpy as np
+
+    from .humanlike import adapter as A
+    from .humanlike import errors as E
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    with np.load(args.judged, allow_pickle=False) as z:
+        jmeta, jrows = json.loads(str(z["meta"])), z["rows"]
+        judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+    if meta["testset_sha256"] != manifest["sha256"] or jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+        raise SystemExit("the scores or the judged file belong to another test set or model")
+    if len(jrows) == 0 or jrows.max() >= len(scores["index"]):
+        raise SystemExit("the judged file does not match these scores (other positions)")
+    chosen = T.read_testset(args.testset, scores["index"][jrows])
+    if S.positions_hash(chosen) != jmeta["positions_sha"]:
+        raise SystemExit("the positions do not match the judged file")
+    arr = R.position_arrays(T.read_testset(args.testset, scores["index"]))
+    arr_j = R.position_arrays(chosen)
+    regime_j = M.clock_regime(arr_j["clock"])
+    # the stand-in cost of the moves outside the judged candidates comes from the TRAINING games' judged sample, as when the adapters were trained
+    tman = json.loads(Path(str(args.train_testset) + ".manifest.json").read_text())
+    tscores, tmeta = S.load_scores(args.train_scores)
+    with np.load(args.judged_train, allow_pickle=False) as z:
+        trmeta, trows = json.loads(str(z["meta"])), z["rows"]
+        tj = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+    if tmeta["testset_sha256"] != tman["sha256"] or trmeta["testset_sha256"] != tman["sha256"] or tmeta["model"] != meta["model"]:
+        raise SystemExit("the training scores or judged sample belong to another test set or model")
+    tarr = R.position_arrays(T.read_testset(args.train_testset, tscores["index"][trows]))
+    tprep = E.prepare({"topk_p": tscores["topk_p"][trows][:, :A.K]}, tj)
+    tail = E.tail_arrays(E.tail_stats(tprep, tscores["rank"][trows], M.clock_regime(tarr["clock"])), regime_j)
+    x, sl = A.features(arr, scores), A.slots(scores)
+    base = {k: scores[k] for k in ("p", "top1", "conf", "rank", "entropy", "sq_sum")}
+    outs = {"frozen model": ({**base, "probs": scores["topk_p"][:, :A.K]}, None)}
+    adapters = {"likelihood adapter": "adapter_all_features_temperature_tail_slot_biases.pt"}
+    for lam in args.lambdas.split(","):
+        adapters[f"behaviour-matched adapter (lambda={float(lam):g})"] = f"behaviour_matched_adapter_lambda_{float(lam):g}.pt"
+    for name, fname in adapters.items():
+        net, mean, std, ameta = A.load_adapter(Path(args.adapters_dir) / fname)
+        if ameta.get("base_model") not in (None, meta["model"]):
+            raise SystemExit(f"{fname} was trained on {ameta.get('base_model')}, not {meta['model']}")
+        outs[name] = (A.apply(net, mean, std, x, sl), ameta)
+    masks = R.masks(arr)
+    jmasks = {"all judged positions": np.ones(len(jrows), dtype=bool), **{f"clock {r}": regime_j == r for r in ("30s+", "10-30s", "<10s")}}
+    lines = [f"# Confirmation split: {meta['model']} on {Path(args.testset).name} ({len(arr['ply']):,} positions, {len(jrows):,} judged)", "",
+             "Frozen model and adapters trained on OTHER games (not refitted, nothing tuned here). Blunder-rate gap = model minus humans, points x100, 95% game-level intervals; "
+             "the mass outside the 16 judged candidates is added back at the humans' cost of such moves, taken from the training games' judged sample.", ""]
+    summary = ["| model | blunder gap <10 s | 10-30 s | 30 s+ | all | NLL change <10 s | 10-30 s | 30 s+ | overall |", "|---|---|---|---|---|---|---|---|---|"]
+    details = []
+    for name, (out, _) in outs.items():
+        prep = E.prepare({"topk_p": np.asarray(out["probs"])[jrows]}, judged)
+        cmp_rows = {k: E.compare(prep, arr_j, m, n_boot=args.boot, tail=tail) for k, m in jmasks.items()}
+        b = lambda k: "{:+.2f} [{:+.2f}, {:+.2f}]".format(*(100 * v for v in cmp_rows[k]["blunder (loss > 0.20)"]["diff"]))
+        if name == "frozen model":
+            nll = ["-"] * 4
+        else:
+            nll = ["{:+.4f} [{:+.4f}, {:+.4f}]".format(*R.compare(out, base, arr, masks[k], n_boot=args.boot)["nll"]) for k in ("clock <10s", "clock 10-30s", "clock 30s+", "full")]
+        summary.append(f"| {name} | {b('clock <10s')} | {b('clock 10-30s')} | {b('clock 30s+')} | {b('all judged positions')} | " + " | ".join(nll) + " |")
+        details += [E.render(cmp_rows, title=f"### {name}"), ""]
+    lines += ["## Summary", ""] + summary + ["", "## Error profile by clock regime", ""] + details
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -2639,6 +2710,11 @@ def main():
     hr.add_argument("--bot-vs-bot", action="store_true"); hr.add_argument("--anchor"); hr.add_argument("--boot", type=int, default=200); hr.add_argument("--seed", type=int, default=0)
     hr.add_argument("--maia3-repo"); hr.add_argument("--maia2-repo"); hr.add_argument("--weights-dir"); hr.add_argument("--extra-path"); hr.add_argument("--device", default="cpu")
     hr.add_argument("--batch", type=int, default=64); hr.set_defaults(func=cmd_humanlike_arena)
+    hk = sub.add_parser("humanlike-confirm", help="confirmation split: the frozen model and already trained adapters (not refitted) on a NEW test set judged by the engine: blunder gaps by clock regime and likelihood changes")
+    hk.add_argument("--testset", required=True); hk.add_argument("--scores", required=True); hk.add_argument("--judged", required=True)
+    hk.add_argument("--adapters-dir", required=True, help="the --save-dir of humanlike-adapter"); hk.add_argument("--lambdas", default="0.1,0.5", help="behaviour weights whose adapters were saved")
+    hk.add_argument("--train-testset", required=True); hk.add_argument("--train-scores", required=True); hk.add_argument("--judged-train", required=True, help="judged sample of the TRAINING games (for the tail stand-in)")
+    hk.add_argument("--boot", type=int, default=500); hk.add_argument("--out", required=True); hk.set_defaults(func=cmd_humanlike_confirm)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
