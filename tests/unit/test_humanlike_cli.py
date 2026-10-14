@@ -239,3 +239,17 @@ def test_humangames_drops_games_that_were_not_returned_or_whose_history_differs(
     run(monkeypatch, "humanlike-humangames", "--testset", testset, "--split", "all", "--games", 6, "--min-start-ply", 8, "--max-start-ply", 11, "--min-clock", 10, "--out", out)
     manifest = _json.loads((tmp_path / "human.jsonl.manifest.json").read_text())
     assert manifest["dropped"]["not returned"] == 1 and manifest["dropped"]["history differs"] == 1 and manifest["games"] == manifest["chosen"] - 2
+
+
+def test_c2st_command_writes_the_report(tmp_path, monkeypatch, capsys):
+    import json as _json
+    import random
+    from tests.unit.test_humanlike_c2st import random_game
+    rng = random.Random(5)
+    for name, bias in (("human", 0.0), ("a", 0.0), ("b", 0.8)):
+        (tmp_path / f"{name}.jsonl").write_text("\n".join(_json.dumps(random_game(rng, f"g{i}@8", capture_bias=bias)) for i in range(80)) + "\n")
+    run(monkeypatch, "humanlike-c2st", "--human", tmp_path / "human.jsonl", "--games", f"a={tmp_path / 'a.jsonl'}", f"b={tmp_path / 'b.jsonl'}", "--folds", 3, "--boot", 10,
+        "--epochs", 3, "--out", tmp_path / "c.md")
+    text = (tmp_path / "c.md").read_text()
+    assert "| a |" in text and "| b |" in text and "control: human against human" in text and "Paired differences" in text
+    assert "80" in capsys.readouterr().out

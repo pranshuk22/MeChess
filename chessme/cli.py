@@ -1769,6 +1769,23 @@ def cmd_humanlike_humangames(args):
     print(f"{kept:,} human games from {len(chosen):,} chosen starts -> {out}; dropped {dropped}")
 
 
+def cmd_humanlike_c2st(args):
+    from .humanlike import c2st as C
+    from .humanlike import gamestats as GS
+    human = GS.read_games(args.human)
+    generated = {}
+    for spec in args.games:
+        name, _, path = spec.partition("=")
+        generated[name] = GS.read_games(path)
+    if args.limit:
+        human = human[:args.limit]
+    result = C.run(human, generated, folds=args.folds, seed=args.seed, boot=args.boot, hidden=args.hidden, epochs=args.epochs)
+    text = C.report(result)
+    if args.out:
+        Path(args.out).write_text(text + "\n")
+    print(text)
+
+
 def cmd_mechess(args):
     from .mechess import priors
     from .mechess.controller import MeChess, load_books
@@ -2356,6 +2373,12 @@ def main():
     hh.add_argument("--split", choices=("all", "train", "val", "test"), default="test"); hh.add_argument("--split-seed", type=int, default=0)
     hh.add_argument("--pause", type=float, default=5.0, help="seconds between requests")
     hh.set_defaults(func=cmd_humanlike_humangames)
+    hc = sub.add_parser("humanlike-c2st", help="classifier two-sample test: can a classifier tell human games from generated ones from the same starts, given only the moves (AUC 0.5 = not at all)")
+    hc.add_argument("--human", required=True, help="games of humanlike-humangames"); hc.add_argument("--games", nargs="+", required=True, help="NAME=FILE of games of humanlike-selfplay from the same starts")
+    hc.add_argument("--folds", type=int, default=5); hc.add_argument("--boot", type=int, default=500); hc.add_argument("--seed", type=int, default=0)
+    hc.add_argument("--hidden", type=int, default=32, help="units of the network's hidden layer"); hc.add_argument("--epochs", type=int, default=60)
+    hc.add_argument("--limit", type=int, help="use only the first N starts of the human games"); hc.add_argument("--out")
+    hc.set_defaults(func=cmd_humanlike_c2st)
     hg = sub.add_parser("humanlike-gamestats", help="statistics of generated games (results, endings, length, captures, checks, time use), optionally against the real continuations of the same starting positions")
     hg.add_argument("--games", nargs="+", required=True, help="NAME=FILE of games written by humanlike-selfplay")
     hg.add_argument("--real", help="Lichess games export (ndjson, with clocks and moves) of the games the starting positions come from")

@@ -1,6 +1,6 @@
 # Running on Kaggle
 
-Eleven notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
+Twelve notebooks, on purpose. Collecting text and counting openings are CPU work and do **not** use the weekly GPU quota; only training and labelling do.
 Each notebook is an **adapter**: it clones the repository, installs a few packages and runs `chessme` commands, nothing else. All the logic
 (resuming from earlier output, linking inputs, checkpoints, time budgets) is in the repository, tested, and runs the same on a laptop; the
 Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data-dir`, `--resume-glob` and `--slim` flags.
@@ -18,6 +18,7 @@ Kaggle-specific parts are in `chessme/kaggle.py` and the `--input-root`, `--data
 | `notebooks/9_humanlike_selfplay_gpu.ipynb` | **GPU** | trains the clock adapters on frozen Maia-3 23M (using notebook 8's Stockfish labels) and lets the frozen and the adapted models play games from the positions, clocks and ratings of real test games | needs the outputs of notebooks 6, 7 and 8; about an hour |
 | `notebooks/10_humanlike_humangames_cpu.ipynb` | **None** | `chessme humanlike-humangames`: fetches the real continuation (moves, clocks) of up to 20,000 starting positions of notebook 6's test set from the public Lichess games export, the human side of the comparison with notebook 9's generated games | needs notebook 6's output; Internet on; about ten minutes |
 | `notebooks/11_humanlike_generate_gpu.ipynb` | **GPU** | `chessme humanlike-selfplay --starts-from`: Maia-3 (frozen, or with one of notebook 9's adapters) plays the same starting positions as notebook 10's human games, against itself; then `humanlike-gamestats` against the real continuations | needs the outputs of notebooks 6, 7, 9 and 10; about 20 minutes per 1,000 games |
+| `notebooks/12_humanlike_c2st_cpu.ipynb` | **None** | `chessme humanlike-c2st`: can a classifier tell the human games of notebook 10 from the generated games of notebook 11 (same starts, moves only)? AUC per generated set, paired differences, human-against-human control | needs the outputs of notebooks 10 and 11; minutes |
 
 ## How to run
 
