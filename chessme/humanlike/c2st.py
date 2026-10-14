@@ -71,19 +71,37 @@ def move_rows(record, plies=None):
 def game_vector(rows):
     """Per-game features: the mean of every move feature over the whole stretch, over its first half and over its second half."""
     if len(rows) == 0:
-        return np.zeros(3 * len(MOVE_FEATURES), dtype=np.float32)
+        return np.zeros(3 * rows.shape[1], dtype=np.float32)
     half = max(1, len(rows) // 2)
     return np.concatenate([rows.mean(0), rows[:half].mean(0), rows[half:].mean(0) if len(rows) > half else rows.mean(0)]).astype(np.float32)
 
 
-def feature_table(human, generated):
+def _rows(record, plies, quality=None):
+    """The move features of the record up to `plies` half-moves in total, with the engine-judged quality of the same moves appended when given."""
+    rows = move_rows(record, plies=plies)
+    if quality is None:
+        return rows
+    q = quality.get(record["gid"])
+    if q is None or len(q) < len(rows):
+        raise ValueError(f"no engine-judged quality for every move of {record['gid']}")
+    return np.hstack([rows, q[:len(rows)]]).astype(np.float32)
+
+
+def feature_table(human, generated, quality=None, max_moves=None):
     """Game vectors of the human games and of each generated set, for the starts present in all of them, cut at the length of the human game.
-    `human` is a list of records, `generated` a dict name -> list of records. Returns (gids, X_human, {name: X})."""
+    `human` is a list of records, `generated` a dict name -> list of records. With `max_moves`, every game is cut after that many moves following the
+    start (the shorter of this and the human game), so the comparison is over the same short fragment; with `quality` (a dict "human" / set name ->
+    {gid: per-move array of `quality.py`}) the engine-judged quality of each move is a feature too. Returns (gids, X_human, {name: X})."""
     by = {name: {r["gid"]: r for r in rs} for name, rs in generated.items()}
     gids = [r["gid"] for r in human if all(r["gid"] in d for d in by.values())]
     h = {r["gid"]: r for r in human}
-    X_h = np.stack([game_vector(move_rows(h[g])) for g in gids])
-    X = {name: np.stack([game_vector(move_rows(d[g], plies=h[g]["plies"])) for g in gids]) for name, d in by.items()}
+
+    def cut(g):
+        plies = h[g]["plies"]
+        return plies if max_moves is None else min(plies, len(h[g]["start"].split()) + max_moves)
+    q = quality or {}
+    X_h = np.stack([game_vector(_rows(h[g], cut(g), q.get("human"))) for g in gids])
+    X = {name: np.stack([game_vector(_rows(d[g], cut(g), q.get(name))) for g in gids]) for name, d in by.items()}
     return gids, X_h, X
 
 
@@ -174,7 +192,12 @@ def null_auc(X_human, gids, folds=5, seed=0, hidden=0, **kw):
     return paired_auc(s0, s1)
 
 
-FEATURE_NAMES = [f"{block}: {name}" for block in ("whole stretch", "first half", "second half") for name in MOVE_FEATURES]
+def feature_names(quality=False):
+    from .quality import QUALITY_FEATURES
+    return [f"{block}: {name}" for block in ("whole stretch", "first half", "second half") for name in MOVE_FEATURES + (QUALITY_FEATURES if quality else [])]
+
+
+FEATURE_NAMES = feature_names()
 
 
 def feature_effects(X_h, Xg, top=10):
@@ -182,16 +205,16 @@ def feature_effects(X_h, Xg, top=10):
     human ones (0.5: no difference) and the two means. Returns the `top` features furthest from 0.5, as (name, auc, human mean, generated mean)."""
     labels = np.r_[np.zeros(len(X_h)), np.ones(len(Xg))]
     rows = []
-    for j, name in enumerate(FEATURE_NAMES):
+    for j, name in enumerate(feature_names(X_h.shape[1] > len(FEATURE_NAMES))):
         rows.append((name, auc(np.concatenate([X_h[:, j], Xg[:, j]]), labels), float(X_h[:, j].mean()), float(Xg[:, j].mean())))
     return sorted(rows, key=lambda r: -abs(r[1] - 0.5))[:top]
 
 
-def run(human, generated, folds=5, seed=0, boot=500, hidden=32, **kw):
+def run(human, generated, folds=5, seed=0, boot=500, hidden=32, quality=None, max_moves=None, **kw):
     """The whole test. Returns a dict with the AUC of every generated set against the human games (linear and network), the paired differences
     between the sets and the human-against-human control."""
-    gids, X_h, X = feature_table(human, generated)
-    out = {"starts": len(gids), "models": {}, "pairs": [], "null": {}, "features": {name: feature_effects(X_h, Xg) for name, Xg in X.items()}}
+    gids, X_h, X = feature_table(human, generated, quality=quality, max_moves=max_moves)
+    out = {"starts": len(gids), "max_moves": max_moves, "engine_features": bool(quality), "models": {}, "pairs": [], "null": {}, "features": {name: feature_effects(X_h, Xg) for name, Xg in X.items()}}
     scores = {}
     for kind, hid in (("linear", 0), ("network", hidden)):
         out["null"][kind] = null_auc(X_h, gids, folds=folds, seed=seed, hidden=hid, **kw)
@@ -210,7 +233,10 @@ def run(human, generated, folds=5, seed=0, boot=500, hidden=32, **kw):
 
 
 def report(result):
-    lines = [f"Human against generated games from the same {result['starts']:,} starts (cut at the length of the human game; moves only: no clocks, results or model probabilities). "
+    cut = f"the first {result['max_moves']} moves after the start" if result.get("max_moves") else "the length of the human game"
+    feats = "moves and the engine-judged quality of each move (evaluation lost, error, blunder, engine's first choice, expected score before the move)" if result.get("engine_features") \
+        else "moves only"
+    lines = [f"Human against generated games from the same {result['starts']:,} starts (cut at {cut}; {feats}: no clocks, results or model probabilities). "
              "AUC 0.5: the classifier cannot tell them apart; 1.0: it always can. 95% intervals by resampling starts.\n",
              "| generated games | linear model AUC | network AUC |", "|---|---|---|"]
     for name, m in result["models"].items():

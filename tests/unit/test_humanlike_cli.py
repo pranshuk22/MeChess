@@ -253,3 +253,23 @@ def test_c2st_command_writes_the_report(tmp_path, monkeypatch, capsys):
     text = (tmp_path / "c.md").read_text()
     assert "| a |" in text and "| b |" in text and "control: human against human" in text and "Paired differences" in text
     assert "80" in capsys.readouterr().out
+
+
+@pytest.mark.skipif(not shutil.which("stockfish"), reason="Stockfish not installed")
+def test_quality_command_and_the_detector_style_classifier(tmp_path, monkeypatch, capsys):
+    import json as _json
+    import random
+    from tests.unit.test_humanlike_c2st import random_game
+    rng = random.Random(8)
+    for name in ("human", "a"):
+        (tmp_path / f"{name}.jsonl").write_text("\n".join(_json.dumps(random_game(rng, f"g{i}@8", plies=14)) for i in range(40)) + "\n")
+        run(monkeypatch, "humanlike-quality", "--games", tmp_path / f"{name}.jsonl", "--workers", 2, "--max-moves", 8, "--nodes", 100, "--out", tmp_path / f"q_{name}.jsonl")
+    rows = [_json.loads(l) for l in (tmp_path / "q_a.jsonl").read_text().splitlines()]
+    assert len(rows) == 40 and all(len(r["rows"]) == 8 and len(r["rows"][0]) == 5 for r in rows)
+    run(monkeypatch, "humanlike-c2st", "--human", tmp_path / "human.jsonl", "--games", f"a={tmp_path / 'a.jsonl'}", "--folds", 3, "--boot", 10, "--epochs", 3,
+        "--quality", f"human={tmp_path / 'q_human.jsonl'}", f"a={tmp_path / 'q_a.jsonl'}", "--max-moves", 8, "--out", tmp_path / "c.md")
+    text = (tmp_path / "c.md").read_text()
+    assert "engine-judged quality" in text and "first 8 moves" in text
+    with pytest.raises(SystemExit, match="needs a file for"):
+        run(monkeypatch, "humanlike-c2st", "--human", tmp_path / "human.jsonl", "--games", f"a={tmp_path / 'a.jsonl'}", "--quality", f"human={tmp_path / 'q_human.jsonl'}",
+            "--out", tmp_path / "c2.md")

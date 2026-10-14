@@ -1769,6 +1769,18 @@ def cmd_humanlike_humangames(args):
     print(f"{kept:,} human games from {len(chosen):,} chosen starts -> {out}; dropped {dropped}")
 
 
+def cmd_humanlike_quality(args):
+    from .humanlike import gamestats as GS
+    from .humanlike import quality as Q
+    records = GS.read_games(args.games)
+    if args.limit:
+        records = records[:args.limit]
+    done = Q.annotate_games(records, engine_path=args.engine, workers=args.workers, max_moves=args.max_moves, nodes=args.nodes,
+                            progress=lambda i, n: print(f"  {i:,} / {n:,} games", flush=True))
+    Q.write(args.out, done)
+    print(f"wrote {len(done):,} games to {args.out}")
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -1779,7 +1791,17 @@ def cmd_humanlike_c2st(args):
         generated[name] = GS.read_games(path)
     if args.limit:
         human = human[:args.limit]
-    result = C.run(human, generated, folds=args.folds, seed=args.seed, boot=args.boot, hidden=args.hidden, epochs=args.epochs)
+    quality = None
+    if args.quality:
+        from .humanlike import quality as Q
+        quality = {}
+        for spec in args.quality:
+            name, _, path = spec.partition("=")
+            quality[name] = Q.read(path)
+        missing = ({"human"} | set(generated)) - set(quality)
+        if missing:
+            raise SystemExit(f"--quality needs a file for {', '.join(sorted(missing))} (NAME=FILE, with 'human' for the human games)")
+    result = C.run(human, generated, folds=args.folds, seed=args.seed, boot=args.boot, hidden=args.hidden, epochs=args.epochs, quality=quality, max_moves=args.max_moves)
     text = C.report(result)
     if args.out:
         Path(args.out).write_text(text + "\n")
@@ -2378,7 +2400,14 @@ def main():
     hc.add_argument("--folds", type=int, default=5); hc.add_argument("--boot", type=int, default=500); hc.add_argument("--seed", type=int, default=0)
     hc.add_argument("--hidden", type=int, default=32, help="units of the network's hidden layer"); hc.add_argument("--epochs", type=int, default=60)
     hc.add_argument("--limit", type=int, help="use only the first N starts of the human games"); hc.add_argument("--out")
+    hc.add_argument("--quality", nargs="+", metavar="NAME=FILE", help="engine-judged move quality (humanlike-quality) for 'human' and for every generated set: adds evaluation lost, error, blunder, engine's first choice as features")
+    hc.add_argument("--max-moves", type=int, help="cut every game after this many moves following the start (the stimuli of the forced-choice study use 20 moves = 40 half-moves)")
     hc.set_defaults(func=cmd_humanlike_c2st)
+    hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
+    hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
+    hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
+    hq.add_argument("--max-moves", type=int, default=40, help="half-moves after the start that are judged"); hq.add_argument("--nodes", type=int, default=20000, help="search budget per position")
+    hq.add_argument("--limit", type=int, help="judge only the first N games"); hq.set_defaults(func=cmd_humanlike_quality)
     hg = sub.add_parser("humanlike-gamestats", help="statistics of generated games (results, endings, length, captures, checks, time use), optionally against the real continuations of the same starting positions")
     hg.add_argument("--games", nargs="+", required=True, help="NAME=FILE of games written by humanlike-selfplay")
     hg.add_argument("--real", help="Lichess games export (ndjson, with clocks and moves) of the games the starting positions come from")
