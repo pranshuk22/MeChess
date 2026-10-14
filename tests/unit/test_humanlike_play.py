@@ -202,3 +202,29 @@ def test_is_start_candidate_filters_ply_legal_moves_and_clocks():
     assert P.is_start_candidate(ok)
     for bad in (dict(ply=7), dict(ply=15), dict(n_legal=1), dict(clock=59.0), dict(opp_clock=10.0)):
         assert not P.is_start_candidate(NS(**{**ok.__dict__, **bad}))
+
+
+class SkewedScorer(Scorer):
+    name = "skewed"
+
+    def probs(self, items):
+        out = []
+        for it in items:
+            moves = sorted(m.uci() for m in chess.Board(it.fen).legal_moves)
+            w = {u: 2.0 ** -i for i, u in enumerate(moves)}
+            z = sum(w.values())
+            out.append({u: v / z for u, v in w.items()})
+        return out
+
+
+def test_temperature_sharpens_below_one_flattens_above_one_and_leaves_one_alone():
+    items = [__import__("chessme.model.compare", fromlist=["EvalItem"]).EvalItem(chess.Board().fen(), "", 1500, 1500, 0, 0, (), clock=120.0, opp_clock=150.0, base=180, inc=0)]
+    base = SkewedScorer().probs(items)[0]
+    top = max(base, key=base.get)
+    same, sharp, flat = (P.TemperatureScorer(SkewedScorer(), t).probs(items)[0] for t in (1.0, 0.5, 2.0))
+    assert all(abs(same[u] - base[u]) < 1e-9 for u in base)
+    assert sharp[top] > base[top] > flat[top]
+    assert sum(sharp.values()) == pytest.approx(1.0) and sum(flat.values()) == pytest.approx(1.0)
+    assert P.TemperatureScorer(SkewedScorer(), 0.5).name == "skewed @T0.5"
+    with pytest.raises(ValueError):
+        P.TemperatureScorer(SkewedScorer(), 0)

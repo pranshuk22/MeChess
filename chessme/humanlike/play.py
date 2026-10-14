@@ -58,6 +58,26 @@ class AdaptedScorer(Scorer):
         return res
 
 
+class TemperatureScorer(Scorer):
+    """`base` scorer with its probabilities sharpened (temperature below 1) or flattened (above 1): p ** (1 / temperature), renormalised. A dose-response
+    control for the classifier test: a model made more or less random on purpose must move the AUC in the right direction."""
+
+    def __init__(self, base, temperature):
+        if temperature <= 0:
+            raise ValueError("temperature must be positive")
+        self.base = base
+        self.temperature = float(temperature)
+        self.name = f"{base.name} @T{temperature:g}"
+
+    def probs(self, items):
+        out = []
+        for p in self.base.probs(items):
+            w = {u: max(v, 1e-300) ** (1.0 / self.temperature) for u, v in p.items()}
+            z = sum(w.values())
+            out.append({u: v / z for u, v in w.items()})
+        return out
+
+
 @dataclass
 class TimeModel:
     """Seconds a move takes, as a share of the time available (clock + increment), drawn from the shares humans used in the same situation."""

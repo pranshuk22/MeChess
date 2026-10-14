@@ -156,6 +156,10 @@ def test_selfplay_command_plays_games_with_and_without_a_saved_adapter(tmp_path,
     run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--games", 3, "--max-plies", 20, "--min-start-ply", 8, "--max-start-ply", 11,
         "--min-clock", 10, "--out", tmp_path / "g2.jsonl")
     assert len((tmp_path / "g2.jsonl").read_text().splitlines()) == 3
+    run(monkeypatch, "humanlike-selfplay", "--testset", testset, "--white", f"ours={ck}", "--games", 3, "--max-plies", 20, "--min-start-ply", 8, "--max-start-ply", 11,
+        "--min-clock", 10, "--temperature", 0.5, "--out", tmp_path / "g3.jsonl")
+    hot = [_json.loads(line) for line in (tmp_path / "g3.jsonl").read_text().splitlines()]
+    assert len(hot) == 3 and all("@T0.5" in r["models"]["white"] for r in hot)
 
 
 def test_gamestats_command_compares_generated_games_with_the_real_continuations(tmp_path, monkeypatch, capsys):

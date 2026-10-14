@@ -1671,7 +1671,8 @@ def cmd_humanlike_selfplay(args):
 
     def build(spec, adapter):
         scorer = MD.make_scorer(spec, **kw)
-        return P.AdaptedScorer(scorer, A.load_adapter(adapter), name=f"{scorer.name} + {Path(adapter).stem}") if adapter else scorer
+        scorer = P.AdaptedScorer(scorer, A.load_adapter(adapter), name=f"{scorer.name} + {Path(adapter).stem}") if adapter else scorer
+        return P.TemperatureScorer(scorer, args.temperature) if args.temperature != 1.0 else scorer
     args.black = args.black or args.white
     white = build(args.white, args.white_adapter)
     black = white if (args.black == args.white and args.black_adapter == args.white_adapter) else build(args.black, args.black_adapter)
@@ -2661,6 +2662,7 @@ def main():
     hp = sub.add_parser("humanlike-selfplay", help="let models play games from the positions, clocks and ratings of real games: moves are sampled from the model's probabilities, thinking time from what humans spent")
     hp.add_argument("--testset", required=True); hp.add_argument("--out", required=True)
     hp.add_argument("--white", required=True, help="scorer spec, as for humanlike-score"); hp.add_argument("--black"); hp.add_argument("--white-adapter"); hp.add_argument("--black-adapter")
+    hp.add_argument("--temperature", type=float, default=1.0, help="sharpen (below 1) or flatten (above 1) both players' probabilities: a dose-response control for the classifier test")
     hp.add_argument("--maia3-repo"); hp.add_argument("--maia2-repo"); hp.add_argument("--weights-dir"); hp.add_argument("--extra-path")
     hp.add_argument("--games", type=int, default=1000); hp.add_argument("--seed", type=int, default=0); hp.add_argument("--max-plies", type=int, default=300)
     hp.add_argument("--min-start-ply", type=int, default=8); hp.add_argument("--max-start-ply", type=int, default=14); hp.add_argument("--min-clock", type=float, default=60.0)
