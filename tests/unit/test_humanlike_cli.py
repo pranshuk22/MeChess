@@ -324,3 +324,25 @@ def test_frontier_command_writes_the_policies_and_the_equal_strength_table(tmp_p
         "--alphas", "0.5", "--boot", 20, "--out", tmp_path / "f.md")
     text = (tmp_path / "f.md").read_text()
     assert "engine-reweighted 5" in text and "temperature 0.5" in text and "mixture 0.5" in text and "human-likeness at equal strength" in text
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_arena_command_ranks_the_ladder_and_resumes(tmp_path, monkeypatch, capsys):
+    import json as _json
+    starts = ["e2e4 e7e5", "d2d4 d7d5", "c2c4 e7e6", "g1f3 d7d5"]
+    (tmp_path / "human.jsonl").write_text("\n".join(_json.dumps({"gid": f"g{i}@2", "start": s}) for i, s in enumerate(starts)) + "\n")
+    args = ["humanlike-arena", "--players", "weak=sf:nodes=1", "mid=sf:nodes=100", "strong=sf:nodes=2000", "--workers", 2, "--starts-from", tmp_path / "human.jsonl", "--starts", 4,
+            "--games-out", tmp_path / "games.jsonl", "--out", tmp_path / "elo.md", "--chunk", 12, "--max-plies", 120, "--referee-nodes", 100, "--boot", 20]
+    run(monkeypatch, *args)
+    text = (tmp_path / "elo.md").read_text()
+    rows = [l for l in text.splitlines() if l.startswith("| ") and "| ladder |" in l]
+    assert rows[0].split("|")[1].strip() == "strong" and len(rows) == 3                  # the strongest is listed first, with the best score
+    assert float(rows[0].split("|")[-2]) > 75
+    games = [_json.loads(l) for l in (tmp_path / "games.jsonl").read_text().splitlines()]
+    assert len(games) == 3 * 4 * 2 and len({g["gid"] for g in games}) == len(games)
+    capsys.readouterr()
+    run(monkeypatch, *args)                                                                  # nothing left to play
+    assert "24 games done, 0 to play" in capsys.readouterr().out
+    assert len((tmp_path / "games.jsonl").read_text().splitlines()) == 24
+    with pytest.raises(SystemExit, match="unknown player"):
+        run(monkeypatch, "humanlike-arena", "--players", "x=gpt:4", "--starts-from", tmp_path / "human.jsonl", "--games-out", tmp_path / "g2.jsonl", "--out", tmp_path / "e2.md")

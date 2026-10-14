@@ -169,8 +169,9 @@ def _finish_if_over(g, max_plies):
     return False
 
 
-def play_games(games, time_model, *, seed=0, max_plies=300, batch=256, progress=None):
-    """Play the `games` (see `game_from_position`) to the end. Each model is called with all the positions it has to move in, at most `batch` at once."""
+def play_games(games, time_model, *, seed=0, max_plies=300, batch=256, progress=None, referee=None):
+    """Play the `games` (see `game_from_position`) to the end. Each model is called with all the positions it has to move in, at most `batch` at once.
+    A `referee` (an object with `check(games)`, see `arena.Referee`) may end games after every ply."""
     active = [g for g in games if not _finish_if_over(g, max_plies)]
     rounds = 0
     while active:
@@ -202,6 +203,9 @@ def play_games(games, time_model, *, seed=0, max_plies=300, batch=256, progress=
                     g.clocks[mover] = g.clocks[mover] - spent + g.inc
                     g.clock_after.append(g.clocks[mover])
         active = [g for g in active if g.result == "*" and not _finish_if_over(g, max_plies)]
+        if referee is not None and active:
+            referee.check(active)
+            active = [g for g in active if g.result == "*"]
         rounds += 1
         if progress and rounds % 20 == 0:
             progress(sum(1 for g in games if g.result != "*"), len(games))

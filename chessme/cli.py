@@ -1892,6 +1892,103 @@ def cmd_humanlike_frontier(args):
     print(text)
 
 
+def cmd_humanlike_arena(args):
+    import hashlib
+    import time
+
+    import chess
+
+    from .humanlike import arena as AR
+    from .humanlike import elo as EL
+    from .humanlike import gamestats as GS
+    from .humanlike import models as MD
+    from .humanlike import play as P
+    import shutil
+    engine = args.engine or shutil.which("stockfish")
+    if not engine:
+        raise SystemExit("Stockfish not found: pass --engine")
+    for spec in args.players:                                                          # a bad spec must fail before any engine is started
+        if spec.partition("=")[2].partition(":")[0] not in ("sf", "bot"):
+            raise SystemExit(f"unknown player {spec!r} (use NAME=sf:nodes=N or NAME=bot:maia3=23m+history:beta=B[:rating=R][:nodes=N])")
+    pool = AR.EnginePool(engine, workers=args.workers)
+    ref_pool = AR.EnginePool(engine, workers=max(1, args.workers // 2))
+    try:
+        _arena(args, AR, EL, GS, MD, P, pool, ref_pool, chess, json, hashlib, time)
+    finally:
+        pool.close()
+        ref_pool.close()
+
+
+def _arena(args, AR, EL, GS, MD, P, pool, ref_pool, chess, json, hashlib, time):
+    players, groups, bases = {}, {}, {}
+    for spec in args.players:
+        name, _, rest = spec.partition("=")
+        kind, _, opts = rest.partition(":")
+        if kind == "sf":
+            kv = dict(o.split("=") for o in opts.split(":"))
+            players[name], groups[name] = AR.StockfishScorer(pool, int(kv["nodes"]), name=name), "ladder"
+        elif kind == "bot":
+            first, *more = opts.split(":")
+            kv = dict(o.split("=") for o in more)
+            if first not in bases:
+                bases[first] = MD.make_scorer(first, maia3_repo=args.maia3_repo, maia2_repo=args.maia2_repo, weights_dir=args.weights_dir, extra_path=args.extra_path,
+                                              device=args.device, batch=args.batch)
+            players[name], groups[name] = AR.ReweightedScorer(bases[first], pool, float(kv.get("beta", 0)), nodes_child=int(kv.get("nodes", 10000)),
+                                                              nodes_root=int(kv.get("root", 20000)), rating=int(kv["rating"]) if "rating" in kv else None, name=name), "bot"
+        else:
+            raise SystemExit(f"unknown player {spec!r} (use NAME=sf:nodes=N or NAME=bot:maia3=23m+history:beta=B[:rating=R][:nodes=N])")
+    starts = []
+    seen = set()
+    for r in GS.read_games(args.starts_from):
+        if r["start"] not in seen:
+            seen.add(r["start"])
+            starts.append(r["start"])
+    starts = sorted(starts, key=lambda s: hashlib.sha256(f"{args.seed}:{s}".encode()).hexdigest())[:args.starts]
+    names = list(players)
+    todo = AR.schedule(players, AR.pairings(names, groups, bot_vs_bot=args.bot_vs_bot), starts)
+    todo.sort(key=lambda g: (g[3], g[0]))
+    out = Path(args.games_out)
+    done = {}
+    if out.exists():
+        for line in out.read_text().splitlines():
+            if line.strip():
+                d = json.loads(line)
+                done[d["gid"]] = d
+    todo = [g for g in todo if g[0] not in done]
+    print(f"{len(players)} players, {len(starts)} openings, {len(done):,} games done, {len(todo):,} to play", flush=True)
+    referee = AR.Referee(ref_pool, nodes=args.referee_nodes)
+    t0 = time.time()
+    for i in range(0, len(todo), args.chunk):
+        part = todo[i:i + args.chunk]
+        games = [AR.game_from_start(s, {chess.WHITE: players[w], chess.BLACK: players[b]}, gid) for gid, w, b, _, s in part]
+        P.play_games(games, AR.NoTime(), max_plies=args.max_plies, referee=referee)
+        with open(out, "a", encoding="utf-8") as f:
+            for (gid, w, b, k, s), g in zip(part, games):
+                d = {"gid": gid, "white": w, "black": b, "opening": k, "result": g.result, "termination": g.termination, "plies": g.ply, "start": s, "moves": " ".join(g.moves)}
+                done[gid] = d
+                f.write(json.dumps(d, separators=(",", ":")) + "\n")
+        print(f"  {len(done):,} games  {time.time() - t0:.0f}s", flush=True)
+    results = [(d["white"], d["black"], AR.result_for(d["white"], d["black"], d["result"], d["white"], d["black"]), d["opening"]) for d in done.values()
+               if d["white"] in players and d["black"] in players]
+    anchor = args.anchor or next(n for n in names if groups[n] == "ladder")
+    rating = EL.fit(names, results, anchor=anchor)
+    ci = EL.bootstrap(names, results, anchor=anchor, boot=args.boot)
+    tally = {n: [0.0, 0] for n in names}
+    for a, b, s, _ in results:
+        tally[a][0] += s; tally[a][1] += 1
+        tally[b][0] += 1 - s; tally[b][1] += 1
+    from collections import Counter
+    ends = Counter(d["termination"] for d in done.values())
+    lines = [f"# Match results: {len(done):,} games, {len(starts)} openings, both colours", "",
+             f"Elo relative to {anchor} (0), 95% intervals resample openings. Games are adjudicated by a referee engine ({args.referee_nodes} nodes). Endings: " + ", ".join(f"{k} {v}" for k, v in ends.most_common()) + ".", "",
+             "| player | kind | Elo | 95% interval | games | score % |", "|---|---|---|---|---|---|"]
+    for n in sorted(names, key=lambda n: -rating[n]):
+        lines.append(f"| {n} | {groups[n]} | {rating[n]:+.0f} | [{ci[n][0]:+.0f}, {ci[n][1]:+.0f}] | {tally[n][1]} | {100 * tally[n][0] / max(tally[n][1], 1):.1f} |")
+    text = "\n".join(lines)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -2533,6 +2630,15 @@ def main():
     hf.add_argument("--betas", default="-10,0,1,2,3,5,7,10,15,20,30,50,100,1000", help="weights of the engine's loss in the reweighted policy (0 = the prior)")
     hf.add_argument("--taus", default="0.2,0.3,0.4,0.5,0.6,0.7,0.85,1.0,1.5", help="temperatures of the sharpened/flattened prior"); hf.add_argument("--alphas", default="0.05,0.1,0.2,0.3,0.45,0.6,0.8,1.0", help="shares of the engine's best candidate in the mixture")
     hf.add_argument("--boot", type=int, default=300); hf.add_argument("--out", required=True); hf.set_defaults(func=cmd_humanlike_frontier)
+    hr = sub.add_parser("humanlike-arena", help="matches between Stockfish at node limits (the ladder) and the human-like bot (Maia-3 prior reweighted by the engine's losses), from the opening moves of real games, adjudicated by a referee engine; Elo with intervals (resumable)")
+    hr.add_argument("--engine", help="Stockfish path"); hr.add_argument("--workers", type=int, default=4)
+    hr.add_argument("--players", nargs="+", required=True, metavar="NAME=SPEC", help="NAME=sf:nodes=N (ladder) or NAME=bot:maia3=23m+history:beta=B[:rating=R][:nodes=N][:root=N]")
+    hr.add_argument("--starts-from", required=True, help="human games (humanlike-humangames) whose opening moves are used"); hr.add_argument("--starts", type=int, default=24)
+    hr.add_argument("--games-out", required=True, help="games (appended; finished games are skipped on a restart)"); hr.add_argument("--out", required=True)
+    hr.add_argument("--chunk", type=int, default=200); hr.add_argument("--max-plies", type=int, default=240); hr.add_argument("--referee-nodes", type=int, default=1000)
+    hr.add_argument("--bot-vs-bot", action="store_true"); hr.add_argument("--anchor"); hr.add_argument("--boot", type=int, default=200); hr.add_argument("--seed", type=int, default=0)
+    hr.add_argument("--maia3-repo"); hr.add_argument("--maia2-repo"); hr.add_argument("--weights-dir"); hr.add_argument("--extra-path"); hr.add_argument("--device", default="cpu")
+    hr.add_argument("--batch", type=int, default=64); hr.set_defaults(func=cmd_humanlike_arena)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
