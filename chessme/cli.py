@@ -1857,6 +1857,41 @@ def cmd_humanlike_scaling(args):
     print(text)
 
 
+def cmd_humanlike_frontier(args):
+    import numpy as np
+
+    from .humanlike import errors as E
+    from .humanlike import frontier as FR
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    with np.load(args.judged, allow_pickle=False) as z:
+        jmeta, rows = json.loads(str(z["meta"])), z["rows"]
+        judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+    if jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+        raise SystemExit("the judged file belongs to another test set or model")
+    arr = R.position_arrays(T.read_testset(args.testset, scores["index"][rows]))
+    sub = {k: v[rows] for k, v in scores.items() if k != "index"}
+    prep = E.prepare(sub, judged)
+    regime = M.clock_regime(arr["clock"])
+    settings = [("engine-reweighted", float(b)) for b in args.betas.split(",")] + [("temperature", float(v)) for v in args.taus.split(",")] + \
+               [("mixture", float(v)) for v in args.alphas.split(",")]
+    lines = [f"# Strength against human-likeness: {meta['model']} ({len(rows):,} judged positions, {prep['cand_loss'].shape[1]} candidates)", "",
+             "Expected loss = points given away per move by the policy (lower = stronger); NLL of the human's move = human-likeness (lower = more human-like), only over positions where "
+             "the human's move is among the judged candidates; policies are renormalised over the judged candidates. 95% game-level intervals.", ""]
+    for label, mask in (("all judged positions", np.ones(len(rows), dtype=bool)), *((f"clock {r}", regime == r) for r in ("30s+", "10-30s", "<10s"))):
+        out = FR.sweep(prep, sub["rank"], arr["gid"], mask, settings, n_boot=args.boot)
+        lines += [FR.render(out, f"## {label} ({int(mask.sum()):,} positions, human move among the candidates in {100 * out[0]['covered']:.1f}%)"), "",
+                  FR.render_equal_strength(out, f"### {label}: human-likeness at equal strength"), ""]
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -2493,6 +2528,11 @@ def main():
     hz.add_argument("--testset", required=True); hz.add_argument("--models", nargs="+", required=True, metavar="NAME=SCORES.npz,JUDGED.npz", help="in increasing order of size")
     hz.add_argument("--params", nargs="+", required=True, metavar="NAME=MILLIONS"); hz.add_argument("--boot", type=int, default=2000); hz.add_argument("--out", required=True)
     hz.set_defaults(func=cmd_humanlike_scaling)
+    hf = sub.add_parser("humanlike-frontier", help="strength against human-likeness on judged positions: policies built from the human prior and the engine's losses (engine-reweighted, temperature, mixture), expected loss against the likelihood of the human's move")
+    hf.add_argument("--testset", required=True); hf.add_argument("--scores", required=True); hf.add_argument("--judged", required=True)
+    hf.add_argument("--betas", default="-10,0,1,2,3,5,7,10,15,20,30,50,100,1000", help="weights of the engine's loss in the reweighted policy (0 = the prior)")
+    hf.add_argument("--taus", default="0.2,0.3,0.4,0.5,0.6,0.7,0.85,1.0,1.5", help="temperatures of the sharpened/flattened prior"); hf.add_argument("--alphas", default="0.05,0.1,0.2,0.3,0.45,0.6,0.8,1.0", help="shares of the engine's best candidate in the mixture")
+    hf.add_argument("--boot", type=int, default=300); hf.add_argument("--out", required=True); hf.set_defaults(func=cmd_humanlike_frontier)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)

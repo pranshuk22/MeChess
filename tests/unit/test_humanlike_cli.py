@@ -311,3 +311,16 @@ def test_scaling_command_compares_sizes_on_identical_positions(tmp_path, monkeyp
     with pytest.raises(SystemExit, match="identical positions"):
         run(monkeypatch, "humanlike-scaling", "--testset", testset, "--models", f"small={tmp_path / 's0.npz'},{tmp_path / 'j0.npz'}", f"large={tmp_path / 's1.npz'},{other}",
             "--params", "small=2", "large=8", "--out", tmp_path / "x.md")
+
+
+@pytest.mark.skipif(shutil.which("stockfish") is None, reason="needs Stockfish")
+def test_frontier_command_writes_the_policies_and_the_equal_strength_table(tmp_path, monkeypatch, testset):
+    torch.manual_seed(1)
+    net.save_checkpoint(tmp_path / "n.pt", net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={tmp_path / 'n.pt'}", "--limit", 40, "--seed", 1, "--out", tmp_path / "s.npz")
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", "--per-regime", 12, "--min-ply", 1, "--workers", 1,
+        "--nodes-child", 100, "--nodes-root", 100, "--out", tmp_path / "j.npz")
+    run(monkeypatch, "humanlike-frontier", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--betas", "0,5", "--taus", "0.5,1.0",
+        "--alphas", "0.5", "--boot", 20, "--out", tmp_path / "f.md")
+    text = (tmp_path / "f.md").read_text()
+    assert "engine-reweighted 5" in text and "temperature 0.5" in text and "mixture 0.5" in text and "human-likeness at equal strength" in text
