@@ -158,3 +158,13 @@ def test_the_behaviour_loss_is_zero_when_the_model_matches_the_targets():
     assert float(A._behaviour_loss(log_slots, cl, valid, reg, targets)) == pytest.approx(0.0, abs=1e-9)
     off = targets * 2
     assert float(A._behaviour_loss(log_slots, cl, valid, reg, off)) > 0.1
+
+
+def test_the_training_seed_changes_the_fit_and_the_same_seed_repeats_it():
+    scores, clock, cand, human, low = judged_synthetic()
+    x, sl = A.features(arrays(clock), scores), A.slots(scores)
+    train, val, test = A.game_split(np.arange(len(clock)) // 4)
+    fit = lambda seed: A.fit(x, sl, train, val, epochs=3, lr=5e-3, seed=seed, log=lambda *a: None)[0]
+    first, again, other = fit(1), fit(1), fit(2)
+    w = lambda net: np.concatenate([p.detach().numpy().ravel() for p in net.parameters()])
+    assert np.allclose(w(first), w(again)) and not np.allclose(w(first), w(other))

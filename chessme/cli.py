@@ -1529,7 +1529,7 @@ def cmd_humanlike_adapter(args):
         mode, cols, override = spec
         x = override if override is not None else (x_all[:, cols] if cols else x_all)
         print(f"fitting {name}", flush=True)
-        net, mean, std = A.fit(x, sl, train, val, epochs=args.epochs, mode=mode, log=lambda m: None)
+        net, mean, std = A.fit(x, sl, train, val, epochs=args.epochs, mode=mode, seed=args.fit_seed, log=lambda m: None)
         fitted[name] = (A.apply(net, mean, std, x, sl), (net, mean, std, cols, override is not None))
     beh, train_losses = None, None
     if args.judged_train:
@@ -1551,7 +1551,7 @@ def cmd_humanlike_adapter(args):
         for lam in (float(v) for v in args.lambdas.split(",")):
             name = f"behaviour-matched adapter (lambda={lam:g})"
             print(f"fitting {name}", flush=True)
-            net, mean, std = A.fit(x_all, sl, train, val, epochs=args.epochs, mode="full", behaviour=beh, lam=lam, log=lambda m: None)
+            net, mean, std = A.fit(x_all, sl, train, val, epochs=args.epochs, mode="full", behaviour=beh, lam=lam, seed=args.fit_seed, log=lambda m: None)
             fitted[name] = (A.apply(net, mean, std, x_all, sl), (net, mean, std, None, False))
     if args.save_dir:
         import re as _re
@@ -2375,7 +2375,8 @@ def main():
     ha.add_argument("--judged-train", help="judged positions of the TRAINING games (humanlike-judge --split trainval): adds the behaviour-matched adapters")
     ha.add_argument("--lambdas", default="1,3,10", help="weights of the behaviour term to try")
     ha.add_argument("--save-dir", help="write each trained adapter (all-features and behaviour-matched ones) here, to be used by humanlike-selfplay")
-    ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0)
+    ha.add_argument("--epochs", type=int, default=20); ha.add_argument("--boot", type=int, default=500); ha.add_argument("--seed", type=int, default=0, help="seed of the split into training, validation and test games")
+    ha.add_argument("--fit-seed", type=int, default=0, help="seed of the training (initial weights, batch order): vary it to see how much the results move from training noise alone")
     ha.add_argument("--out", default="data/humanlike/adapter.md")
     ha.set_defaults(func=cmd_humanlike_adapter)
     hp = sub.add_parser("humanlike-selfplay", help="let models play games from the positions, clocks and ratings of real games: moves are sampled from the model's probabilities, thinking time from what humans spent")

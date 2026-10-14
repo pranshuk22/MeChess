@@ -95,7 +95,7 @@ def test_judge_and_errors_commands(tmp_path, monkeypatch, testset):
     run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", "--per-regime", 12, "--min-ply", 1, "--workers", 1, "--split", "trainval",
         "--nodes-child", 200, "--nodes-root", 400, "--out", tmp_path / "jt.npz")
     run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--judged-train", tmp_path / "jt.npz",
-        "--lambdas", "2", "--epochs", 1, "--boot", 20, "--out", ad)
+        "--lambdas", "2", "--fit-seed", 3, "--epochs", 1, "--boot", 20, "--out", ad)
     assert "behaviour-matched adapter (lambda=2)" in ad.read_text()
     run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={ck}", "--limit", 40, "--seed", 2, "--out", tmp_path / "other.npz")
     with pytest.raises(SystemExit, match="another test set or model|do not match"):
