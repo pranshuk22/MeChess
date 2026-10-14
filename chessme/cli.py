@@ -1805,6 +1805,58 @@ def cmd_humanlike_stimuli(args):
           f"answer key -> {args.key} (keep it away from the participants)")
 
 
+def cmd_humanlike_scaling(args):
+    import numpy as np
+
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import scaling as SC
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    params = {}
+    for spec in args.params:
+        name, _, v = spec.partition("=")
+        params[name] = float(v)
+    per, arr, rows0, regime, sizes = {}, None, None, None, []
+    for spec in args.models:
+        name, _, rest = spec.partition("=")
+        spath, _, jpath = rest.partition(",")
+        scores, meta = S.load_scores(spath)
+        with np.load(jpath, allow_pickle=False) as z:
+            jmeta, rows = json.loads(str(z["meta"])), z["rows"]
+            judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+        if jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+            raise SystemExit(f"{name}: the judged file belongs to another test set or model")
+        if rows0 is None:
+            rows0 = rows
+            chosen = T.read_testset(args.testset, scores["index"][rows])
+            arr = R.position_arrays(chosen)
+            regime = M.clock_regime(arr["clock"])
+        elif not np.array_equal(rows, rows0):
+            raise SystemExit(f"{name}: judged on other positions than the first model; sizes must be compared on identical positions")
+        sub = {k: v[rows] for k, v in scores.items() if k != "index"}
+        per[name], _ = SC.prepared(sub, judged, regime)
+        sizes.append(name)
+    masks = {"all judged positions": np.ones(len(rows0), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
+    lines = [f"# Gap between model and humans by model size (axis A3, same {len(rows0):,} positions for every size)", "",
+             "Gap = the model's expected value minus what the humans did, in points (x100), positions of the clock regime; 95% intervals resample whole games; "
+             "differences are larger minus smaller size on identical positions; slope = change of the gap per doubling of the parameters (least squares over the sizes).", ""]
+    for measure in ("blunder (loss > 0.20)", "error (loss > 0.10)", "mean loss"):
+        lines += [f"## {measure}", "", "| positions | " + " | ".join(sizes) + " | " + " | ".join(f"{b} - {a}" for (b, a) in [(sizes[-1], sizes[0])] + ([(sizes[-1], sizes[-2])] if len(sizes) > 2 else [])) + " | slope per doubling |",
+                  "|---|" + "---|" * (len(sizes) + 1 + (1 if len(sizes) > 2 else 0) + 1)]
+        for label, m in masks.items():
+            r = SC.gaps({n: per[n][measure] for n in sizes}, params, arr["gid"], m, measure, n_boot=args.boot)
+            f = lambda t: f"{100 * t[0]:+.2f} [{100 * t[1]:+.2f}, {100 * t[2]:+.2f}]"
+            pairs = [(sizes[-1], sizes[0])] + ([(sizes[-1], sizes[-2])] if len(sizes) > 2 else [])
+            lines.append(f"| {label} ({r['positions']:,}) | " + " | ".join(f(r["gap"][n]) for n in sizes) + " | " + " | ".join(f(r["diff"][p]) for p in pairs) + f" | {f(r['slope'])} |")
+        lines.append("")
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -2437,6 +2489,10 @@ def main():
     hs.add_argument("--seed", type=int, required=True)
     hs.add_argument("--out", required=True); hs.add_argument("--key", required=True, help="the answer key (human side, condition, game id per trial)")
     hs.set_defaults(func=cmd_humanlike_stimuli)
+    hz = sub.add_parser("humanlike-scaling", help="does the gap between a model and the humans (error profile, same judged positions) change with the model's size? gaps, differences and the slope with game-level intervals")
+    hz.add_argument("--testset", required=True); hz.add_argument("--models", nargs="+", required=True, metavar="NAME=SCORES.npz,JUDGED.npz", help="in increasing order of size")
+    hz.add_argument("--params", nargs="+", required=True, metavar="NAME=MILLIONS"); hz.add_argument("--boot", type=int, default=2000); hz.add_argument("--out", required=True)
+    hz.set_defaults(func=cmd_humanlike_scaling)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
