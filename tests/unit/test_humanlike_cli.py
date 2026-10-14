@@ -273,3 +273,19 @@ def test_quality_command_and_the_detector_style_classifier(tmp_path, monkeypatch
     with pytest.raises(SystemExit, match="needs a file for"):
         run(monkeypatch, "humanlike-c2st", "--human", tmp_path / "human.jsonl", "--games", f"a={tmp_path / 'a.jsonl'}", "--quality", f"human={tmp_path / 'q_human.jsonl'}",
             "--out", tmp_path / "c2.md")
+
+
+def test_stimuli_command_writes_blocks_and_a_separate_key(tmp_path, monkeypatch, capsys):
+    import json as _json
+    from tests.unit.test_humanlike_stimuli import sets
+    human, gen = sets(60)
+    for name, rs in (("human", human), *gen.items()):
+        (tmp_path / f"{name}.jsonl").write_text("\n".join(_json.dumps(r) for r in rs) + "\n")
+    run(monkeypatch, "humanlike-stimuli", "--human", tmp_path / "human.jsonl", "--games", f"frozen={tmp_path / 'frozen.jsonl'}", f"adapted={tmp_path / 'adapted.jsonl'}",
+        "--blocks", 2, "--per-condition", 8, "--checks", 2, "--seed", 7, "--out", tmp_path / "s.json", "--key", tmp_path / "k.json")
+    stim, key = _json.loads((tmp_path / "s.json").read_text()), _json.loads((tmp_path / "k.json").read_text())
+    assert len(stim["blocks"]) == 2 and len(stim["blocks"][0]["trials"]) == 18 and len(key["trials"]) == 36 and key["seed"] == 7
+    assert "human_side" not in (tmp_path / "s.json").read_text() and "gid" not in (tmp_path / "s.json").read_text()
+    with pytest.raises(SystemExit):
+        run(monkeypatch, "humanlike-stimuli", "--human", tmp_path / "human.jsonl", "--games", f"frozen={tmp_path / 'frozen.jsonl'}", "--blocks", 50, "--seed", 1,
+            "--out", tmp_path / "s2.json", "--key", tmp_path / "k2.json")

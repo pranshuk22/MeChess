@@ -1781,6 +1781,30 @@ def cmd_humanlike_quality(args):
     print(f"wrote {len(done):,} games to {args.out}")
 
 
+def cmd_humanlike_stimuli(args):
+    from .humanlike import gamestats as GS
+    from .humanlike import stimuli as ST
+    human = GS.read_games(args.human)
+    generated = {}
+    for spec in args.games:
+        name, _, path = spec.partition("=")
+        generated[name] = GS.read_games(path)
+    conditions = args.conditions or list(generated)
+    try:
+        stim, key = ST.build(human, generated, conditions, blocks=args.blocks, per_condition=args.per_condition, checks=args.checks,
+                             fragment_plies=args.fragment_plies, min_plies=args.min_plies, seed=args.seed)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    problems = ST.audit(stim, key)
+    if problems:
+        raise SystemExit("audit failed: " + "; ".join(problems[:5]))
+    stim["seed"] = args.seed
+    Path(args.out).write_text(json.dumps(stim, separators=(",", ":")))
+    Path(args.key).write_text(json.dumps({"seed": args.seed, "conditions": conditions, "trials": key}, indent=0))
+    print(f"{len(stim['blocks'])} blocks of {len(stim['blocks'][0]['trials'])} trials ({args.per_condition} per condition {conditions}, {args.checks} checks) -> {args.out}; "
+          f"answer key -> {args.key} (keep it away from the participants)")
+
+
 def cmd_humanlike_c2st(args):
     from .humanlike import c2st as C
     from .humanlike import gamestats as GS
@@ -2404,6 +2428,15 @@ def main():
     hc.add_argument("--quality", nargs="+", metavar="NAME=FILE", help="engine-judged move quality (humanlike-quality) for 'human' and for every generated set: adds evaluation lost, error, blunder, engine's first choice as features")
     hc.add_argument("--max-moves", type=int, help="cut every game after this many moves following the start (the stimuli of the forced-choice study use 20 moves = 40 half-moves)")
     hc.set_defaults(func=cmd_humanlike_c2st)
+    hs = sub.add_parser("humanlike-stimuli", help="stimuli of the forced-choice study: blocks of trials (a start and two fragments, the human one and a generated one), no clocks or ids, with a separate answer key")
+    hs.add_argument("--human", required=True, help="games of humanlike-humangames"); hs.add_argument("--games", nargs="+", required=True, help="NAME=FILE of generated games from the same starts")
+    hs.add_argument("--conditions", nargs="+", help="names of the generated sets that form the conditions 'human vs NAME' (default: all)")
+    hs.add_argument("--blocks", type=int, default=30, help="one block per participant (with spares)"); hs.add_argument("--per-condition", type=int, default=60)
+    hs.add_argument("--checks", type=int, default=4, help="attention checks per block: a human fragment against random legal moves")
+    hs.add_argument("--fragment-plies", type=int, default=40, help="half-moves per fragment (fewer when a game ends earlier)"); hs.add_argument("--min-plies", type=int, default=24, help="shortest fragment allowed")
+    hs.add_argument("--seed", type=int, required=True)
+    hs.add_argument("--out", required=True); hs.add_argument("--key", required=True, help="the answer key (human side, condition, game id per trial)")
+    hs.set_defaults(func=cmd_humanlike_stimuli)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
