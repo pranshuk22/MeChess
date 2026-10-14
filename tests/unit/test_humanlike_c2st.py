@@ -112,3 +112,17 @@ def test_feature_table_cuts_generated_games_at_the_human_length_and_keeps_common
     assert gids == [f"g{i}@8" for i in range(4)] and X_h.shape[0] == 4 and X["m"].shape == X_h.shape
     short = C.move_rows(gen[0], plies=human[0]["plies"])
     assert len(short) == human[0]["plies"] - 8
+
+
+def test_feature_effects_name_the_feature_that_differs_and_the_report_lists_it():
+    rng = np.random.default_rng(3)
+    n, d = 300, len(C.FEATURE_NAMES)
+    X_h, Xg = rng.normal(size=(n, d)).astype(np.float32), rng.normal(size=(n, d)).astype(np.float32)
+    j = C.FEATURE_NAMES.index("whole stretch: check")
+    Xg[:, j] -= 1.0                                                  # the generated games give fewer checks
+    rows = C.feature_effects(X_h, Xg, top=3)
+    name, a, mh, mg = rows[0]
+    assert name == "whole stretch: check" and a < 0.3 and mg < mh and len(rows) == 3
+    text = C.report({"starts": n, "models": {"m": {"linear": {"auc": 0.6, "ci": (0.5, 0.7)}, "network": {"auc": 0.6, "ci": (0.5, 0.7)}}},
+                     "null": {"linear": 0.5, "network": 0.5}, "pairs": [], "features": {"m": rows}})
+    assert "whole stretch: check" in text and "one feature at a time" in text

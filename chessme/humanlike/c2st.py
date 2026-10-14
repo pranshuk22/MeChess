@@ -174,11 +174,24 @@ def null_auc(X_human, gids, folds=5, seed=0, hidden=0, **kw):
     return paired_auc(s0, s1)
 
 
+FEATURE_NAMES = [f"{block}: {name}" for block in ("whole stretch", "first half", "second half") for name in MOVE_FEATURES]
+
+
+def feature_effects(X_h, Xg, top=10):
+    """What separates the two sets, feature by feature: for each game feature, the AUC with which that single feature alone ranks the generated games above the
+    human ones (0.5: no difference) and the two means. Returns the `top` features furthest from 0.5, as (name, auc, human mean, generated mean)."""
+    labels = np.r_[np.zeros(len(X_h)), np.ones(len(Xg))]
+    rows = []
+    for j, name in enumerate(FEATURE_NAMES):
+        rows.append((name, auc(np.concatenate([X_h[:, j], Xg[:, j]]), labels), float(X_h[:, j].mean()), float(Xg[:, j].mean())))
+    return sorted(rows, key=lambda r: -abs(r[1] - 0.5))[:top]
+
+
 def run(human, generated, folds=5, seed=0, boot=500, hidden=32, **kw):
     """The whole test. Returns a dict with the AUC of every generated set against the human games (linear and network), the paired differences
     between the sets and the human-against-human control."""
     gids, X_h, X = feature_table(human, generated)
-    out = {"starts": len(gids), "models": {}, "pairs": [], "null": {}}
+    out = {"starts": len(gids), "models": {}, "pairs": [], "null": {}, "features": {name: feature_effects(X_h, Xg) for name, Xg in X.items()}}
     scores = {}
     for kind, hid in (("linear", 0), ("network", hidden)):
         out["null"][kind] = null_auc(X_h, gids, folds=folds, seed=seed, hidden=hid, **kw)
@@ -207,4 +220,8 @@ def report(result):
         lines += ["", "Paired differences in AUC on the same starts (negative: the first set is harder to tell from human games):", "", "| first | second | model | AUC difference |", "|---|---|---|---|"]
         for p in result["pairs"]:
             lines.append(f"| {p['a']} | {p['b']} | {p['kind']} | {p['diff']:+.3f} [{p['ci'][0]:+.3f}, {p['ci'][1]:+.3f}] |")
+    for name, rows in result.get("features", {}).items():
+        lines += ["", f"What separates the {name} games from the human ones, one feature at a time (AUC of that feature alone, generated above human; every feature is a "
+                  "mean over the moves of a game):", "", "| feature | AUC | human mean | generated mean |", "|---|---|---|---|"]
+        lines += [f"| {f} | {a:.3f} | {mh:.4f} | {mg:.4f} |" for f, a, mh, mg in rows]
     return "\n".join(lines)
