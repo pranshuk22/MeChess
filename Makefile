@@ -16,3 +16,8 @@ test-deep:
 	$(MAKE) -C engine test-deep
 
 .PHONY: test test-all test-deep
+
+# the web app: build the frontend once, then serve everything (API and pages) on http://127.0.0.1:8765
+app:
+	cd frontend && npm install && npm run build
+	PYTHONPATH=. .venv/bin/python -m chessme app

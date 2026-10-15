@@ -1,8 +1,11 @@
 import clsx from "clsx";
 import { Activity, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords, User } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/api/client";
 import { useJobEvents, useRunningJobs, useWorkspace } from "@/api/hooks";
+import { ServerDown } from "./ServerDown";
 import { ImportDialog } from "@/features/library/ImportDialog";
 import { resolveMode, useUi } from "@/state/ui";
 import { TipProvider, Tip } from "./ui/Tip";
@@ -23,8 +26,12 @@ function Mark({ size = 28 }: { size?: number }) {
 
 export function Shell() {
   useJobEvents();
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api("/api/health"), retry: false, refetchInterval: (q) => (q.state.status === "error" ? 3000 : 20000) });
   const { mode, toggleMode } = useUi();
   const dark = resolveMode(mode) === "dark";
+  const qc = useQueryClient();
+  const wasDown = useRef(false);
+  useEffect(() => { if (health.isError) wasDown.current = true; else if (health.isSuccess && wasDown.current) { wasDown.current = false; qc.invalidateQueries(); } }, [health.isError, health.isSuccess, qc]);   // the server came back: fetch everything again
   const running = useRunningJobs();
   const engine = useWorkspace().data?.checks.find((c) => c.id === "engine");
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("mechess.rail") === "1"; } catch { return false; } });
@@ -78,7 +85,7 @@ export function Shell() {
             {collapsed && <button onClick={toggle} aria-label="Expand the sidebar" className="mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-md text-[var(--rail-text)] hover:bg-[var(--rail-hover)] cursor-pointer"><PanelLeft size={16} /></button>}
           </div>
         </nav>
-        <main className="min-h-0 overflow-auto"><Outlet /></main>
+        <main className="min-h-0 overflow-auto">{health.isError ? <ServerDown onRetry={() => health.refetch()} /> : <Outlet />}</main>
       </div>
       <ImportDialog />
     </TipProvider>

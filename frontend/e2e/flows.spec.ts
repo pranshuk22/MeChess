@@ -93,3 +93,11 @@ test("a custom piece set can be added from the settings and used on the board", 
   await page.getByRole("button", { name: "Delete Test set" }).click();
   await expect(page.getByRole("button", { name: "Test set", exact: true })).toHaveCount(0);
 });
+
+test("when the server is not reachable the app says so and reconnects by itself", async ({ page }) => {
+  await page.route("**/api/health", (r) => r.abort());
+  await page.goto("/");
+  await expect(page.getByText("The MeChess server is not running")).toBeVisible();
+  await page.unroute("**/api/health");
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 15_000 });
+});

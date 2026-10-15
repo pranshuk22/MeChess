@@ -4,14 +4,25 @@ A single-page app in `frontend/` (React, Vite, TypeScript, Tailwind CSS). Status
 
 ## Run it
 
+The app is two parts: the **server** (Python: API, database, background jobs, Stockfish) and the **pages** (this frontend). Both must run.
+
+```bash
+# for using it: build the pages once, then serve everything on http://127.0.0.1:8765
+make app                          # = cd frontend && npm install && npm run build, then python -m chessme app
+
+# for developing it (hot reload): both parts with one command, then open http://localhost:5173
+cd frontend && npm install && npm run dev:all
+```
+
+Starting only `npm run dev` shows a "the MeChess server is not running" screen: the pages have nothing to talk to. `npm run dev:api` starts only the server.
+
+The production build (`make app`) is also much smoother than the development server, which runs React's slow development mode. Tests:
+
 ```bash
 cd frontend
-npm install
-npm run dev        # http://localhost:5173
-npm run build      # type check + production build in frontend/dist
-npm test           # unit tests (Vitest)
+npm test                          # unit tests (Vitest)
 npx playwright install chromium   # once
-npx playwright test               # end-to-end tests: board, retry loop, no external requests, long list
+npx playwright test               # end-to-end tests against the real server with its own temporary data folder
 ```
 
 Players who only use the app never need Node: the built files ship inside the Python package (planned).

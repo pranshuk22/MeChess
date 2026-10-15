@@ -806,7 +806,8 @@ def cmd_app(args):
         print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
-    app = create_app(cfg, extra_hosts=["localhost:5173"] if args.dev else (), extra_origins=["http://localhost:5173"] if args.dev else ())
+    dev_hosts = [f"localhost:{p}" for p in range(5173, 5181)] if args.dev else []                    # the Vite dev server picks the next free port when 5173 is taken
+    app = create_app(cfg, extra_hosts=dev_hosts, extra_origins=[f"http://{h}" for h in dev_hosts])
     if args.seed_samples or args.seed_stress:
         from contextlib import asynccontextmanager
         from .app import db as DB

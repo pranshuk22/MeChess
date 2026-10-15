@@ -8,7 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:all": "node scripts/dev.mjs",
+    "dev:api": "cd .. && PYTHONPATH=. ${MECHESS_PYTHON:-.venv/bin/python} -m chessme app --dev --no-browser"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
