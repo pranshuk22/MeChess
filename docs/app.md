@@ -43,11 +43,27 @@ Not built in CI: try it before relying on it.
 | **Home** | the numbers that matter (games, accuracy, mistakes, results), your next step, recent games, openings, activity calendar, a checklist of what MeChess found on your computer |
 | **Library** | all your games, searchable and filterable, any size; import from Lichess, Chess.com or a PGN file |
 | **Review** | the board, every move classed (brilliant to blunder) with an icon, accuracy, the engine's best lines for each move, live engine analysis, the opening explorer, side lines you try yourself, and **Retry your mistakes** |
-| **Coach** | practice positions from your own mistakes (repeated on a schedule), and where you lose points compared with players of your rating |
+| **Coach** | practice positions from your own mistakes (repeated on a schedule), opening practice, endgames, steered games, and where you lose points compared with players of your rating. Every move you try is **graded with reasons**: best, great (as good), good but not the best (it counts, and you may try for the best), inaccuracy, mistake, blunder; a bad try says what it allows (checkmate, a lost piece, the engine's line) without giving the answer away |
+| **Prepare** | **Prepare against an opponent**: give their Lichess / Chess.com user name(s) (or paste a PGN) and get their weak openings, traps in their own games with the punishing move, a plan of your moves against what they really play (saved as a repertoire for the opening practice), their middlegame, endgame and clock weaknesses, and their latest games. See below |
 | **Play** | a game against Stockfish at eight levels, or MeChess at a chosen strength; finished games go to your library |
 | **Insights** | accuracy by phase, move kinds, rating over time, results by colour and speed |
 | **Activity** | imports, analyses and other work running in the background, with progress and cancel |
 | **Settings** | accounts, engine, opening cache, colours, board and pieces (also your own images) |
+
+## Prepare against an opponent
+
+`Prepare` reads the opponent's public games (newest first, one request at a time, no passwords; or a pasted PGN), keeps them for this preparation only (deleted with it), and analyses them with
+your engine and the opening cache: the openings of every game, and whole games for the most recent ones (*Quick*: none; *Standard*: 40; *Deep*: 120). The report has:
+
+- **Your plan**: for each of your colours a tree of your moves and the replies this opponent has actually played (with how often). At each of your turns the planner picks the move with the best
+  *expected* result against their observed replies, never more than 5 points under the engine's best move, or up to 12 points under when the opponent has been seen at least four times after
+  it (a marked *gamble*). Your own record at each position breaks near-ties. Save a plan as a repertoire and practise it in Coach → Openings.
+- **Their openings** by colour: games, results, score, how often they err in the first 12 moves, marked weak when they score clearly below their usual or often err early, next to your own record against it.
+- **Traps**: positions in their games where their usual move gives away at least 8 points, how to get there (and whether your moves on the way are sound), the punishing reply and where it leaves you.
+- **Middlegame and endgame**: where their mistakes are (phase, equal / better / worse positions, kind of mistake, kind of endgame, when short of time, converting advantages), against players of their rating when
+  the reference counts exist.
+
+All numbers come from the games found: with few games the report says so. Nothing is sent anywhere but the requests for their public games.
 
 ## Your data
 

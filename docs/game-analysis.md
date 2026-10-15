@@ -38,7 +38,9 @@ public), and all thresholds are configurable (`Thresholds`). Nothing here claims
 ## Accuracy and the rest of the report
 
 - **Accuracy** per move follows the Lichess formula `103.1668 exp(-0.04354415 x drop) - 3.1669 + 1` (drop in win probability, in percent),
-  clipped to 0-100, averaged per colour and per phase. As on Lichess, the score is clamped to +-1000 centipawns before the win probability is taken
+  clipped to 0-100. The moves of a game are combined as Lichess does it (`analysis/accuracy.py`): the mean of a volatility-weighted mean (a move in a sharp position counts
+  more than one in a quiet position) and the harmonic mean (one bad move pulls the figure down; many easy moves do not lift it back). A plain average was tried first and was too
+  generous: forced and book moves score 100 and hid the mistakes (on one 400-game library 89 became 77). Per phase the same combination is used. As on Lichess, the score is clamped to +-1000 centipawns before the win probability is taken
   (so giving away a +30 advantage for a +10 one costs no accuracy); the class thresholds use the unclamped scale.
 - **Phases**: opening until move 10 (unless the position is already an endgame), endgame when the pieces (no pawns) are worth 26 points or less.
 - **Opportunism / luck** (as in Lichess Insights): how often you punish the opponent's mistakes, and how often yours go unpunished.
