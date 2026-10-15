@@ -44,3 +44,14 @@ test("the page does not scroll sideways or change width when content changes (st
   expect(w1).toBe(w0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
+
+test("on a phone the pages do not scroll sideways and the bottom bar shows the main places", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const path of ["/", "/library", `/review/${GAME}`, "/coach", "/play"]) {
+    await page.goto(path);
+    await page.waitForLoadState("networkidle");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), path).toBe(true);
+  }
+  const bar = page.getByRole("navigation", { name: "Main" });
+  for (const name of ["Home", "Library", "Coach", "Play", "Settings"]) await expect(bar.getByRole("link", { name }).first()).toBeVisible();
+});

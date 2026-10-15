@@ -44,7 +44,7 @@ export function Shell() {
     return (
       <Tip key={to} label={label} side="right">
         <NavLink to={to} end={opts.end} aria-label={label} aria-current={isActive ? "page" : undefined}
-          className={clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot"].includes(to) && "max-md:hidden",
+          className={clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot"].includes(to) && "max-md:hidden", "max-md:flex-col max-md:justify-center max-md:gap-0.5 max-md:px-0 max-md:text-[10.5px]",
             isActive ? "bg-[var(--rail-active)] text-[var(--rail-strong)]" : "text-[var(--rail-text)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-strong)]")}>
           {isActive && <span className="absolute -left-3 top-2 h-5 w-[3px] rounded-r-full bg-accent max-md:hidden" />}
           <Icon size={18} strokeWidth={1.7} className="shrink-0" />
@@ -57,15 +57,15 @@ export function Shell() {
 
   return (
     <TipProvider>
-      <div className="grid h-full max-md:grid-cols-1 max-md:grid-rows-[1fr_60px]" style={{ gridTemplateColumns: `${collapsed ? 68 : 232}px 1fr` }}>
-        <nav aria-label="Main" className="flex min-h-0 flex-col bg-[var(--rail-bg)] px-3 py-4 max-md:order-2 max-md:flex-row max-md:items-center max-md:justify-around max-md:px-1 max-md:py-0">
+      <div className="grid h-full grid-cols-1 grid-rows-[minmax(0,1fr)_60px] md:grid-cols-[var(--rail-w)_minmax(0,1fr)] md:grid-rows-1" style={{ "--rail-w": `${collapsed ? 68 : 232}px` } as React.CSSProperties}>
+        <nav aria-label="Main" className="flex min-h-0 flex-col bg-[var(--rail-bg)] px-3 py-4 max-md:order-2 max-md:grid max-md:auto-cols-fr max-md:grid-flow-col max-md:items-stretch max-md:px-1 max-md:py-0">
           <div className={clsx("mb-5 flex items-center gap-2.5 px-1 max-md:hidden", collapsed && "justify-center px-0")}>
             <Mark />
             {!collapsed && <span className="font-display text-[15px] font-semibold tracking-[-0.04em] text-[var(--rail-strong)]">MeChess</span>}
           </div>
-          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto max-md:flex max-md:flex-none max-md:space-y-0 max-md:overflow-visible">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto max-md:contents">
             {GROUPS.map((g, i) => (
-              <div key={g.label} className="space-y-0.5 max-md:flex max-md:space-y-0">
+              <div key={g.label} className="space-y-0.5 max-md:contents">
                 {!collapsed && <div className="mb-1.5 px-2.5 font-display text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--rail-text)] max-md:hidden">{g.label}</div>}
                 {collapsed && i > 0 && <div className="mx-2 mb-2 h-px bg-[var(--rail-line)] max-md:hidden" />}
                 {g.items.map((it) => link(it.to, it.label, it.icon, { end: (it as { end?: boolean }).end }))}
@@ -89,7 +89,7 @@ export function Shell() {
             {collapsed && <button onClick={toggle} aria-label="Expand the sidebar" className="mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-md text-[var(--rail-text)] hover:bg-[var(--rail-hover)] cursor-pointer"><PanelLeft size={16} /></button>}
           </div>
         </nav>
-        <main className="min-h-0 overflow-auto">{health.isError ? <ServerDown onRetry={() => health.refetch()} /> : health.data?.auth === false ? <ServerDown signedOut onRetry={() => health.refetch()} /> : <Outlet />}</main>
+        <main className="min-h-0 min-w-0 overflow-auto max-md:order-1">{health.isError ? <ServerDown onRetry={() => health.refetch()} /> : health.data?.auth === false ? <ServerDown signedOut onRetry={() => health.refetch()} /> : <Outlet />}</main>
       </div>
       <ImportDialog />
     </TipProvider>
