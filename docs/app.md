@@ -21,10 +21,20 @@ it printed.
 | `--engine PATH` | Stockfish (default: `stockfish` on the PATH; also settable in Settings) |
 | `--port N` | default 8765 (the older `chessme coach` uses 8766) |
 | `--no-browser` | do not open a browser, only print the address |
+| `--host ADDR` | listen address (default 127.0.0.1); only for use inside a container |
 | `--dev` | also accept the Vite dev server on `localhost:5173..5180` |
 
 For development: `cd frontend && npm install && npm run dev:all` starts the server and the hot-reloading pages together and prints the address to open
 ([ui.md](ui.md)).
+
+### In a container
+
+```bash
+docker compose up --build          # then open the address with ?t=... that the log prints
+```
+
+The image holds the server, Stockfish and the C++ engine (no PyTorch: the app does not need it); the data lives in a volume. The port is published to `127.0.0.1` only. Set `MECHESS_TOKEN` in your environment to keep the same access key between runs.
+Not built in CI: try it before relying on it.
 
 ## What is where
 

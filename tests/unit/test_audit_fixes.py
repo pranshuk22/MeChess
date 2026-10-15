@@ -72,3 +72,19 @@ def test_checkpoints_are_loaded_without_running_code_but_numpy_arrays_still_load
     with __import__("pytest").raises((pickle.UnpicklingError, RuntimeError)):
         safe_load.load(bad)
     assert not marker.exists()
+
+
+def test_the_dockerfile_starts_the_app_with_options_that_exist_and_the_compose_file_publishes_to_localhost_only():
+    import json
+    import subprocess
+    import sys
+    docker = (ROOT / "Dockerfile").read_text()
+    cmd = json.loads(re.search(r"^CMD (\[.*\])$", docker, re.M).group(1))
+    assert cmd[:4] == ["python", "-m", "chessme", "app"]
+    help_text = subprocess.run([sys.executable, "-m", "chessme", "app", "-h"], capture_output=True, text=True, cwd=ROOT).stdout
+    for flag in (a for a in cmd if a.startswith("--")):
+        assert flag in help_text, flag
+    assert "0.0.0.0" in cmd and "--no-browser" in cmd
+    compose = (ROOT / "docker-compose.yml").read_text()
+    assert '"127.0.0.1:8765:8765"' in compose and "0.0.0.0:" not in compose
+    assert "torch" not in docker.split("RUN pip install")[1].split("COPY")[0]                    # the app image does not carry PyTorch

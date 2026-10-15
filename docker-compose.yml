@@ -1,0 +1,12 @@
+services:
+  mechess:
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765"          # reachable from this computer only
+    volumes:
+      - mechess-data:/data              # the database, your piece sets and board images
+    # MECHESS_TOKEN=... in the environment keeps the access key the same between runs; otherwise the address printed in the log has a new one
+    environment:
+      - MECHESS_TOKEN
+volumes:
+  mechess-data:

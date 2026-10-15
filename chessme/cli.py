@@ -809,7 +809,7 @@ def cmd_app(args):
     import os
     import secrets
     token = os.environ.get("MECHESS_TOKEN") or secrets.token_urlsafe(24)                    # the access key of this run (see docs/app.md)
-    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir, token=token, bot_dir=args.bot_dir)
+    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir, token=token, bot_dir=args.bot_dir, host=args.host)
     url = f"http://127.0.0.1:{args.port}/?t={token}"
     if static_dir() is None:
         print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
@@ -835,7 +835,7 @@ def cmd_app(args):
                         print(f"{seed_stress(s, args.seed_stress)} plain games added")
                 yield
         app.router.lifespan_context = with_seed
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning", timeout_graceful_shutdown=2)         # open browser tabs must not keep the server alive
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning", timeout_graceful_shutdown=2)         # open browser tabs must not keep the server alive
 
 
 def cmd_coach_reference_games(args):
@@ -2953,6 +2953,8 @@ def main():
     ap_ = sub.add_parser("app", help="start the MeChess web app: your games, review, coach and play in the browser (local only; needs the built frontend in frontend/dist)")
     ap_.add_argument("--data-dir", default="~/.mechess", help="where the app keeps its database (one SQLite file) and your files"); ap_.add_argument("--research-dir", default=str(config.ROOT / "data"), help="where the command-line tools keep explorer, tablebases, models and older analyses (found automatically)")
     ap_.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); ap_.add_argument("--port", type=int, default=8765); ap_.add_argument("--no-browser", action="store_true")
+    ap_.add_argument("--host", default="127.0.0.1", help="address to listen on; leave it, except inside a container whose port is published to 127.0.0.1 only (docs/app.md)")
+    ap_.add_argument("--host", default="127.0.0.1", help="address to listen on; leave it, except inside a container whose port is published to 127.0.0.1 only (docs/app.md)")
     ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)")
     ap_.add_argument("--seed-samples", help="load the sample games of this JSON file (end-to-end tests and demos)"); ap_.add_argument("--seed-stress", type=int, default=0, help="add this many plain games (end-to-end test of a long library)")
     ap_.add_argument("--legacy-coach-dir", default="~/.mechess-coach", help="where the old command-line coach kept reviewed games (offered for import)")

@@ -1,0 +1,16 @@
+.git
+.venv
+data
+profiles
+bot
+architecture-research
+plan*.md
+frontend/node_modules
+frontend/dist
+frontend/test-results
+engine/build
+**/__pycache__
+*.pt
+*.npz
+notebooks
+tests
