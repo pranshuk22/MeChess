@@ -1,0 +1,650 @@
+{
+ "blunder": 0.2,
+ "cells": {
+  "blitz|1000": {
+   "blunders": 1089,
+   "by_phase": {
+    "endgame": [
+     4530,
+     421
+    ],
+    "middlegame": [
+     8222,
+     1371
+    ],
+    "opening": [
+     6040,
+     740
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5962,
+     947
+    ],
+    "behind": [
+     4736,
+     298
+    ],
+    "level": [
+     8094,
+     1287
+    ]
+   },
+   "games": 604,
+   "kinds": {
+    "deeper": 1983,
+    "ignores a threat": 226,
+    "mate in 1": 39,
+    "walks into a capture": 284
+   },
+   "mistakes": 2532,
+   "moves": 18792
+  },
+  "blitz|1200": {
+   "blunders": 890,
+   "by_phase": {
+    "endgame": [
+     5363,
+     428
+    ],
+    "middlegame": [
+     8227,
+     1327
+    ],
+    "opening": [
+     5880,
+     529
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5632,
+     760
+    ],
+    "behind": [
+     4570,
+     259
+    ],
+    "level": [
+     9268,
+     1265
+    ]
+   },
+   "games": 588,
+   "kinds": {
+    "deeper": 1911,
+    "ignores a threat": 173,
+    "mate in 1": 37,
+    "walks into a capture": 163
+   },
+   "mistakes": 2284,
+   "moves": 19470
+  },
+  "blitz|1400": {
+   "blunders": 814,
+   "by_phase": {
+    "endgame": [
+     4759,
+     407
+    ],
+    "middlegame": [
+     9103,
+     1436
+    ],
+    "opening": [
+     5980,
+     401
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     4958,
+     738
+    ],
+    "behind": [
+     3962,
+     255
+    ],
+    "level": [
+     10922,
+     1251
+    ]
+   },
+   "games": 598,
+   "kinds": {
+    "deeper": 1941,
+    "ignores a threat": 125,
+    "mate in 1": 27,
+    "walks into a capture": 151
+   },
+   "mistakes": 2244,
+   "moves": 19842
+  },
+  "blitz|1600": {
+   "blunders": 784,
+   "by_phase": {
+    "endgame": [
+     5429,
+     417
+    ],
+    "middlegame": [
+     9623,
+     1405
+    ],
+    "opening": [
+     6040,
+     360
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5023,
+     727
+    ],
+    "behind": [
+     4286,
+     225
+    ],
+    "level": [
+     11783,
+     1230
+    ]
+   },
+   "games": 604,
+   "kinds": {
+    "deeper": 1912,
+    "ignores a threat": 133,
+    "mate in 1": 22,
+    "walks into a capture": 115
+   },
+   "mistakes": 2182,
+   "moves": 21092
+  },
+  "blitz|1800": {
+   "blunders": 734,
+   "by_phase": {
+    "endgame": [
+     5547,
+     435
+    ],
+    "middlegame": [
+     10321,
+     1309
+    ],
+    "opening": [
+     6100,
+     300
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5289,
+     678
+    ],
+    "behind": [
+     4059,
+     223
+    ],
+    "level": [
+     12620,
+     1143
+    ]
+   },
+   "games": 610,
+   "kinds": {
+    "deeper": 1790,
+    "ignores a threat": 123,
+    "mate in 1": 17,
+    "walks into a capture": 114
+   },
+   "mistakes": 2044,
+   "moves": 21968
+  },
+  "blitz|2000": {
+   "blunders": 666,
+   "by_phase": {
+    "endgame": [
+     5993,
+     493
+    ],
+    "middlegame": [
+     11373,
+     1330
+    ],
+    "opening": [
+     6260,
+     187
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5167,
+     648
+    ],
+    "behind": [
+     4266,
+     225
+    ],
+    "level": [
+     14193,
+     1137
+    ]
+   },
+   "games": 626,
+   "kinds": {
+    "deeper": 1775,
+    "ignores a threat": 108,
+    "mate in 1": 18,
+    "walks into a capture": 109
+   },
+   "mistakes": 2010,
+   "moves": 23626
+  },
+  "blitz|2200": {
+   "blunders": 583,
+   "by_phase": {
+    "endgame": [
+     6688,
+     520
+    ],
+    "middlegame": [
+     11307,
+     1133
+    ],
+    "opening": [
+     6080,
+     110
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     4992,
+     572
+    ],
+    "behind": [
+     3963,
+     217
+    ],
+    "level": [
+     15120,
+     974
+    ]
+   },
+   "games": 608,
+   "kinds": {
+    "deeper": 1588,
+    "ignores a threat": 65,
+    "mate in 1": 14,
+    "walks into a capture": 96
+   },
+   "mistakes": 1763,
+   "moves": 24075
+  },
+  "blitz|2400": {
+   "blunders": 518,
+   "by_phase": {
+    "endgame": [
+     8262,
+     448
+    ],
+    "middlegame": [
+     10705,
+     1039
+    ],
+    "opening": [
+     5620,
+     74
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5009,
+     514
+    ],
+    "behind": [
+     3802,
+     162
+    ],
+    "level": [
+     15776,
+     885
+    ]
+   },
+   "games": 562,
+   "kinds": {
+    "deeper": 1376,
+    "ignores a threat": 81,
+    "mate in 1": 14,
+    "walks into a capture": 90
+   },
+   "mistakes": 1561,
+   "moves": 24587
+  },
+  "rapid|1000": {
+   "blunders": 1097,
+   "by_phase": {
+    "endgame": [
+     5254,
+     418
+    ],
+    "middlegame": [
+     7583,
+     1202
+    ],
+    "opening": [
+     5970,
+     845
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     6190,
+     933
+    ],
+    "behind": [
+     5132,
+     302
+    ],
+    "level": [
+     7485,
+     1230
+    ]
+   },
+   "games": 597,
+   "kinds": {
+    "deeper": 1891,
+    "ignores a threat": 293,
+    "mate in 1": 55,
+    "walks into a capture": 226
+   },
+   "mistakes": 2465,
+   "moves": 18807
+  },
+  "rapid|1200": {
+   "blunders": 928,
+   "by_phase": {
+    "endgame": [
+     5697,
+     451
+    ],
+    "middlegame": [
+     8663,
+     1323
+    ],
+    "opening": [
+     5990,
+     597
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     6210,
+     799
+    ],
+    "behind": [
+     5042,
+     311
+    ],
+    "level": [
+     9098,
+     1261
+    ]
+   },
+   "games": 599,
+   "kinds": {
+    "deeper": 1978,
+    "ignores a threat": 171,
+    "mate in 1": 35,
+    "walks into a capture": 187
+   },
+   "mistakes": 2371,
+   "moves": 20350
+  },
+  "rapid|1400": {
+   "blunders": 826,
+   "by_phase": {
+    "endgame": [
+     5625,
+     421
+    ],
+    "middlegame": [
+     9176,
+     1305
+    ],
+    "opening": [
+     6050,
+     494
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5753,
+     728
+    ],
+    "behind": [
+     4832,
+     284
+    ],
+    "level": [
+     10266,
+     1208
+    ]
+   },
+   "games": 605,
+   "kinds": {
+    "deeper": 1900,
+    "ignores a threat": 144,
+    "mate in 1": 35,
+    "walks into a capture": 141
+   },
+   "mistakes": 2220,
+   "moves": 20851
+  },
+  "rapid|1600": {
+   "blunders": 756,
+   "by_phase": {
+    "endgame": [
+     5323,
+     401
+    ],
+    "middlegame": [
+     9576,
+     1328
+    ],
+    "opening": [
+     5980,
+     353
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5368,
+     706
+    ],
+    "behind": [
+     4136,
+     221
+    ],
+    "level": [
+     11375,
+     1155
+    ]
+   },
+   "games": 598,
+   "kinds": {
+    "deeper": 1823,
+    "ignores a threat": 107,
+    "mate in 1": 20,
+    "walks into a capture": 132
+   },
+   "mistakes": 2082,
+   "moves": 20879
+  },
+  "rapid|1800": {
+   "blunders": 735,
+   "by_phase": {
+    "endgame": [
+     5869,
+     402
+    ],
+    "middlegame": [
+     11284,
+     1485
+    ],
+    "opening": [
+     6460,
+     302
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     5632,
+     697
+    ],
+    "behind": [
+     4789,
+     238
+    ],
+    "level": [
+     13192,
+     1254
+    ]
+   },
+   "games": 646,
+   "kinds": {
+    "deeper": 1936,
+    "ignores a threat": 118,
+    "mate in 1": 26,
+    "walks into a capture": 109
+   },
+   "mistakes": 2189,
+   "moves": 23613
+  },
+  "rapid|2000": {
+   "blunders": 514,
+   "by_phase": {
+    "endgame": [
+     6855,
+     372
+    ],
+    "middlegame": [
+     10680,
+     1126
+    ],
+    "opening": [
+     6200,
+     202
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     4877,
+     505
+    ],
+    "behind": [
+     4215,
+     184
+    ],
+    "level": [
+     14643,
+     1011
+    ]
+   },
+   "games": 620,
+   "kinds": {
+    "deeper": 1529,
+    "ignores a threat": 73,
+    "mate in 1": 15,
+    "walks into a capture": 83
+   },
+   "mistakes": 1700,
+   "moves": 23735
+  },
+  "rapid|2200": {
+   "blunders": 417,
+   "by_phase": {
+    "endgame": [
+     7534,
+     393
+    ],
+    "middlegame": [
+     10885,
+     940
+    ],
+    "opening": [
+     6290,
+     123
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     4855,
+     416
+    ],
+    "behind": [
+     4249,
+     182
+    ],
+    "level": [
+     15605,
+     858
+    ]
+   },
+   "games": 629,
+   "kinds": {
+    "deeper": 1294,
+    "ignores a threat": 74,
+    "mate in 1": 13,
+    "walks into a capture": 75
+   },
+   "mistakes": 1456,
+   "moves": 24709
+  },
+  "rapid|2400": {
+   "blunders": 217,
+   "by_phase": {
+    "endgame": [
+     6568,
+     263
+    ],
+    "middlegame": [
+     9248,
+     523
+    ],
+    "opening": [
+     5060,
+     40
+    ]
+   },
+   "by_situation": {
+    "ahead": [
+     4288,
+     243
+    ],
+    "behind": [
+     2866,
+     103
+    ],
+    "level": [
+     13722,
+     480
+    ]
+   },
+   "games": 506,
+   "kinds": {
+    "deeper": 749,
+    "ignores a threat": 28,
+    "mate in 1": 4,
+    "walks into a capture": 45
+   },
+   "mistakes": 826,
+   "moves": 20876
+  }
+ },
+ "mistake": 0.1,
+ "multipv": 5,
+ "nodes": 100000,
+ "source": "Lichess standard rated, 2026-06",
+ "version": 1
+}

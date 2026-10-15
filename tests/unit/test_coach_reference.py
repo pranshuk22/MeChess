@@ -171,3 +171,15 @@ def test_the_commands_pick_games_analyse_nothing_and_count(tmp_path, monkeypatch
     ref = R.load(tmp_path / "r.json")
     assert ref["nodes"] == 123 and sum(c["games"] for c in ref["cells"].values()) == 2 * n and all(k.startswith("blitz|") for k in ref["cells"])
     assert all(c["mistakes"] * 2 == c["moves"] for c in ref["cells"].values())                # every second move lost 0.3
+
+
+def test_the_packaged_reference_counts_are_there_are_plain_counts_and_fall_with_rating():
+    """The counts made on Kaggle (Lichess standard rated games, one month, analysed with the coach's own settings) ship with the package: counts only, no games, no names."""
+    ref = R.load()
+    assert ref is not None and ref["version"] == 1 and ref["nodes"] == 100_000 and ref["multipv"] == 5
+    assert len(ref["cells"]) == 16 and sum(c["moves"] for c in ref["cells"].values()) > 300_000
+    text = open(R.DEFAULT, encoding="utf-8").read()
+    assert "http" not in text and "lichess.org" not in text                                           # nothing but numbers and category names
+    for speed in R.SPEEDS:
+        rates = [ref["cells"][f"{speed}|{b}"]["mistakes"] / ref["cells"][f"{speed}|{b}"]["moves"] for b in range(R.LOWEST, R.HIGHEST + 1, R.BAND)]
+        assert rates[0] > rates[-1] * 1.5 and all(r > 0 for r in rates)                                   # stronger players give away points less often
