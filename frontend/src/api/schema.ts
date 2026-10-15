@@ -64,6 +64,10 @@ export interface DayCount {
   games: number;
 }
 
+export interface EndgameStart {
+  theme: string;
+}
+
 export interface EngineLine {
   uci: string;
   cp: number;
@@ -117,6 +121,10 @@ export interface GameSummary {
   spark: number[];
 }
 
+export interface Hint {
+  level: number;
+}
+
 export interface ImportPgn {
   text: string;
   player?: string | null;
@@ -164,6 +172,12 @@ export interface MoveBody {
   uci: string;
 }
 
+export interface OpeningStart {
+  pgn: string;
+  colour: string;
+  rating: number;
+}
+
 export interface OpeningStat {
   name: string;
   colour: string;
@@ -177,9 +191,19 @@ export interface PhaseAccuracy {
   endgame: number | null;
 }
 
+export interface PlayedMove {
+  uci: string;
+}
+
 export interface RatingPoint {
   date: string;
   rating: number;
+}
+
+export interface RepertoireBody {
+  name: string;
+  colour: string;
+  pgn: string;
 }
 
 export interface Results {
@@ -231,6 +255,11 @@ export interface Stats {
   accuracy: AccuracyStats;
   mistakesPerGame: MistakeStats;
   openings: OpeningStat[];
+}
+
+export interface SteerStart {
+  colour: string;
+  foci: Record<string, number>;
 }
 
 export interface Workspace {

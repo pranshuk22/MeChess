@@ -10,7 +10,7 @@ from ..services import coach as CO
 router = APIRouter(prefix="/api/coach")
 
 
-class Move(BaseModel):
+class PlayedMove(BaseModel):
     uci: str
 
 
@@ -110,7 +110,7 @@ def opening_coverage(body: OpeningStart, request: Request):
 
 
 @router.post("/openings/{sid}/move")
-def opening_move(sid: str, body: Move, request: Request):
+def opening_move(sid: str, body: PlayedMove, request: Request):
     return run(request, "opening_move", sid, body.uci)
 
 
@@ -147,7 +147,7 @@ def endgame_start(body: EndgameStart, request: Request):
 
 
 @router.post("/endgames/{sid}/move")
-def endgame_move(sid: str, body: Move, request: Request):
+def endgame_move(sid: str, body: PlayedMove, request: Request):
     return run(request, "endgame_act", sid, "move", {"uci": body.uci})
 
 
@@ -172,7 +172,7 @@ def steer_start(body: SteerStart, request: Request):
 
 
 @router.post("/steer/{sid}/move")
-def steer_move(sid: str, body: Move, request: Request):
+def steer_move(sid: str, body: PlayedMove, request: Request):
     return run(request, "steer_move", sid, body.uci)
 
 

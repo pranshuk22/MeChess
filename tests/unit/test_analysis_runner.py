@@ -123,7 +123,7 @@ def test_engine_search_reads_multipv_lines_from_an_engine():
         sent = []
         def _send(self, s): self.sent.append(s)
         def ready(self): pass
-        def go(self, fen, moves, nodes=None): 
+        def go(self, fen, moves, nodes=None, timeout=None):
             self.last = (fen, list(moves), nodes)
             return SimpleNamespace(lines=[line("e2e4", 30)], bestmove="e2e4", score=30, score_kind="cp", pv=["e2e4"])
     eng = FakeEngine()

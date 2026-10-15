@@ -24,7 +24,7 @@ it printed.
 | `--host ADDR` | listen address (default 127.0.0.1); only for use inside a container |
 | `--dev` | also accept the Vite dev server on `localhost:5173..5180` |
 
-For development: `cd frontend && npm install && npm run dev:all` starts the server and the hot-reloading pages together and prints the address to open
+For development: `cd frontend && npm install && npm run dev:all` starts the server and the hot-reloading pages together and prints the address to open (the access key changes every run; set `MECHESS_TOKEN=some-long-secret` before the command to keep the same address, so an open browser tab keeps working after a restart)
 ([ui.md](ui.md)).
 
 ### In a container

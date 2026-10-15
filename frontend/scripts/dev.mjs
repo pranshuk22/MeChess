@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const venv = resolve(root, ".venv/bin/python");
-const token = randomBytes(18).toString("base64url");                                  // the access key of this run
+const token = process.env.MECHESS_TOKEN ?? randomBytes(18).toString("base64url");     // the access key of this run (set MECHESS_TOKEN to keep the same address between runs)
 const python = process.env.MECHESS_PYTHON ?? (existsSync(venv) ? venv : "python3");
 
 const run = (name, cmd, args, opts) => {

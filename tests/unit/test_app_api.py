@@ -264,3 +264,10 @@ def test_insights_cover_calendar_phases_kinds_rating_colours_and_speeds(client):
     assert [r["rating"] for r in st["ratingSeries"]][-1] in (1500, 1510, 1520, 1530, 1540, 1550) and len(st["ratingSeries"]) == 6
     assert {c["name"] for c in st["colours"]} == {"white", "black"} and {c["name"] for c in st["speeds"]} == {"blitz", "rapid"}
     assert all(0 <= c["score"] <= 1 for c in st["colours"] + st["speeds"])
+
+
+def test_two_response_models_never_share_a_name(client):
+    """Regression: two models called `Move` made the OpenAPI names `Move-Input` / `Move-Output`, which is not valid TypeScript."""
+    import re
+    names = client.app.openapi()["components"]["schemas"]
+    assert all(re.fullmatch(r"[A-Za-z0-9_]+", n) for n in names), [n for n in names if not re.fullmatch(r"[A-Za-z0-9_]+", n)]
