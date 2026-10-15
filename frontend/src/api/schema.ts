@@ -27,7 +27,7 @@ export interface Check {
   title: string;
   state: string;
   detail: string;
-  action?: string | null;
+  action: string | null;
 }
 
 export interface GameDetail {
@@ -47,7 +47,7 @@ export interface GameDetail {
   analysed: boolean;
   accuracy: Accuracy | null;
   mistakes: number | null;
-  spark?: number[];
+  spark: number[];
   moves: Move[];
   pgn: string | null;
 }
@@ -74,7 +74,7 @@ export interface GameSummary {
   analysed: boolean;
   accuracy: Accuracy | null;
   mistakes: number | null;
-  spark?: number[];
+  spark: number[];
 }
 
 export interface ImportPgn {
@@ -114,8 +114,8 @@ export interface Move {
   winBefore: number;
   winAfter: number;
   cp: number;
-  acc?: number | null;
-  phase?: string | null;
+  acc: number | null;
+  phase: string | null;
 }
 
 export interface OpeningStat {
@@ -132,11 +132,11 @@ export interface Results {
 }
 
 export interface Settings {
-  engine_path?: string | null;
-  nodes?: number;
-  multipv?: number;
-  threads?: number;
-  hash_mb?: number;
+  engine_path: string | null;
+  nodes: number;
+  multipv: number;
+  threads: number;
+  hash_mb: number;
 }
 
 export interface SettingsPatch {

@@ -1,7 +1,7 @@
 import { formatEval, winPercent } from "@/lib/types";
 
 /** White's share of the bar grows with the evaluation; the value is printed beside it. Dark track, white fill, outlined: it reads on any page colour. */
-export function EvalBar({ cp, orientation }: { cp: number; orientation: "white" | "black" }) {
+export function EvalBar({ cp, orientation, muted = false }: { cp: number; orientation: "white" | "black"; muted?: boolean }) {
   const white = winPercent(cp);
   const flipped = orientation === "black";
   return (
@@ -9,7 +9,7 @@ export function EvalBar({ cp, orientation }: { cp: number; orientation: "white" 
       <div className="evalbar w-full flex-1" role="img" aria-label={`Evaluation ${formatEval(cp)}`}>
         <div style={{ transform: `scaleY(${white / 100})`, transformOrigin: flipped ? "top" : "bottom", ...(flipped ? { top: 0, bottom: "auto" } : {}) }} />
       </div>
-      <span className="tnum -mx-2 text-[11px] font-semibold text-text">{formatEval(cp)}</span>
+      <span className="tnum font-display -mx-2 text-[10.5px] font-semibold text-text">{muted ? "–" : formatEval(cp)}</span>
     </div>
   );
 }

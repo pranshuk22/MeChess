@@ -51,3 +51,10 @@ export function uciToSan(fen: string, uci: string): string {
   const chess = new Chess(fen);
   try { return chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }).san; } catch { return uci; }
 }
+
+/** The moves of a PGN text (UCI and SAN), for games that have no analysis yet. */
+export function movesFromPgn(pgn: string): { uci: string; san: string }[] {
+  const chess = new Chess();
+  try { chess.loadPgn(pgn); } catch { return []; }
+  return chess.history({ verbose: true }).map((m) => ({ uci: m.from + m.to + (m.promotion ?? ""), san: m.san }));
+}

@@ -81,7 +81,7 @@ test("right-drag draws an arrow, right-click marks a square, a left click clears
 test("the app makes no request to any other host", async ({ page }) => {
   const hosts = new Set<string>();
   page.on("request", (r) => { const u = new URL(r.url()); if (u.protocol.startsWith("http")) hosts.add(u.host); });
-  for (const path of ["/", "/library", `/review/${GAME}`, "/settings"]) { await page.goto(path); await page.waitForLoadState("networkidle"); }
+  for (const path of ["/", "/library", `/review/${GAME}`, "/settings", "/activity"]) { await page.goto(path); await page.waitForLoadState("domcontentloaded"); await page.waitForTimeout(700); }
   expect([...hosts]).toEqual(["127.0.0.1:4173"]);
 });
 
@@ -96,16 +96,17 @@ test("dragging does not block the main thread", async ({ page }) => {
   expect(Math.max(0, ...long)).toBeLessThan(50);
 });
 
-test("a library of 10,000 games renders only the visible rows and scrolls", async ({ page }) => {
-  await page.goto("/library?stress=10000");
-  await expect(page.getByText("10,000 games")).toBeVisible();
+test("a library of 10,000 games renders only the visible rows, loads more while scrolling and stays fast", async ({ page }) => {
+  await page.goto("/library");
+  await expect(page.getByText(/10,0\d\d games/)).toBeVisible();
   const rows = await page.locator("a[role=row]").count();
   expect(rows).toBeLessThan(60);
   const t = await page.evaluate(async () => {
     const el = document.querySelector("[role=rowgroup]") as HTMLElement;
     const t0 = performance.now();
-    for (let k = 0; k < 40; k++) { el.scrollTop += 4000; await new Promise((r) => requestAnimationFrame(r)); }
+    for (let k = 0; k < 60; k++) { el.scrollTop += 3000; await new Promise((r) => requestAnimationFrame(r)); }
     return performance.now() - t0;
   });
-  expect(t).toBeLessThan(2000);                       // 40 frames of fast scrolling in well under 2 s even on a loaded machine
+  expect(t).toBeLessThan(2500);                       // 60 frames of fast scrolling, with more pages being fetched meanwhile
+  expect(await page.locator("a[role=row]").count()).toBeLessThan(60);
 });

@@ -1,101 +1,96 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
-import { Download, Search } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { useGames } from "@/api/games";
+import { Download, Library as LibraryIcon, Search, Sparkles } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAnalyse, useGamesInfinite, useStats } from "@/api/hooks";
 import { MiniEval } from "@/components/MiniEval";
 import { Button } from "@/components/ui/Button";
-import { Panel } from "@/components/ui/Panel";
-import { myAccuracy, opponent, outcome } from "@/lib/format";
-import type { GameRecord } from "@/lib/types";
-import { ImportDialog } from "./ImportDialog";
+import { Input } from "@/components/ui/Field";
+import { Badge, EmptyState, Skeleton } from "@/components/ui/Misc";
+import { PageHeader, Panel } from "@/components/ui/Panel";
+import { Segmented } from "@/components/ui/Segmented";
+import { formatDate, me, myAccuracy, mySide, opponent, outcome } from "@/lib/format";
+import { useDialogs } from "@/state/dialogs";
 
-const COLS = "grid-cols-[56px_minmax(160px,1.4fr)_64px_minmax(140px,1.6fr)_72px_100px_72px] max-md:grid-cols-[48px_1fr_56px]";
-const RESULT = { win: ["Win", "var(--q-best)"], loss: ["Loss", "var(--q-blunder)"], draw: ["Draw", "var(--faint)"] } as const;
+const COLS = "grid-cols-[64px_minmax(180px,1.5fr)_112px_minmax(150px,1.4fr)_72px_108px_104px] max-lg:grid-cols-[64px_minmax(0,1fr)_88px_92px]";
+const RESULT = { win: ["Win", "good"], loss: ["Loss", "bad"], draw: ["Draw", "neutral"], unknown: ["–", "neutral"] } as const;
+const ROW = 58;
 
 export function LibraryPage() {
-  const { data = [], isLoading } = useGames();
-  const [params] = useSearchParams();
-  const stress = Number(params.get("stress") || 0);                         // ?stress=10000 repeats the sample games to check that a long list stays smooth
   const [q, setQ] = useState("");
-  const [colour, setColour] = useState<"all" | "white" | "black">("all");
-  const [result, setResult] = useState<"all" | "win" | "loss" | "draw">("all");
-  const [open, setOpen] = useState(false);
-
-  const all = useMemo<GameRecord[]>(() => (stress && data.length ? Array.from({ length: stress }, (_, i) => data[i % data.length]) : data), [data, stress]);
-  const rows = useMemo(() => all.filter((g) => {
-    if (colour !== "all" && g.user !== colour) return false;
-    if (result !== "all" && outcome(g) !== result) return false;
-    const t = q.trim().toLowerCase();
-    return !t || `${g.white} ${g.black} ${g.opening} ${g.title ?? ""}`.toLowerCase().includes(t);
-  }), [all, q, colour, result]);
+  const [debounced, setDebounced] = useState("");
+  const [colour, setColour] = useState("all");
+  const [result, setResult] = useState("all");
+  const [analysed, setAnalysed] = useState("all");
+  useEffect(() => { const t = setTimeout(() => setDebounced(q), 250); return () => clearTimeout(t); }, [q]);
+  const filters = { q: debounced || undefined, colour: colour === "all" ? undefined : colour, result: result === "all" ? undefined : result, analysed: analysed === "all" ? undefined : analysed === "yes" };
+  const query = useGamesInfinite(filters);
+  const rows = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const total = query.data?.pages[0]?.total ?? 0;
+  const stats = useStats().data;
+  const setImportOpen = useDialogs((s) => s.setImportOpen);
+  const analyse = useAnalyse(), nav = useNavigate();
+  const todo = stats ? stats.games - stats.analysed : 0;
 
   const scroller = useRef<HTMLDivElement>(null);
-  const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => 52, overscan: 12 });
+  const v = useVirtualizer({ count: rows.length, getScrollElement: () => scroller.current, estimateSize: () => ROW, overscan: 10 });
+  const items = v.getVirtualItems();
+  const last = items.at(-1)?.index ?? 0;
+  useEffect(() => { if (last >= rows.length - 25 && query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); }, [last, rows.length, query]);   // eslint-disable-line react-hooks/exhaustive-deps
+  const filtered = !!(debounced || colour !== "all" || result !== "all" || analysed !== "all");
 
   return (
-    <div className="mx-auto flex h-full max-w-[1180px] flex-col gap-3 p-5 max-md:p-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or openings" aria-label="Search games"
-            className="h-9 w-64 rounded-md border border-border bg-surface pl-9 pr-3 text-[13.5px] outline-none placeholder:text-faint focus:border-accent max-md:w-full" />
-        </label>
-        <Seg label="Colour" value={colour} onChange={setColour} options={[["all", "Any colour"], ["white", "White"], ["black", "Black"]]} />
-        <Seg label="Result" value={result} onChange={setResult} options={[["all", "Any result"], ["win", "Wins"], ["loss", "Losses"], ["draw", "Draws"]]} />
-        <div className="ml-auto flex items-center gap-3">
-          <span className="tnum text-[12.5px] text-muted">{rows.length.toLocaleString()} games</span>
-          <Button variant="primary" onClick={() => setOpen(true)}><Download size={15} /> Import games</Button>
-        </div>
+    <div className="mx-auto flex h-full max-w-[1240px] flex-col px-8 py-8 max-md:px-4">
+      <PageHeader title="Library" sub={query.isLoading ? " " : `${total.toLocaleString()} game${total === 1 ? "" : "s"}${filtered ? " match" : ""}`}
+        actions={<>
+          {todo > 0 && <Button disabled={analyse.isPending} onClick={() => analyse.mutate({}, { onSuccess: () => nav("/activity") })}><Sparkles size={15} /> Analyse {todo.toLocaleString()} new</Button>}
+          <Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>
+        </>} />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="w-72 max-md:w-full"><Input icon={<Search size={15} />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or openings" aria-label="Search games" /></div>
+        <Segmented size="sm" label="Colour" value={colour} onChange={setColour} options={[["all", "Any colour"], ["white", "White"], ["black", "Black"]]} />
+        <Segmented size="sm" label="Result" value={result} onChange={setResult} options={[["all", "Any result"], ["win", "Wins"], ["loss", "Losses"], ["draw", "Draws"]]} />
+        <Segmented size="sm" label="Analysis" value={analysed} onChange={setAnalysed} options={[["all", "All"], ["yes", "Analysed"], ["no", "Not analysed"]]} />
       </div>
 
       <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className={clsx("grid gap-3 border-b border-border px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted", COLS)} role="row">
-          <span>Result</span><span>Opponent</span><span className="max-md:hidden">Acc.</span><span className="max-md:hidden">Opening</span><span className="max-md:hidden">Speed</span><span className="max-md:hidden">Evaluation</span><span className="text-right max-md:text-left">Year</span>
+        <div className={clsx("grid items-center gap-4 border-b border-border bg-surface-2/60 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.06em] text-muted", COLS)} role="row">
+          <span>Result</span><span>Opponent</span><span className="max-lg:hidden">Accuracy</span><span className="max-lg:hidden">Opening</span><span className="max-lg:hidden">Speed</span><span>Evaluation</span><span className="text-right">Date</span>
         </div>
         <div ref={scroller} className="min-h-0 flex-1 overflow-auto" role="rowgroup">
-          {isLoading && <div className="p-6 text-muted">Loading…</div>}
-          {!isLoading && rows.length === 0 && <Empty />}
+          {query.isLoading && Array.from({ length: 9 }, (_, i) => <div key={i} className="border-b border-border/60 px-5 py-3.5"><Skeleton className="h-7" /></div>)}
+          {query.isError && <p className="p-8 text-[13.5px] text-[var(--q-blunder)]">The library could not be loaded: {(query.error as Error).message}</p>}
+          {!query.isLoading && !query.isError && rows.length === 0 && (filtered
+            ? <EmptyState icon={Search} title="No games match" text="Clear the search or the filters to see all your games." />
+            : <EmptyState icon={LibraryIcon} title="Your library is empty" text="Import your games from Lichess, Chess.com or a PGN file to see them here." action={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />)}
           <div style={{ height: v.getTotalSize(), position: "relative" }}>
-            {v.getVirtualItems().map((it) => {
-              const g = rows[it.index], opp = opponent(g), [label, colourVar] = RESULT[outcome(g)];
+            {items.map((it) => {
+              const g = rows[it.index];
+              if (!g) return null;
+              const [label, tone] = RESULT[outcome(g)], opp = opponent(g), acc = myAccuracy(g), side = mySide(g);
               return (
-                <Link key={it.key} to={`/review/${g.id}`} role="row" style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)` }}
-                  className={clsx("grid items-center gap-3 border-b border-border/60 px-4 text-[13.5px] hover:bg-surface-2", COLS)}>
-                  <span className="text-[12.5px] font-semibold" style={{ color: colourVar }}>{label}</span>
-                  <span className="min-w-0"><span className="block truncate font-medium">{opp.name}</span><span className="tnum text-[12px] text-muted">{opp.elo} · you played {g.user}</span></span>
-                  <span className="tnum max-md:hidden">{myAccuracy(g).toFixed(0)}%</span>
-                  <span className="truncate text-muted max-md:hidden">{g.title ?? (g.opening || "—")}</span>
-                  <span className="capitalize text-muted max-md:hidden">{g.speed}</span>
-                  <span className="max-md:hidden"><MiniEval moves={g.moves} /></span>
-                  <span className="tnum text-right text-muted max-md:text-left">{g.year}</span>
+                <Link key={g.id} to={`/review/${encodeURIComponent(g.id)}`} role="row" style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)` }}
+                  className={clsx("grid items-center gap-4 border-b border-border/60 px-5 text-[13.5px] transition-colors hover:bg-surface-2/70", COLS)}>
+                  <Badge tone={tone} className="justify-center">{label}</Badge>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-2"><span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full border", side === "white" ? "border-[var(--border-strong)] bg-white" : "border-transparent bg-[#2b3139]")} title={`You played ${side}`} /><span className="truncate font-medium">{opp.name}</span></span>
+                    <span className="tnum block truncate pl-[18px] text-[12px] text-muted">{opp.elo ?? "unrated"} · you {me(g).elo ?? ""}</span>
+                  </span>
+                  <span className="max-lg:hidden">
+                    {acc === null ? <span className="text-[12.5px] text-faint">not analysed</span> : <span className="flex items-center gap-2"><span className="tnum w-9 text-[13px] font-medium">{acc.toFixed(0)}%</span><span className="h-1 w-12 overflow-hidden rounded-full bg-sunken"><span className="block h-full rounded-full bg-accent" style={{ width: `${acc}%` }} /></span></span>}
+                  </span>
+                  <span className="min-w-0 max-lg:hidden"><span className="block truncate">{g.title ?? (g.opening || "—")}</span>{g.title && g.opening && <span className="block truncate text-[12px] text-muted">{g.opening}</span>}</span>
+                  <span className="text-muted capitalize max-lg:hidden">{g.speed ?? ""}</span>
+                  <span><MiniEval cps={g.spark} /></span>
+                  <span className="tnum text-right text-[12.5px] text-muted">{formatDate(g.date)}</span>
                 </Link>
               );
             })}
           </div>
+          {query.isFetchingNextPage && <div className="p-3 text-center text-[12.5px] text-faint">Loading more…</div>}
         </div>
       </Panel>
-      <ImportDialog open={open} onOpenChange={setOpen} />
-    </div>
-  );
-}
-
-function Seg<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: [T, string][] }) {
-  return (
-    <div role="group" aria-label={label} className="inline-flex rounded-md border border-border bg-surface p-0.5">
-      {options.map(([v, l]) => (
-        <button key={v} onClick={() => onChange(v)} aria-pressed={value === v} className={clsx("h-8 rounded px-2.5 text-[12.5px] font-medium cursor-pointer", value === v ? "bg-accent-soft text-accent" : "text-muted hover:text-text")}>{l}</button>
-      ))}
-    </div>
-  );
-}
-
-function Empty() {
-  return (
-    <div className="grid place-items-center gap-2 p-14 text-center">
-      <p className="text-[15px] font-medium">No games match.</p>
-      <p className="max-w-sm text-muted">Clear the filters, or import more games from Lichess, Chess.com or a PGN file.</p>
     </div>
   );
 }

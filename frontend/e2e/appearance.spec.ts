@@ -6,25 +6,31 @@ test("the website is light by default, even when the system prefers dark", async
   const page = await ctx.newPage();
   await page.goto("/");
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
-  expect(await page.evaluate(() => document.documentElement.dataset.palette)).toBe("glacier");
+  expect(await page.evaluate(() => document.documentElement.dataset.palette)).toBe("catppuccin");
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).toBe("rgb(243, 245, 247)");
+  expect(bg).toBe("rgb(239, 241, 245)");                                            // Catppuccin Latte base
   await ctx.close();
 });
 
 test("every palette has a light and a dark mode, and the choice is remembered", async ({ page }) => {
   await page.goto("/settings");
-  const seen = new Set<string>();
-  for (const palette of ["Glacier", "Paper", "Forest", "Graphite"]) {
+  const names = ["Catppuccin", "Macchiato", "Glacier", "Paper", "Forest", "Graphite"];
+  const accents = new Set<string>();
+  for (const palette of names) {
     await page.getByRole("button", { name: palette, exact: true }).click();
+    const bgs: string[] = [];
     for (const mode of ["light", "dark"]) {
       await page.getByRole("button", { name: mode, exact: true }).click();
-      const d = await page.evaluate(() => ({ t: document.documentElement.dataset.theme, p: document.documentElement.dataset.palette, bg: getComputedStyle(document.body).backgroundColor, accent: getComputedStyle(document.documentElement).getPropertyValue("--accent") }));
+      const d = await page.evaluate(() => ({ t: document.documentElement.dataset.theme, bg: getComputedStyle(document.body).backgroundColor, accent: getComputedStyle(document.documentElement).getPropertyValue("--accent").trim(), text: getComputedStyle(document.body).color }));
       expect(d.t).toBe(mode);
-      seen.add(`${d.p}/${d.t}/${d.bg}`);
+      expect(d.accent).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(d.bg).not.toBe(d.text);
+      bgs.push(d.bg);
+      accents.add(`${palette}/${mode}/${d.accent}`);
     }
+    expect(bgs[0]).not.toBe(bgs[1]);                                                  // light and dark really differ
   }
-  expect(seen.size).toBe(8);                                                        // eight different page backgrounds: nothing falls back to another palette
+  expect(accents.size).toBe(12);
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   await page.getByRole("button", { name: "dark", exact: true }).click();
   await page.reload();
@@ -60,7 +66,7 @@ test("board and piece themes change the board and are remembered", async ({ page
 
 test("the evaluation bar stands out from the page in every palette and mode", async ({ page }) => {
   await page.goto("/review/s03");
-  for (const [palette, mode] of [["glacier", "light"], ["paper", "light"], ["forest", "dark"], ["graphite", "dark"]]) {
+  for (const [palette, mode] of [["catppuccin", "light"], ["catppuccin", "dark"], ["paper", "light"], ["graphite", "dark"]]) {
     await page.evaluate(([p, m]) => { document.documentElement.dataset.palette = p; document.documentElement.dataset.theme = m; }, [palette, mode]);
     const c = await page.locator(".evalbar").evaluate((el) => { const s = getComputedStyle(el); return { track: s.backgroundColor, outline: s.boxShadow, page: getComputedStyle(document.body).backgroundColor }; });
     expect(c.track).toBe("rgb(43, 49, 57)");

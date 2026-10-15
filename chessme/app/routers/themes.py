@@ -2,6 +2,7 @@
 The player's own files (for example images they are allowed to use for themselves) never enter the repository. Uploads are validated: size, type, and no scripts in SVG."""
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import FileResponse
@@ -44,10 +45,10 @@ def list_themes(request: Request):
         for d in sorted(p for p in pieces_dir.iterdir() if p.is_dir() and NAME.fullmatch(p.name)):
             files = {f.stem: f.name for f in d.iterdir() if f.suffix.lower() in EXT and f.stem in PIECES}
             if len(files) == 12:
-                pieces.append({"id": d.name, "name": d.name, "files": {k: f"/api/themes/pieces/{d.name}/{v}" for k, v in files.items()}})
+                pieces.append({"id": d.name, "name": d.name, "files": {k: f"/api/themes/pieces/{quote(d.name)}/{quote(v)}" for k, v in files.items()}})
     boards = []
     if boards_dir.is_dir():
-        boards = [{"id": f.stem, "name": f.stem, "url": f"/api/themes/boards/{f.name}"} for f in sorted(boards_dir.iterdir()) if f.suffix.lower() in EXT and NAME.fullmatch(f.name)]
+        boards = [{"id": f.stem, "name": f.stem, "url": f"/api/themes/boards/{quote(f.name)}"} for f in sorted(boards_dir.iterdir()) if f.suffix.lower() in EXT and NAME.fullmatch(f.name)]
     return {"pieces": pieces, "boards": boards, "pieces_dir": str(pieces_dir), "boards_dir": str(boards_dir)}
 
 

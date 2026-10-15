@@ -5,12 +5,12 @@ export interface AnalysedMove {
   cp: number;                                   // evaluation after the move, white's point of view, centipawns
   acc?: number; phase?: string;                 // the move's accuracy (0..100) and the phase of the game
 }
-export interface GameRecord {
-  id: string; white: string; black: string; whiteElo: number | null; blackElo: number | null; result: string; year: number;
-  speed: string; opening: string; user: "white" | "black"; title?: string;
-  accuracy: { white: number; black: number };
-  moves: AnalysedMove[];
-}
+import type * as S from "@/api/schema";
+
+export type Side = "white" | "black";
+export type GameSummary = Omit<S.GameSummary, "user"> & { user: Side | null };
+export type GameDetail = Omit<S.GameDetail, "moves" | "user"> & { user: Side | null; moves: AnalysedMove[] };
+export type { S };
 export const BAD: MoveClass[] = ["inaccuracy", "mistake", "miss", "blunder"];
 export const SYMBOL: Partial<Record<MoveClass, string>> = { brilliant: "!!", great: "!", inaccuracy: "?!", mistake: "?", miss: "?", blunder: "??" };
 export const CLASS_LABEL: Record<MoveClass, string> = {

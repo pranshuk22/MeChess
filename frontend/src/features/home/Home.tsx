@@ -1,81 +1,168 @@
-import { ArrowRight, Check, CircleAlert, Minus } from "lucide-react";
-import { Link } from "react-router-dom";
-import { useGames } from "@/api/games";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CircleAlert, Download, Minus, Sparkles, Swords } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useAnalyse, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
 import { Board } from "@/board/Board";
 import { MiniEval } from "@/components/MiniEval";
+import { Spark } from "@/components/Spark";
 import { Button } from "@/components/ui/Button";
-import { Panel, PanelTitle } from "@/components/ui/Panel";
-import { myAccuracy, opponent, outcome } from "@/lib/format";
-import { fensFromUci } from "@/lib/game";
-import { BAD } from "@/lib/types";
+import { Badge, EmptyState, Skeleton, Stat } from "@/components/ui/Misc";
+import { PageHeader, Panel, PanelTitle } from "@/components/ui/Panel";
+import { formatDate, myAccuracy, opponent, outcome } from "@/lib/format";
+import { fensFromUci, START_FEN } from "@/lib/game";
+import { useDialogs } from "@/state/dialogs";
+import type { GameSummary, S } from "@/lib/types";
 import { useMemo } from "react";
 
-const CHECKS: [string, "ok" | "todo" | "off", string][] = [
-  ["Stockfish engine", "ok", "found"],
-  ["Games imported", "ok", "12 sample games"],
-  ["Games analysed", "ok", "12 of 12"],
-  ["Opening explorer", "off", "not built: optional"],
-  ["Endgame tablebases", "off", "not found: optional"],
-  ["Your personal model", "todo", "not trained yet"],
-];
+const RESULT = { win: ["Win", "good"], loss: ["Loss", "bad"], draw: ["Draw", "neutral"], unknown: ["–", "neutral"] } as const;
+
+function Delta({ now, before, invert = false, unit = "" }: { now: number | null; before: number | null; invert?: boolean; unit?: string }) {
+  if (now === null || before === null) return <span className="text-[12px] text-faint">needs more games</span>;
+  const d = now - before, good = invert ? d < 0 : d > 0;
+  if (Math.abs(d) < 0.05) return <span className="inline-flex items-center gap-1 text-[12px] text-muted"><Minus size={13} /> no change</span>;
+  const Icon = d > 0 ? ArrowUpRight : ArrowDownRight;
+  return <span className="inline-flex items-center gap-1 text-[12px] font-medium" style={{ color: good ? "var(--q-best)" : "var(--q-mistake)" }}><Icon size={14} /> {Math.abs(d).toFixed(1)}{unit} vs the 20 before</span>;
+}
 
 export function HomePage() {
-  const { data: games = [] } = useGames();
-  const featured = games[3] ?? games[0];
-  const mistakes = featured ? featured.moves.filter((m, i) => (i % 2 === 0) === (featured.user === "white") && BAD.includes(m.cls) && m.loss >= 0.1).length : 0;
-  const fen = useMemo(() => (featured ? fensFromUci(featured.moves.slice(0, 22).map((m) => m.uci)).at(-1)! : ""), [featured]);
+  const stats = useStats(), ws = useWorkspace(), recent = useGamesPage({}, 7);
+  const setImportOpen = useDialogs((s) => s.setImportOpen);
+  const empty = stats.data && stats.data.games === 0 && !ws.isLoading && !ws.data?.checks.some((c) => c.id === "legacy");
   return (
-    <div className="mx-auto grid max-w-[1120px] grid-cols-[minmax(0,1fr)_340px] gap-5 p-6 max-lg:grid-cols-1 max-md:p-3">
-      <div className="space-y-5">
-        {featured && (
-          <Panel className="grid grid-cols-[200px_1fr] gap-5 p-5 max-sm:grid-cols-1">
-            <div className="max-sm:w-48"><Board fen={fen} orientation={featured.user} showCoords={false} /></div>
-            <div className="flex flex-col">
-              <div className="text-[12px] font-semibold uppercase tracking-wide text-muted">Next step</div>
-              <h2 className="mt-1 text-[19px] font-semibold leading-tight">Learn from your last game</h2>
-              <p className="mt-2 text-muted">You gave away points in {mistakes} moves against {opponent(featured).name}. Replay them one by one, find the better move, and see why it is better.</p>
-              <div className="mt-auto flex gap-2 pt-4">
-                <Link to={`/review/${featured.id}`}><Button variant="primary">Review the game <ArrowRight size={15} /></Button></Link>
-                <Link to="/library"><Button variant="ghost">All games</Button></Link>
-              </div>
-            </div>
-          </Panel>
-        )}
-        <Panel>
-          <PanelTitle right={<Link to="/library" className="text-[12.5px] text-accent hover:underline">See all</Link>}>Recent games</PanelTitle>
-          <div className="pb-2">
-            {games.slice(0, 6).map((g) => (
-              <Link key={g.id} to={`/review/${g.id}`} className="grid grid-cols-[52px_1fr_auto_100px] items-center gap-3 px-4 py-2.5 hover:bg-surface-2 max-sm:grid-cols-[52px_1fr_auto]">
-                <span className="text-[12.5px] font-semibold" style={{ color: { win: "var(--q-best)", loss: "var(--q-blunder)", draw: "var(--faint)" }[outcome(g)] }}>{{ win: "Win", loss: "Loss", draw: "Draw" }[outcome(g)]}</span>
-                <span className="min-w-0 truncate"><b className="font-medium">{opponent(g).name}</b> <span className="text-muted">· {g.title ?? g.opening}</span></span>
-                <span className="tnum text-[12.5px] text-muted">{myAccuracy(g).toFixed(0)}%</span>
-                <span className="max-sm:hidden"><MiniEval moves={g.moves} /></span>
-              </Link>
-            ))}
+    <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
+      <PageHeader title="Overview" sub="How you are playing, from your own analysed games." actions={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />
+      {empty ? (
+        <Panel><EmptyState icon={Swords} title="Bring in your games" text="Import your games from Lichess, Chess.com or a PGN file. They are analysed on this computer and never leave it." action={<Button variant="primary" size="lg" onClick={() => setImportOpen(true)}><Download size={16} /> Import games</Button>} /></Panel>
+      ) : (<>
+        <StatRow stats={stats.data} loading={stats.isLoading} />
+        <div className="mt-5 grid grid-cols-[minmax(0,1fr)_360px] gap-5 max-lg:grid-cols-1">
+          <div className="space-y-5">
+            <NextStep ws={ws.data} games={recent.data?.items ?? []} />
+            <RecentGames games={recent.data?.items} loading={recent.isLoading} total={recent.data?.total ?? 0} />
+            {!!stats.data?.openings.length && <Openings openings={stats.data.openings} />}
           </div>
-        </Panel>
-      </div>
-
-      <div className="space-y-5">
-        <Panel>
-          <PanelTitle>Practice due</PanelTitle>
-          <div className="px-4 pb-4">
-            <p className="text-[13.5px] text-muted">Positions from your own mistakes come back here after a day, then after longer gaps once you get them right.</p>
-            <Link to="/coach"><Button className="mt-3 w-full">Start 5 positions</Button></Link>
+          <div className="space-y-5">
+            <Workspace ws={ws.data} loading={ws.isLoading} />
+            <Panel>
+              <PanelTitle sub="Positions from your own mistakes">Practice</PanelTitle>
+              <div className="px-5 pb-5"><p className="text-[13.5px] text-muted">They come back after a day, then after longer gaps once you get them right.</p><Link to="/coach"><Button className="mt-3 w-full">Open the coach</Button></Link></div>
+            </Panel>
           </div>
-        </Panel>
-        <Panel>
-          <PanelTitle>Your workspace</PanelTitle>
-          <ul className="px-4 pb-3">
-            {CHECKS.map(([name, state, note]) => (
-              <li key={name} className="flex items-center gap-2.5 border-t border-border/60 py-2 first:border-t-0 text-[13.5px]">
-                {state === "ok" ? <Check size={16} className="text-[var(--q-best)]" /> : state === "todo" ? <CircleAlert size={16} className="text-[var(--q-inaccuracy)]" /> : <Minus size={16} className="text-faint" />}
-                <span className="flex-1">{name}</span><span className="text-[12.5px] text-muted">{note}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      </div>
+        </div>
+      </>)}
     </div>
+  );
+}
+
+function StatRow({ stats, loading }: { stats?: S.Stats; loading: boolean }) {
+  if (loading || !stats) return <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[108px] rounded-[12px]" />)}</div>;
+  const r = stats.results, played = r.win + r.draw + r.loss;
+  return (
+    <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">
+      <Stat label="Games" value={stats.games.toLocaleString()} sub={`${stats.analysed.toLocaleString()} analysed`} />
+      <Stat label="Accuracy" value={stats.accuracy.recent === null ? "–" : stats.accuracy.recent.toFixed(1)} sub={<Delta now={stats.accuracy.recent} before={stats.accuracy.previous} unit="" />}><Spark values={stats.accuracy.series} domain={[Math.max(0, Math.min(...(stats.accuracy.series.length ? stats.accuracy.series : [50])) - 5), 100]} /></Stat>
+      <Stat label="Mistakes per game" value={stats.mistakesPerGame.recent === null ? "–" : stats.mistakesPerGame.recent.toFixed(1)} sub={<Delta now={stats.mistakesPerGame.recent} before={stats.mistakesPerGame.previous} invert />} />
+      <Stat label="Results" value={played ? `${Math.round((100 * (r.win + r.draw / 2)) / played)}%` : "–"} sub={played ? `${r.win} wins · ${r.draw} draws · ${r.loss} losses` : "no results yet"}>
+        {played > 0 && <div className="mb-1 flex h-9 w-2.5 flex-col-reverse overflow-hidden rounded-full" aria-hidden><span style={{ height: `${(100 * r.win) / played}%`, background: "var(--q-best)" }} /><span style={{ height: `${(100 * r.draw) / played}%`, background: "var(--faint)" }} /><span style={{ height: `${(100 * r.loss) / played}%`, background: "var(--q-blunder)" }} /></div>}
+      </Stat>
+    </div>
+  );
+}
+
+function NextStep({ ws, games }: { ws?: S.Workspace; games: GameSummary[] }) {
+  const setImportOpen = useDialogs((s) => s.setImportOpen);
+  const legacy = useImportLegacy(), analyse = useAnalyse(), nav = useNavigate();
+  const step = ws?.next_step;
+  const featured = games.find((g) => g.analysed && (g.mistakes ?? 0) > 0) ?? games[0];
+  const detail = useGame(featured?.analysed ? featured.id : undefined).data;
+  const fen = useMemo(() => {                                                          // the position just before the player's biggest mistake, or the start
+    if (!detail || !detail.moves.length) return START_FEN;
+    const mine = detail.moves.map((m, i) => ({ m, i })).filter(({ m, i }) => (i % 2 === 0) === (detail.user !== "black") && m.loss >= 0.1).sort((a, b) => b.m.loss - a.m.loss)[0];
+    return fensFromUci(detail.moves.map((m) => m.uci))[mine ? mine.i : Math.min(20, detail.moves.length)];
+  }, [detail]);
+  let title = "Learn from your last game", text: React.ReactNode = featured ? <>You gave away points in <b className="text-text">{featured.mistakes ?? 0} moves</b> against {opponent(featured).name}. Replay them one by one, find the better move, and see why it is better.</> : "Review a game to see where points were lost.";
+  let cta: React.ReactNode = featured ? <Link to={`/review/${encodeURIComponent(featured.id)}`}><Button variant="primary" size="lg">Review the game <ArrowRight size={16} /></Button></Link> : null;
+  if (step === "set-engine") { title = "Set up the engine"; text = "Analysis needs Stockfish. Install it, then tell MeChess where it is in Settings."; cta = <Link to="/settings"><Button variant="primary" size="lg">Open Settings</Button></Link>; }
+  else if (step === "import-legacy") { title = "Bring in your earlier work"; text = "Analysed games from the coach and the command-line tools were found on this computer. Import them into your library."; cta = <Button variant="primary" size="lg" disabled={legacy.isPending} onClick={() => legacy.mutate(undefined, { onSuccess: () => nav("/activity") })}>Import earlier work</Button>; }
+  else if (step === "import") { title = "Import your games"; text = "Add your games from Lichess, Chess.com or a PGN file."; cta = <Button variant="primary" size="lg" onClick={() => setImportOpen(true)}>Import games</Button>; }
+  else if (step === "analyse") { title = "Analyse your games"; text = "Some games have no analysis yet. Analysis runs in the background; you can keep using the app."; cta = <Button variant="primary" size="lg" disabled={analyse.isPending} onClick={() => analyse.mutate({}, { onSuccess: () => nav("/activity"), onError: () => undefined })}>Analyse new games</Button>; }
+  return (
+    <Panel className="relative overflow-hidden">
+      <div className="grid grid-cols-[212px_1fr] items-center gap-6 p-5 max-sm:grid-cols-1">
+        <div className="w-[212px] max-sm:w-44"><Board fen={fen} orientation={featured?.user === "black" ? "black" : "white"} showCoords={false} /></div>
+        <div>
+          <Badge tone="accent"><Sparkles size={12} className="mr-1" /> Next step</Badge>
+          <h2 className="mt-3 text-[21px] font-semibold leading-7 tracking-[-0.025em]">{title}</h2>
+          <p className="mt-2 max-w-[46ch] text-[14px] text-muted">{text}</p>
+          {cta && <div className="mt-5">{cta}</div>}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function RecentGames({ games, loading, total }: { games?: GameSummary[]; loading: boolean; total: number }) {
+  return (
+    <Panel>
+      <PanelTitle right={<Link to="/library" className="text-[12.5px] font-medium text-accent hover:underline">All {total.toLocaleString()} games</Link>}>Recent games</PanelTitle>
+      <div className="pb-2">
+        {loading && [0, 1, 2, 3].map((i) => <div key={i} className="px-5 py-3"><Skeleton className="h-8" /></div>)}
+        {games?.map((g) => {
+          const [label, tone] = RESULT[outcome(g)], opp = opponent(g), acc = myAccuracy(g);
+          return (
+            <Link key={g.id} to={`/review/${encodeURIComponent(g.id)}`} className="grid grid-cols-[56px_minmax(0,1fr)_56px_96px] items-center gap-4 px-5 py-2.5 transition-colors hover:bg-surface-2 max-sm:grid-cols-[56px_1fr_56px]">
+              <Badge tone={tone} className="justify-center">{label}</Badge>
+              <span className="min-w-0"><span className="block truncate text-[13.5px] font-medium">{opp.name}{opp.elo ? <span className="font-normal text-muted"> · {opp.elo}</span> : null}</span><span className="block truncate text-[12px] text-muted">{g.title ?? g.opening ?? "Opening unknown"} · {formatDate(g.date)}</span></span>
+              <span className="tnum text-right text-[13px] font-medium">{acc === null ? <span className="text-faint">–</span> : `${acc.toFixed(0)}%`}</span>
+              <span className="justify-self-end max-sm:hidden"><MiniEval cps={g.spark} /></span>
+            </Link>
+          );
+        })}
+        {games && games.length === 0 && <p className="px-5 py-6 text-[13.5px] text-muted">No games yet.</p>}
+      </div>
+    </Panel>
+  );
+}
+
+function Openings({ openings }: { openings: S.OpeningStat[] }) {
+  return (
+    <Panel>
+      <PanelTitle sub="Your most played openings and how you score with them">Openings</PanelTitle>
+      <div className="px-5 pb-4">
+        {openings.map((o) => (
+          <div key={o.name + o.colour} className="grid grid-cols-[minmax(0,1fr)_72px_120px] items-center gap-4 border-t border-border/70 py-2.5 first:border-t-0 text-[13.5px]">
+            <span className="truncate font-medium">{o.name} <span className="font-normal text-muted capitalize">· {o.colour}</span></span>
+            <span className="tnum text-right text-muted">{o.games} games</span>
+            <span className="flex items-center gap-2"><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-sunken"><span className="block h-full rounded-full" style={{ width: `${o.score * 100}%`, background: o.score >= 0.5 ? "var(--q-best)" : "var(--q-mistake)" }} /></span><span className="tnum w-9 text-right text-[12.5px]">{Math.round(o.score * 100)}%</span></span>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
+  const setImportOpen = useDialogs((s) => s.setImportOpen);
+  const legacy = useImportLegacy(), analyse = useAnalyse(), nav = useNavigate();
+  const act = (a?: string | null) => {
+    if (a === "import") return <Button size="sm" onClick={() => setImportOpen(true)}>Import</Button>;
+    if (a === "analyse") return <Button size="sm" disabled={analyse.isPending} onClick={() => analyse.mutate({}, { onSuccess: () => nav("/activity") })}>Analyse</Button>;
+    if (a === "import-legacy") return <Button size="sm" disabled={legacy.isPending} onClick={() => legacy.mutate(undefined, { onSuccess: () => nav("/activity") })}>Import</Button>;
+    if (a === "set-engine") return <Link to="/settings"><Button size="sm">Settings</Button></Link>;
+    return null;
+  };
+  return (
+    <Panel>
+      <PanelTitle sub="What MeChess found on this computer">Your workspace</PanelTitle>
+      <ul className="px-5 pb-3">
+        {loading && [0, 1, 2, 3].map((i) => <li key={i} className="py-2.5"><Skeleton className="h-5" /></li>)}
+        {ws?.checks.map((c) => (
+          <li key={c.id} className="flex items-center gap-3 border-t border-border/70 py-2.5 first:border-t-0">
+            {c.state === "ok" ? <Check size={16} className="shrink-0 text-[var(--q-best)]" /> : c.state === "todo" ? <CircleAlert size={16} className="shrink-0 text-[var(--q-inaccuracy)]" /> : <Minus size={16} className="shrink-0 text-faint" />}
+            <div className="min-w-0 flex-1"><div className="text-[13.5px] font-medium">{c.title}</div><div className="truncate text-[12px] text-muted" title={c.detail}>{c.detail}</div></div>
+            {act(c.action)}
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }

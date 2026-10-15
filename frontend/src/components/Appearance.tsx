@@ -1,12 +1,11 @@
 import * as Popover from "@radix-ui/react-popover";
 import clsx from "clsx";
 import { Check, Palette } from "lucide-react";
-import { BOARD_THEMES, PALETTES, type BoardTheme, type Mode } from "@/board/themes";
-import { pieceSets } from "@/board/pieces";
-import { useUi } from "@/state/ui";
+import { PALETTES, type BoardTheme, type Mode } from "@/board/themes";
+import { useBoardThemes, usePieceSets, useUi } from "@/state/ui";
 import { IconButton } from "./ui/IconButton";
 
-const swatchBg = (t: Pick<BoardTheme, "light" | "dark">) => `conic-gradient(${t.dark} 25%, ${t.light} 0 50%, ${t.dark} 0 75%, ${t.light} 0) 0 0 / 24px 24px`;
+const swatchBg = (t: Pick<BoardTheme, "light" | "dark"> & { image?: string }) => t.image ? `url("${t.image}") center / cover` : `conic-gradient(${t.dark} 25%, ${t.light} 0 50%, ${t.dark} 0 75%, ${t.light} 0) 0 0 / 24px 24px`;
 
 function Choice({ selected, onClick, label, children }: { selected: boolean; onClick: () => void; label: string; children: React.ReactNode }) {
   return (
@@ -23,12 +22,12 @@ const Heading = ({ children }: { children: React.ReactNode }) => <div className=
 /** Board and piece choices (the quick switcher next to the board). */
 export function BoardAndPieces() {
   const ui = useUi();
-  const sets = pieceSets();
+  const sets = usePieceSets(), boards = useBoardThemes();
   return (
     <div>
       <Heading>Board</Heading>
       <div className="grid grid-cols-4 gap-1.5">
-        {BOARD_THEMES.map((t) => (
+        {boards.map((t) => (
           <Choice key={t.id} selected={ui.boardId === t.id} onClick={() => ui.setBoard(t.id)} label={t.name}><span className="block h-9 w-full rounded" style={{ background: swatchBg(t) }} /></Choice>
         ))}
         {ui.custom && <Choice selected={ui.boardId === "custom"} onClick={() => ui.setBoard("custom")} label="Custom"><span className="block h-9 w-full rounded" style={{ background: swatchBg(ui.custom) }} /></Choice>}

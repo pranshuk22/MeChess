@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { BOARD_THEMES, DEFAULT_BOARD, PALETTES, type BoardTheme, type Mode } from "@/board/themes";
-import { DEFAULT_PIECE_SET, pieceSets, type PieceSet } from "@/board/pieces";
+import { customPieceSet, DEFAULT_PIECE_SET, pieceSets, type PieceSet } from "@/board/pieces";
+import { useThemes } from "@/api/hooks";
 
 const read = (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode: the choice just is not remembered */ } };
@@ -53,15 +54,25 @@ export const useUi = create<UiState>((set, get) => ({
   setShowCoords: (v) => { write("mechess.coords", v ? "1" : "0"); set({ showCoords: v }); },
 }));
 
-/** the board theme in effect (a built-in one, or the player's own pair of colours) */
+/** built-in board themes plus the player's own board images */
+export function useBoardThemes(): BoardTheme[] {
+  const t = useThemes().data;
+  return [...BOARD_THEMES, ...(t?.boards ?? []).map((b) => ({ id: "img:" + b.id, name: b.name, light: "#cfd6dc", dark: "#8c98a3", grain: false, image: b.url }))];
+}
+/** the board theme in effect (a built-in one, one of the player's images, or the player's own pair of colours) */
 export function useBoardTheme(): BoardTheme {
   const { boardId, custom, grain } = useUi();
-  const base = boardId === "custom" && custom ? { id: "custom", name: "Custom", light: custom.light, dark: custom.dark, grain: false } : BOARD_THEMES.find((t) => t.id === boardId) ?? DEFAULT_BOARD;
+  const all = useBoardThemes();
+  const base = boardId === "custom" && custom ? { id: "custom", name: "Custom", light: custom.light, dark: custom.dark, grain: false } : all.find((t) => t.id === boardId) ?? DEFAULT_BOARD;
   return { ...base, grain: base.grain && grain };
+}
+export function usePieceSets(): PieceSet[] {
+  const t = useThemes().data;
+  return [...pieceSets(), ...(t?.pieces ?? []).map(customPieceSet)];
 }
 export function usePieceSet(): PieceSet {
   const id = useUi((s) => s.pieceSetId);
-  return pieceSets().find((p) => p.id === id) ?? DEFAULT_PIECE_SET;
+  return usePieceSets().find((p) => p.id === id) ?? DEFAULT_PIECE_SET;
 }
 
 // follow the system while the mode is "system"

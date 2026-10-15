@@ -30,3 +30,8 @@ const BUILT = build();
 /** all bundled sets (custom sets added by the player come from the backend later) */
 export const pieceSets = (): PieceSet[] => BUILT;
 export const DEFAULT_PIECE_SET = BUILT[0];
+
+/** a set from the player's own folder (see the backend's theme folders): `files` maps wK ... bP to URLs */
+export function customPieceSet(s: { id: string; name: string; files: Record<string, string> }): PieceSet {
+  return { id: "custom:" + s.id, name: s.name, author: "Your own folder", licence: "yours", url: (p) => s.files[p.colour + p.role.toUpperCase()] };
+}

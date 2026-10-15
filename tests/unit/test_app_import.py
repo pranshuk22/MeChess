@@ -178,7 +178,7 @@ def test_custom_piece_sets_and_boards_are_listed_served_and_validated(client):
     for name in [c + p for c in "wb" for p in "KQRBNP"]:
         assert client.put(f"/api/themes/pieces/My Set/{name}.svg", content=SVG).status_code == 204
     t = client.get("/api/themes").json()
-    assert [p["id"] for p in t["pieces"]] == ["My Set"] and t["pieces"][0]["files"]["wK"] == "/api/themes/pieces/My Set/wK.svg"
+    assert [p["id"] for p in t["pieces"]] == ["My Set"] and t["pieces"][0]["files"]["wK"] == "/api/themes/pieces/My%20Set/wK.svg"
     r = client.get(t["pieces"][0]["files"]["wK"])
     assert r.content == SVG and r.headers["content-type"] == "image/svg+xml" and "default-src 'none'" in r.headers["content-security-policy"]
     client.put("/api/themes/pieces/Half/wK.svg", content=SVG)

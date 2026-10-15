@@ -163,7 +163,7 @@ export const Board = memo(function Board(props: BoardProps) {
   const badgePos = badge ? (() => { const [c, r] = view(badge.sq); return { left: `calc(${(c + 1) * 12.5}% - 2px)`, top: `calc(${r * 12.5}% + 2px)` }; })() : null;
 
   return (
-    <div ref={root} className="board" data-grain={theme.grain ? "1" : "0"} role="application" aria-label="Chess board" style={{ "--sq-light": theme.light, "--sq-dark": theme.dark } as React.CSSProperties}
+    <div ref={root} className="board" data-grain={theme.grain ? "1" : "0"} data-image={theme.image ? "1" : "0"} role="application" aria-label="Chess board" style={{ "--sq-light": theme.light, "--sq-dark": theme.dark, ...(theme.image ? { "--board-image": `url("${theme.image}")` } : {}) } as React.CSSProperties}
       onContextMenu={(e) => e.preventDefault()} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={() => { gesture.current = null; setDrag(null); setHover(null); setPreview(null); }}>
       <div className="layer">
         {lastMove?.map((sq) => <div key={sq} className="sq move" style={pos(sq)} />)}

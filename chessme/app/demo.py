@@ -3,6 +3,8 @@ database. The sample ids (s01, s02 ...) are the game ids, the source is "sample"
 import json
 from pathlib import Path
 
+from sqlalchemy import insert
+
 from .models import Analysis, Game
 from .services import games as G
 
@@ -22,3 +24,14 @@ def seed_samples(session, path) -> int:
         n += 1
     session.commit()
     return n
+
+
+def seed_stress(session, n: int) -> int:
+    """`n` plain unanalysed games (for testing a very long library)."""
+    have = session.query(Game).filter(Game.source == "stress").count()
+    rows = [{"id": f"stress:{i}", "source": "stress", "white": f"Player {i}", "black": f"Rival {i}", "white_elo": 1500, "black_elo": 1500, "result": ["1-0", "0-1", "1/2-1/2"][i % 3],
+             "played_at": f"2025-{1 + i % 12:02d}-{1 + i % 28:02d}", "speed": "blitz", "opening": "Italian Game", "user_colour": "white", "pgn": "1. e4 e5 *", "plies": 2} for i in range(have, n)]
+    if rows:
+        session.execute(insert(Game), rows)
+        session.commit()
+    return len(rows)

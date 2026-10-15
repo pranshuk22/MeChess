@@ -5,7 +5,7 @@ import type { AnalysedMove, MoveClass } from "@/lib/types";
 
 const QUIET: MoveClass[] = ["book", "good", "excellent"];            // not flagged in the list: only the moves worth a look carry an icon
 
-export const MoveList = memo(function MoveList({ moves, ply, onSelect }: { moves: AnalysedMove[]; ply: number; onSelect: (ply: number) => void }) {
+export const MoveList = memo(function MoveList({ moves, ply, onSelect, plain = false }: { moves: AnalysedMove[]; ply: number; onSelect: (ply: number) => void; plain?: boolean }) {
   const cur = useRef<HTMLButtonElement>(null);
   useEffect(() => { cur.current?.scrollIntoView({ block: "nearest" }); }, [ply]);
   const rows = Math.ceil(moves.length / 2);
@@ -17,7 +17,7 @@ export const MoveList = memo(function MoveList({ moves, ply, onSelect }: { moves
       <button ref={active ? cur : undefined} onClick={() => onSelect(i + 1)} aria-current={active ? "step" : undefined}
         className={clsx("flex items-center gap-1.5 rounded px-2 py-1 text-left font-medium cursor-pointer", active ? "bg-accent text-[var(--accent-text)]" : "hover:bg-surface-2")}>
         <span>{m.san}</span>
-        {!QUIET.includes(m.cls) && <ClassIcon cls={m.cls} size={15} />}
+        {!plain && !QUIET.includes(m.cls) && <ClassIcon cls={m.cls} size={15} />}
       </button>
     );
   };

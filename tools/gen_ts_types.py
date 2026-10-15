@@ -32,12 +32,16 @@ def ts(s: dict) -> str:
     return "unknown"
 
 
+# models that only come IN (requests): their defaulted fields are optional for the caller. Every other model is a response, where every field is always present.
+REQUESTS = {"AnalyseRequest", "ImportUser", "ImportPgn", "SettingsPatch", "Accounts"}
+
+
 def render(spec: dict) -> str:
     out = ["// Generated from the API's OpenAPI schema by tools/gen_ts_types.py: do not edit.", ""]
     for name, s in sorted(spec["components"]["schemas"].items()):
         if name in ("HTTPValidationError", "ValidationError"):
             continue
-        req = set(s.get("required", []))
+        req = set(s.get("required", [])) if name in REQUESTS else set(s.get("properties", {}))
         out.append(f"export interface {name} {{")
         for k, v in s.get("properties", {}).items():
             out.append(f"  {k}{'' if k in req else '?'}: {ts(v)};")

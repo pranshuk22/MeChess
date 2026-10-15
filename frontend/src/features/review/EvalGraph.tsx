@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { winPercent, type AnalysedMove } from "@/lib/types";
 
-const W = 320, H = 64;
-/** The game's evaluation as white's win chance; click to jump to a ply. Marks the user's mistakes. */
+const W = 320, H = 72;
+/** The game's evaluation as white's share of the position: white fill below the line on a dark track (like the eval bar); click to jump; the player's mistakes are dotted. */
 export function EvalGraph({ moves, ply, onSelect, userIsWhite }: { moves: AnalysedMove[]; ply: number; onSelect: (ply: number) => void; userIsWhite: boolean }) {
   const n = moves.length;
-  const x = (i: number) => (n <= 1 ? 0 : (i / n) * W);                  // index 0 = start position
+  const x = (i: number) => (n <= 1 ? 0 : (i / n) * W);
   const y = (cp: number) => H - (winPercent(cp) / 100) * H;
   const { line, area, dots } = useMemo(() => {
     const pts = [[0, H / 2], ...moves.map((m, i) => [x(i + 1), y(m.cp)])];
@@ -18,13 +18,13 @@ export function EvalGraph({ moves, ply, onSelect, userIsWhite }: { moves: Analys
     onSelect(Math.max(0, Math.min(n, Math.round(((e.clientX - r.left) / r.width) * n))));
   };
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="block h-16 w-full cursor-pointer" preserveAspectRatio="none" onClick={pick} role="img" aria-label="Evaluation graph: click to jump to a move">
-      <rect width={W} height={H} fill="var(--surface-2)" rx="4" />
-      <path d={area} fill="var(--surface)" opacity="0.9" />
-      <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="var(--border)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-      {dots.map((d) => <circle key={d.i} cx={d.cx} cy={d.cy} r="2.6" fill={d.cls === "blunder" ? "var(--q-blunder)" : "var(--q-mistake)"} />)}
-      <line x1={x(ply)} x2={x(ply)} y1="0" y2={H} stroke="var(--text)" strokeWidth="1.2" opacity="0.55" vectorEffect="non-scaling-stroke" />
+    <svg viewBox={`0 0 ${W} ${H}`} className="block h-[72px] w-full cursor-pointer overflow-hidden rounded-[8px]" preserveAspectRatio="none" onClick={pick} role="img" aria-label="Evaluation graph: click to jump to a move">
+      <rect width={W} height={H} fill="#2b3139" />
+      <path d={area} fill="#f4f6f8" />
+      <line x1="0" x2={W} y1={H / 2} y2={H / 2} stroke="#8a95a1" strokeWidth="1" strokeDasharray="3 4" opacity="0.7" vectorEffect="non-scaling-stroke" />
+      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="1.6" vectorEffect="non-scaling-stroke" />
+      {dots.map((d) => <circle key={d.i} cx={d.cx} cy={d.cy} r="2.8" fill={d.cls === "blunder" ? "var(--q-blunder)" : "var(--q-mistake)"} stroke="#fff" strokeWidth="0.8" />)}
+      <line x1={x(ply)} x2={x(ply)} y1="0" y2={H} stroke="var(--accent)" strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

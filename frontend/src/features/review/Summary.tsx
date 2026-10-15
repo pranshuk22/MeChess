@@ -1,11 +1,11 @@
 import { memo, useMemo } from "react";
 import { ClassIcon } from "@/components/ClassIcon";
-import { CLASS_LABEL, CLASS_ORDER, type GameRecord } from "@/lib/types";
+import { CLASS_LABEL, CLASS_ORDER, type GameDetail } from "@/lib/types";
 
 const PHASES = [["opening", "Opening"], ["middlegame", "Middlegame"], ["endgame", "Endgame"]] as const;
 
 /** The game at a glance: accuracy of both players, how many moves of every kind each played, and accuracy by phase. */
-export const Summary = memo(function Summary({ game }: { game: GameRecord }) {
+export const Summary = memo(function Summary({ game }: { game: GameDetail }) {
   const { counts, phase } = useMemo(() => {
     const counts = CLASS_ORDER.map((cls) => ({ cls, white: 0, black: 0 }));
     const acc: Record<string, { white: number[]; black: number[] }> = {};
@@ -18,7 +18,7 @@ export const Summary = memo(function Summary({ game }: { game: GameRecord }) {
     const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
     return { counts, phase: PHASES.map(([id, label]) => ({ label, white: mean(acc[id]?.white ?? []), black: mean(acc[id]?.black ?? []) })).filter((p) => p.white !== null || p.black !== null) };
   }, [game]);
-  const side = (colour: "white" | "black") => ({ name: colour === "white" ? game.white : game.black, elo: colour === "white" ? game.whiteElo : game.blackElo, acc: game.accuracy[colour], you: game.user === colour });
+  const side = (colour: "white" | "black") => ({ name: colour === "white" ? game.white : game.black, elo: colour === "white" ? game.whiteElo : game.blackElo, acc: game.accuracy?.[colour] ?? 0, you: game.user === colour });
   const [w, b] = [side("white"), side("black")];
   return (
     <div className="space-y-4 p-4 text-[13.5px]">

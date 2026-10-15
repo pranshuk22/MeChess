@@ -3,14 +3,14 @@ import { useMemo, useState } from "react";
 import type { Arrow } from "@/board/Arrows";
 import { Button } from "@/components/ui/Button";
 import { applyUci, fensFromUci, legalMap, uciToSan } from "@/lib/game";
-import type { AnalysedMove, GameRecord } from "@/lib/types";
+import type { AnalysedMove, GameDetail } from "@/lib/types";
 
 type Status = "find" | "wrong" | "right" | "revealed";
 
 /** Guided replay: the position before one of the player's mistakes; find a better move, hints in steps, reveal, then the next mistake. The board props and the
  *  prompt are returned separately so the prompt can sit beside the board (the board never changes size). Prototype: judged against the engine's first choice stored
  *  with the game; the real judge in the app uses the live engine. */
-export function useRetry(game: GameRecord, mistakes: { m: AnalysedMove; i: number }[], active: boolean, onExit: () => void) {
+export function useRetry(game: GameDetail, mistakes: { m: AnalysedMove; i: number }[], active: boolean, onExit: () => void) {
   const fens = useMemo(() => fensFromUci(game.moves.map((m) => m.uci)), [game]);
   const [k, setK] = useState(0);
   const [status, setStatus] = useState<Status>("find");
