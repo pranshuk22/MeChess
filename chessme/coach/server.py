@@ -18,6 +18,7 @@ import chess.pgn
 from ..analysis import runner as AR
 from . import drills as D
 from . import exercises as X
+from . import openings as OP
 from . import profile as PR
 from . import session as S
 
@@ -46,8 +47,10 @@ class EngineBackend:
 
 
 class CoachApp:
-    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None):
+    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None, explorer=None):
         self.search = search
+        self.explorer = explorer                                       # path of the opening explorer database, or a callable rating -> replies(fen) (tests)
+        self.openings = {}
         self.data_dir = Path(data_dir) if data_dir else None          # reviewed games are kept here (one small JSON each) for the weakness profile
         self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
         self.sessions = {}
@@ -90,6 +93,38 @@ class CoachApp:
         replay = S.Replay(ex, S.Judge(self.search), S.EngineOpponent(self.search, seed=self.seed))
         self.sessions[sid] = replay
         return {"session": sid, "n": len(ex), "accuracy": summary["accuracy"], "classes": summary["classes"], "view": replay.view()}
+
+    def _replies(self, rating):
+        if self.explorer is None:
+            return None
+        return self.explorer(rating) if callable(self.explorer) else OP.explorer_replies(str(self.explorer), rating)
+
+    def opening_start(self, pgn, color="white", rating=1500, max_plies=24):
+        """Start a drill of the repertoire in `pgn` (variations welcome) for `color` against replies typical of `rating`."""
+        replies = self._replies(int(rating))
+        if replies is None:
+            return {"error": "the opening explorer database is not set up (see docs/opening-explorer.md; start the coach with --explorer PATH)"}
+        if color not in ("white", "black"):
+            return {"error": "color must be white or black"}
+        rep = OP.Repertoire.from_pgn(pgn, color)
+        if rep.size == 0:
+            return {"error": "no moves of your colour found in that PGN"}
+        sid = secrets.token_urlsafe(8)
+        if len(self.openings) >= self.max_sessions:
+            self.openings.pop(next(iter(self.openings)))
+        self.openings[sid] = OP.OpeningDrill(rep, replies, max_plies=int(max_plies), seed=self.seed + len(self.openings))
+        return {"session": sid, "moves": rep.size, "view": self.openings[sid].view()}
+
+    def opening_move(self, sid, uci):
+        d = self.openings.get(sid)
+        return {"error": "unknown session"} if d is None else d.move(uci)
+
+    def opening_coverage(self, pgn, color="white", rating=1500):
+        replies = self._replies(int(rating))
+        if replies is None:
+            return {"error": "the opening explorer database is not set up"}
+        rep = OP.Repertoire.from_pgn(pgn, color)
+        return OP.coverage(rep, replies) if rep.size else {"error": "no moves of your colour found in that PGN"}
 
     def _keep(self, game, analysis, color):
         if self.data_dir is None:
@@ -201,6 +236,13 @@ def make_handler(app, fetch=lichess_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/opening/start":
+                    return self._send(200, app.opening_start(body.get("pgn", ""), body.get("color", "white"), body.get("rating", 1500)))
+                if path == "/api/opening/coverage":
+                    return self._send(200, app.opening_coverage(body.get("pgn", ""), body.get("color", "white"), body.get("rating", 1500)))
+                m2 = re.fullmatch(r"/api/opening/([\w-]+)/move", path)
+                if m2:
+                    return self._send(200, app.opening_move(m2.group(1), str(body.get("uci", ""))))
                 if path == "/api/profile":
                     return self._send(200, app.profile())
                 if path == "/api/drills":

@@ -43,6 +43,16 @@
       <b>Practice my mistakes</b> <span class="muted" id="drillinfo"></span><br>
       <button id="drills">Start</button>
     </div>
+    <div class="card" id="opencard">
+      <b>Opening practice</b> <span class="muted">drill your own repertoire against the replies players of your rating really play (needs the opening explorer database)</span>
+      <div class="row" style="margin-top:8px">
+        <div><label class="muted">Your repertoire as PGN (variations welcome)</label><textarea id="reppgn" placeholder="1. e4 e5 2. Nf3 Nc6 3. Bb5 (3. Bc4 Bc5) 3... a6 4. Ba4 *"></textarea></div>
+        <div><label class="muted">I play</label><select id="repcolor"><option value="white">White</option><option value="black">Black</option></select>
+          <label class="muted">Rating of the players I face</label><input id="reprating" value="1500" inputmode="numeric">
+          <button id="repstart">Drill it</button><button id="repcov" class="secondary">Check coverage</button></div>
+      </div>
+      <p id="covout" class="muted" style="white-space:pre-wrap"></p>
+    </div>
     <div class="card">
       <b>1. Get a game</b>
       <div class="row" style="margin-top:8px">
@@ -81,7 +91,7 @@
 "use strict";
 const $ = id => document.getElementById(id);
 const GLYPH = {K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘",P:"♙",k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
-let pgnText = "", sid = null, view = null, selected = null, busy = false;
+let pgnText = "", sid = null, view = null, selected = null, busy = false, mode = "review", repArgs = null;
 
 async function api(path, body) {
   const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body || {})});
@@ -128,6 +138,7 @@ function refresh(v) {
   drawBoard();
 }
 async function sendMove(uci) {
+  if (mode === "opening") return sendOpeningMove(uci);
   busy = true;
   const act = view.mode === "find" ? "attempt" : "play";
   const out = await api(`/api/replay/${sid}/${act}`, {uci});
@@ -143,6 +154,45 @@ async function sendMove(uci) {
   }
   refresh(out.view);
 }
+function setButtons() {
+  const op = mode === "opening";
+  $("hint").classList.toggle("hide", op); $("reveal").classList.toggle("hide", op); $("reset").classList.toggle("hide", op);
+  $("next").textContent = op ? "Another line" : "Next mistake";
+}
+function openingRefresh() {
+  selected = null; setButtons();
+  $("status").textContent = "Opening practice · " + (view.line.length ? view.line.join(" ") : "your move");
+  if (view.over) setMsg(view.report.message + "\n\nThe line: " + view.line.join(" ") + (view.mistakes ? `\nWrong tries: ${view.mistakes}` : ""), view.report.reason === "unanswered" ? "no" : "good");
+  $("next").disabled = false;
+  drawBoard();
+}
+async function sendOpeningMove(uci) {
+  busy = true;
+  const out = await api(`/api/opening/${sid}/move`, {uci});
+  busy = false;
+  if (out.error) { setMsg(out.error, "no"); return drawBoard(); }
+  if (out.verdict === "not in your repertoire") { setMsg(out.message + " Try again.", "no"); view = out.view; return openingRefresh(); }
+  view = out.view;
+  if (!view.over) setMsg("Right. The opponent replied; your move.", "good");
+  openingRefresh();
+}
+async function startOpening() {
+  const out = await api("/api/opening/start", repArgs);
+  if (out.error) { $("covout").textContent = out.error; return false; }
+  mode = "opening"; sid = out.session; view = out.view;
+  $("setup").classList.add("hide"); $("game").classList.add("on");
+  setMsg(`Play your repertoire (${out.moves} prepared move(s)). The opponent answers the way players of that rating do.`);
+  openingRefresh();
+  return true;
+}
+$("repstart").onclick = () => { repArgs = {pgn: $("reppgn").value, color: $("repcolor").value, rating: +$("reprating").value || 1500}; startOpening(); };
+$("repcov").onclick = async () => {
+  const a = {pgn: $("reppgn").value, color: $("repcolor").value, rating: +$("reprating").value || 1500};
+  const out = await api("/api/opening/coverage", a);
+  if (out.error) { $("covout").textContent = out.error; return; }
+  $("covout").textContent = `About ${(100 * out.covered).toFixed(0)}% of games at that rating stay inside your repertoire to the end of the walk or of theory.\nMost common replies you have no answer to:\n` +
+    out.gaps.map(g => `  ${(100 * g.share).toFixed(1)}%  ${g.line}`).join("\n");
+};
 $("fetch").onclick = async () => {
   $("setupmsg").textContent = "Fetching…";
   const out = await api("/api/games", {user: $("user").value.trim(), max: 10});
@@ -169,15 +219,15 @@ $("start").onclick = async () => {
   $("start").disabled = false; $("startmsg").textContent = "";
   if (out.error) { $("startmsg").textContent = out.error; return; }
   if (out.none) { $("startmsg").textContent = out.message; return; }
-  sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
+  mode = "review"; setButtons(); sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
   setMsg(`Your accuracy in this game was ${out.accuracy ? out.accuracy.toFixed(0) : "?"}%. We go through ${out.n} moment(s) where you gave away the most. Find a better move than the one you played: click a piece, then its square.`);
   refresh(out.view);
 };
 $("hint").onclick = async () => { const o = await api(`/api/replay/${sid}/hint`); if (o.error) setMsg(o.error, "no"); else setMsg(`Hint ${o.level} of 3: ${o.hint}`); refresh(o.view); };
 $("reveal").onclick = async () => { const o = await api(`/api/replay/${sid}/reveal`); if (o.error) setMsg(o.error, "no"); else setMsg(`The better move was ${o.best_san}.\n\n${o.message}` + (o.reply_san ? `\n\nThe opponent replied ${o.reply_san}. Play on if you like.` : "")); refresh(o.view); };
 $("reset").onclick = async () => { const o = await api(`/api/replay/${sid}/reset`); setMsg("Back to the position before your mistake. Find a better move."); refresh(o.view); };
-$("next").onclick = async () => { const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
-$("home").onclick = () => { $("game").classList.remove("on"); $("setup").classList.remove("hide"); async function loadProfile() {
+$("next").onclick = async () => { if (mode === "opening") { await startOpening(); return; } const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
+$("home").onclick = () => { mode = "review"; setButtons(); $("game").classList.remove("on"); $("setup").classList.remove("hide"); async function loadProfile() {
   const p = await api("/api/profile");
   if (!p.games) return;
   $("profcard").classList.remove("hide");
@@ -193,7 +243,7 @@ async function loadDrills() {
 $("drills").onclick = async () => {
   const out = await api("/api/drills/start", {limit: 10});
   if (out.none) { $("drillinfo").textContent = out.message; return; }
-  sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
+  mode = "review"; setButtons(); sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
   setMsg(`${out.n} position(s) from your own games are due. Find the better move without a hint if you can: that moves a position to a later review.`);
   refresh(out.view);
 };

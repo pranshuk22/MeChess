@@ -768,7 +768,11 @@ def cmd_coach(args):
     from .coach import drills as CD
     backend = CS.EngineBackend(args.engine, nodes=args.nodes)
     data = Path(args.data_dir).expanduser()
-    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data)
+    explorer = Path(args.explorer) if args.explorer else None
+    if explorer and not explorer.exists():
+        print(f"(no opening explorer at {explorer}: opening practice is off; see docs/opening-explorer.md)")
+        explorer = None
+    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data, explorer=explorer)
     if not args.no_browser:
         import threading
         threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
@@ -2830,6 +2834,7 @@ def main():
     co = sub.add_parser("coach", help="start the local coach: a web page on this computer to go back over the mistakes of a game, find better moves, see why they are better and play on (needs Stockfish)")
     co.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); co.add_argument("--nodes", type=int, default=100000, help="search budget per position (more is slower and stronger)")
     co.add_argument("--data-dir", default="~/.mechess-coach", help="where your drills and reviewed games are kept (small JSON files on this computer; nothing is sent anywhere)")
+    co.add_argument("--explorer", default="data/explorer/explorer.db", help="the opening explorer database (opening practice needs it)")
     co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
