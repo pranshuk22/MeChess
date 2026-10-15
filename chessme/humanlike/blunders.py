@@ -57,13 +57,20 @@ def see(board, move):
     return gain[0]
 
 
-def best_capture_gain(board):
-    """The largest exchange value among the legal captures of the side to move (0 if none)."""
-    best = 0
+def best_capture(board):
+    """(exchange value, move) of the best legal capture of the side to move, by static exchange; (0, None) if there is none."""
+    best, move = 0, None
     for m in board.legal_moves:
         if board.is_capture(m):
-            best = max(best, see(board, m))
-    return best
+            v = see(board, m)
+            if move is None or v > best:
+                best, move = v, m
+    return best, move
+
+
+def best_capture_gain(board):
+    """The largest exchange value among the legal captures of the side to move (0 if none)."""
+    return max(0, best_capture(board)[0])
 
 
 def _pass_threat(board):
