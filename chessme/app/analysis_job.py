@@ -8,6 +8,7 @@ from ..analysis import runner as AR
 from ..uci_client import UciEngine
 from .config import AppConfig
 from .models import Analysis, Game
+from .services import cache as CA
 from .services import games as G
 from .workspace import find_engine
 
@@ -25,6 +26,8 @@ def analyse_games(config: AppConfig, session_factory, ids, settings, ctx, engine
     done = skipped = 0
     try:
         search = AR.engine_search(eng, nodes=settings.nodes, multipv=settings.multipv)
+        if settings.use_cache:                                                  # opening positions are looked up (and stored) instead of searched again
+            search = CA.CachedSearch(search, session_factory, nodes=settings.nodes, multipv=settings.multipv, engine=getattr(eng, "name", None))
         s = session_factory()
         try:
             for i, gid in enumerate(ids):
@@ -44,4 +47,5 @@ def analyse_games(config: AppConfig, session_factory, ids, settings, ctx, engine
             s.close()
     finally:
         eng.close()
-    return f"{done:,} games analysed" + (f", {skipped:,} skipped" if skipped else "")
+    hits = getattr(search, "hits", 0)
+    return f"{done:,} games analysed" + (f", {skipped:,} skipped" if skipped else "") + (f" ({hits:,} opening positions came from the cache)" if hits else "")

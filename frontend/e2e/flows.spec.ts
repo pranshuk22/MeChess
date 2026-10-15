@@ -101,3 +101,32 @@ test("when the server is not reachable the app says so and reconnects by itself"
   await page.unroute("**/api/health");
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 15_000 });
 });
+
+test("insights show the calendar, phases and move kinds", async ({ page }) => {
+  await page.goto("/insights");
+  await expect(page.getByRole("heading", { name: "Insights" })).toBeVisible();
+  await expect(page.getByText("Accuracy by phase")).toBeVisible();
+  await expect(page.getByRole("img", { name: /games in the last 26 weeks/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Move kinds" })).toBeVisible();
+});
+
+test("the opening cache can be built from your games, used, and deleted", async ({ page, request }) => {
+  const ws = await (await request.get("/api/workspace")).json();
+  test.skip(ws.checks.find((c: { id: string }) => c.id === "engine")?.state !== "ok", "needs Stockfish");
+  const g = (id: string, tail: string) => `[Event "Rated Blitz game"]\n[Site "https://lichess.org/${id}"]\n[Date "2026.06.02"]\n[White "cacheme"]\n[Black "x"]\n[Result "1-0"]\n[TimeControl "180+0"]\n\n1. d4 d5 2. c4 e6 ${tail} 1-0\n`;
+  await request.post("/api/import/pgn", { data: { text: g("CACHE001", "3. Nc3 Nf6") + "\n" + g("CACHE002", "3. Nf3 Nf6"), player: "cacheme" } });
+  await request.patch("/api/settings", { data: { nodes: 2000, multipv: 1, use_cache: true } });
+  await request.delete("/api/cache");
+  await page.goto("/settings");
+  await expect(page.getByText("Opening cache")).toBeVisible();
+  await page.getByRole("button", { name: "Build for my openings" }).click();
+  await expect(page).toHaveURL(/\/activity/);
+  await expect(page.getByText(/opening positions added to the cache/)).toBeVisible({ timeout: 60_000 });
+  await page.goto("/settings");
+  await expect(page.getByText("Positions by move number")).toBeVisible();
+  const n = (await (await request.get("/api/cache")).json()).positions;
+  expect(n).toBeGreaterThanOrEqual(4);
+  await page.getByRole("button", { name: "Delete all" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect.poll(async () => (await (await request.get("/api/cache")).json()).positions).toBe(0);
+});

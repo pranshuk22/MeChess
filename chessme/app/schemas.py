@@ -2,6 +2,12 @@
 from pydantic import BaseModel, Field
 
 
+class EngineLine(BaseModel):
+    uci: str
+    cp: int = Field(description="evaluation after this line's first move, white's point of view, centipawns (capped at 1500)")
+    pv: list[str] = Field(description="the engine's line in UCI, starting with `uci`")
+
+
 class Move(BaseModel):
     san: str
     uci: str
@@ -13,6 +19,7 @@ class Move(BaseModel):
     cp: int = Field(description="evaluation after the move, white's point of view, centipawns (capped at 1500)")
     acc: float | None = Field(default=None, description="the move's accuracy, 0 to 100")
     phase: str | None = Field(default=None, description="opening, middlegame or endgame")
+    lines: list[EngineLine] | None = Field(default=None, description="the engine's best lines in the position BEFORE this move, best first")
 
 
 class Accuracy(BaseModel):
@@ -82,6 +89,7 @@ class Settings(BaseModel):
     multipv: int = Field(5, ge=1, le=10)
     threads: int = Field(1, ge=1, le=64)
     hash_mb: int = Field(64, ge=1, le=65_536)
+    use_cache: bool = Field(True, description="keep and reuse engine evaluations of opening positions (first ten moves)")
 
 
 class SettingsPatch(BaseModel):
@@ -90,6 +98,7 @@ class SettingsPatch(BaseModel):
     multipv: int | None = Field(None, ge=1, le=10)
     threads: int | None = Field(None, ge=1, le=64)
     hash_mb: int | None = Field(None, ge=1, le=65_536)
+    use_cache: bool | None = None
 
 
 class Accounts(BaseModel):
@@ -138,10 +147,61 @@ class OpeningStat(BaseModel):
     score: float = Field(description="points per game from the player's side, 0 to 1")
 
 
+class DayCount(BaseModel):
+    date: str
+    games: int
+
+
+class PhaseAccuracy(BaseModel):
+    opening: float | None
+    middlegame: float | None
+    endgame: float | None
+
+
+class RatingPoint(BaseModel):
+    date: str
+    rating: int
+
+
+class SplitStat(BaseModel):
+    name: str
+    games: int
+    score: float
+
+
 class Stats(BaseModel):
+    perDay: list[DayCount]
+    phaseAccuracy: PhaseAccuracy
+    classCounts: dict[str, int]
+    ratingSeries: list[RatingPoint]
+    colours: list[SplitStat]
+    speeds: list[SplitStat]
     games: int
     analysed: int
     results: Results
     accuracy: AccuracyStats
     mistakesPerGame: MistakeStats
     openings: list[OpeningStat]
+
+
+class CacheMove(BaseModel):
+    move: int
+    positions: int
+
+
+class CacheStats(BaseModel):
+    positions: int
+    hits: int
+    bytes: int
+    byMove: list[CacheMove]
+    bySource: dict[str, int]
+    oldest: str | None
+    newest: str | None
+    maxMoves: int
+
+
+class CacheBuild(BaseModel):
+    min_count: int = Field(2, ge=1, le=1000, description="a position must occur in at least this many of the player's games")
+    limit: int = Field(300, ge=1, le=5000)
+    include_theory: bool = Field(False, description="also the positions of named opening lines (needs the opening names folder)")
+    nodes: int | None = Field(None, ge=1_000, le=50_000_000)

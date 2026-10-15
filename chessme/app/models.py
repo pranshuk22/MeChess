@@ -62,3 +62,19 @@ class Setting(Base):
     __tablename__ = "settings"
     key: Mapped[str] = mapped_column(String, primary_key=True)
     value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON)
+
+
+class PositionEval(Base):
+    """The engine's verdict on an opening position (the first ten moves), kept so that the same opening is not searched again and again. Deleting the table's rows is always safe."""
+    __tablename__ = "position_evals"
+    key: Mapped[str] = mapped_column(String, primary_key=True)                 # the position without the move counters (placement, side, castling, en passant)
+    ply: Mapped[int] = mapped_column(Integer, index=True)                      # half-moves played to reach it
+    engine: Mapped[str | None] = mapped_column(String)
+    nodes: Mapped[int] = mapped_column(Integer)                                # search effort behind the lines (live analysis counts its nodes)
+    multipv: Mapped[int] = mapped_column(Integer)
+    depth: Mapped[int | None] = mapped_column(Integer)
+    lines: Mapped[list] = mapped_column(JSON)                                  # [{uci, cp (white's point of view), pv [uci]}], best first
+    source: Mapped[str] = mapped_column(String)                                # analysis, live or build
+    hits: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

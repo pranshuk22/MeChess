@@ -1,5 +1,5 @@
 import * as Tabs from "@radix-ui/react-tabs";
-import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, FlipVertical2, Lightbulb, RotateCcw, Sparkles, Target } from "lucide-react";
+import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, FlipVertical2, GitBranch, RotateCcw, Sparkles, Target, Undo2 } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAnalyse, useGame } from "@/api/hooks";
@@ -12,8 +12,12 @@ import { IconButton } from "@/components/ui/IconButton";
 import { EmptyState, Skeleton } from "@/components/ui/Misc";
 import { Panel } from "@/components/ui/Panel";
 import { formatDate } from "@/lib/format";
-import { checkSquare, fensFromUci, movesFromPgn, uciToSan } from "@/lib/game";
-import { BAD, CLASS_LABEL, CLASS_VAR, formatEval, type AnalysedMove, type GameDetail, type MoveClass } from "@/lib/types";
+import { applyUci, checkSquare, fensFromUci, legalMap, movesFromPgn, uciToSan } from "@/lib/game";
+import { scoreToCp, useLiveAnalysis, type Live } from "@/api/live";
+import { EngineTab } from "./EngineTab";
+import { MoveCard } from "./MoveCard";
+import { ExplorerTab } from "./ExplorerTab";
+import { BAD, type AnalysedMove, type GameDetail, type MoveClass } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
 import { EvalGraph } from "./EvalGraph";
 import { MoveList } from "./MoveList";
@@ -47,33 +51,50 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
   const [flipped, setFlipped] = useState(!userIsWhite);
   const [showBest, setShowBest] = useState(true);
   const [retryOn, setRetryOn] = useState(false);
+  const [variation, setVariation] = useState<string[]>([]);                              // moves the player tried from the position at `ply` (a side line, not part of the game)
+  const [engineOn, setEngineOn] = useState(() => { try { return localStorage.getItem("mechess.engine") === "1"; } catch { return false; } });
+  const [multipv, setMultipv] = useState(3);
   const fens = useMemo(() => fensFromUci(moves.map((m) => m.uci)), [moves]);
   const checks = useMemo(() => fens.map(checkSquare), [fens]);                      // once per game, not on every render
   const n = moves.length;
   const fen = fens[ply];
-  const last = ply > 0 ? moves[ply - 1] : null;
-  const lastMove: [string, string] | null = last ? [last.uci.slice(0, 2), last.uci.slice(2, 4)] : null;
-  const next = moves[ply];
+  const varFens = useMemo(() => { const out: string[] = []; let f = fen; for (const u of variation) { const nf = applyUci(f, u); if (!nf) break; out.push(nf); f = nf; } return out; }, [fen, variation]);
+  const inVariation = variation.length > 0 && varFens.length === variation.length;
+  const fenNow = inVariation ? varFens[varFens.length - 1] : fen;
+  const lastVar = inVariation ? variation[variation.length - 1] : null;
+  const last = !inVariation && ply > 0 ? moves[ply - 1] : null;
+  const lastMove: [string, string] | null = lastVar ? [lastVar.slice(0, 2), lastVar.slice(2, 4)] : last ? [last.uci.slice(0, 2), last.uci.slice(2, 4)] : null;
+  const next = inVariation ? undefined : moves[ply];
   const cp = ply === 0 ? 20 : moves[ply - 1].cp;
+  const live = useLiveAnalysis(engineOn && !retryOn, fenNow, multipv);
+  const toggleEngine = (v: boolean) => { setEngineOn(v); try { localStorage.setItem("mechess.engine", v ? "1" : "0"); } catch { /* not remembered */ } };
 
   const mistakes = useMemo(() => analysed ? moves.map((m, i) => ({ m, i })).filter(({ m, i }) => (i % 2 === 0) === userIsWhite && m.loss >= 0.1 && (m.cls === "mistake" || m.cls === "blunder" || m.cls === "miss")).sort((a, b) => b.m.loss - a.m.loss) : [], [moves, userIsWhite, analysed]);
   const retry = useRetry(game, mistakes, retryOn, () => setRetryOn(false));
 
+  const playUci = useCallback((uci: string) => {
+    if (!inVariation && moves[ply]?.uci === uci) { setPly((p) => p + 1); return; }              // the game's own next move: just go forward
+    if (applyUci(fenNow, uci)) setVariation((v) => [...(inVariation ? v : []), uci]);
+  }, [inVariation, moves, ply, fenNow]);
+  const legal = useMemo(() => (retry ? undefined : legalMap(fenNow)), [retry, fenNow]);
+
   const arrows = useMemo<Arrow[]>(() => {
-    if (!analysed || !showBest || !next || retry) return [];
+    if (inVariation || retry) return engineOn && live.lines[0] && !retry ? [{ from: live.lines[0].uci[0].slice(0, 2), to: live.lines[0].uci[0].slice(2, 4), kind: "best" }] : [];
+    if (!analysed || !showBest || !next) return [];
     const out: Arrow[] = [{ from: next.best.slice(0, 2), to: next.best.slice(2, 4), kind: "best" }];
     if (next.uci !== next.best && BAD.includes(next.cls)) out.push({ from: next.uci.slice(0, 2), to: next.uci.slice(2, 4), kind: "played" });
     return out;
-  }, [analysed, showBest, next, retry]);
+  }, [analysed, showBest, next, retry, inVariation, engineOn, live.lines]);
 
   useEffect(() => {
     if (retryOn) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select, [role=dialog]")) return;
-      if (e.key === "ArrowLeft") setPly((p) => Math.max(0, p - 1));
-      else if (e.key === "ArrowRight") setPly((p) => Math.min(n, p + 1));
-      else if (e.key === "Home") setPly(0);
-      else if (e.key === "End") setPly(n);
+      if ((e.target as HTMLElement).closest("input, textarea, select, [role=dialog], [role=switch]")) return;
+      if (e.key === "ArrowLeft") { if (variation.length) setVariation((v) => v.slice(0, -1)); else setPly((p) => Math.max(0, p - 1)); }
+      else if (e.key === "ArrowRight") { if (!variation.length) setPly((p) => Math.min(n, p + 1)); }
+      else if (e.key === "Home") { setVariation([]); setPly(0); }
+      else if (e.key === "End") { setVariation([]); setPly(n); }
+      else if (e.key === "Escape") setVariation([]);
       else if (e.key === "f") setFlipped((f) => !f);
       else if (e.key === "b") setShowBest((b) => !b);
       else return;
@@ -81,34 +102,42 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [n, retryOn]);
+  }, [n, retryOn, variation.length]);
 
   const orientation = flipped ? "black" : "white";
   const white = { name: game.white, elo: game.whiteElo, acc: game.accuracy?.white ?? null, colour: "white" as const }, black = { name: game.black, elo: game.blackElo, acc: game.accuracy?.black ?? null, colour: "black" as const };
   const top = flipped ? white : black, bottom = flipped ? black : white;
-  const goto = useCallback((p: number) => { setRetryOn(false); setPly(p); }, []);
+  const goto = useCallback((p: number) => { setRetryOn(false); setVariation([]); setPly(p); }, []);
+  const tryLine = useCallback((fromPly: number, ucis: string[]) => { setRetryOn(false); setPly(fromPly); setVariation(ucis); }, []);
   const dPly = useDeferredValue(ply);                                                  // the side panels follow one beat later: the board moves first
-  const boardFen = retry ? retry.fen : fen;
+  const boardFen = retry ? retry.fen : fenNow;
   const badge = analysed && !retry && last && !NO_BADGE.includes(last.cls) ? { sq: last.uci.slice(2, 4), cls: last.cls } : null;
+  const liveTop = engineOn && !retry && live.lines[0] ? scoreToCp(live.lines[0].kind, live.lines[0].score) : null;
 
   return (
     <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_388px] gap-6 p-6 lg:h-[100dvh] max-lg:grid-cols-1 max-md:p-3">
       <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - 140px))" }}>
         <PlayerStrip {...top} />
+        {inVariation && (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-[9px] bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent" role="status">
+            <span className="flex items-center gap-2 font-medium"><GitBranch size={14} /> Trying a side line: {variation.length} move{variation.length === 1 ? "" : "s"}</span>
+            <button onClick={() => setVariation([])} className="inline-flex items-center gap-1 font-semibold hover:underline cursor-pointer"><Undo2 size={13} /> Back to the game (Esc)</button>
+          </div>
+        )}
         <div className="my-2.5 flex gap-2.5">
-          <EvalBar cp={retry || !analysed ? 0 : cp} orientation={orientation} muted={!analysed} />
+          <EvalBar cp={liveTop ?? (retry || !analysed || inVariation ? 0 : cp)} orientation={orientation} muted={liveTop === null && (!analysed || inVariation)} />
           <div className="min-w-0 flex-1 overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">
-            <Board fen={boardFen} orientation={orientation} lastMove={retry ? retry.lastMove : lastMove} checkSquare={retry ? checkSquare(boardFen) : checks[ply]} arrows={retry ? retry.arrows : arrows}
-              marks={retry?.marks} legal={retry?.legal} movable={retry ? (userIsWhite ? "w" : "b") : null} badge={badge} onMove={retry?.onMove} />
+            <Board fen={boardFen} orientation={orientation} lastMove={retry ? retry.lastMove : lastMove} checkSquare={retry || inVariation ? checkSquare(boardFen) : checks[ply]} arrows={retry ? retry.arrows : arrows}
+              marks={retry?.marks} legal={retry ? retry.legal : legal} movable={retry ? (userIsWhite ? "w" : "b") : "both"} badge={badge} onMove={retry ? retry.onMove : (f, t, p) => playUci(f + t + (p ?? ""))} />
           </div>
         </div>
         <PlayerStrip {...bottom} />
         <div className="mt-2 flex h-9 items-center justify-center gap-1">
           {!retry && <>
-            <IconButton label="First move (Home)" onClick={() => setPly(0)} disabled={ply === 0}><ChevronFirst size={18} /></IconButton>
-            <IconButton label="Previous (←)" onClick={() => setPly(ply - 1)} disabled={ply === 0}><ChevronLeft size={18} /></IconButton>
-            <IconButton label="Next (→)" onClick={() => setPly(ply + 1)} disabled={ply === n}><ChevronRight size={18} /></IconButton>
-            <IconButton label="Last move (End)" onClick={() => setPly(n)} disabled={ply === n}><ChevronLast size={18} /></IconButton>
+            <IconButton label="First move (Home)" onClick={() => { setVariation([]); setPly(0); }} disabled={ply === 0 && !variation.length}><ChevronFirst size={18} /></IconButton>
+            <IconButton label="Previous (←)" onClick={() => (variation.length ? setVariation((v) => v.slice(0, -1)) : setPly(ply - 1))} disabled={ply === 0 && !variation.length}><ChevronLeft size={18} /></IconButton>
+            <IconButton label="Next (→)" onClick={() => setPly(ply + 1)} disabled={ply === n || variation.length > 0}><ChevronRight size={18} /></IconButton>
+            <IconButton label="Last move (End)" onClick={() => { setVariation([]); setPly(n); }} disabled={ply === n && !variation.length}><ChevronLast size={18} /></IconButton>
             <span className="mx-2 h-5 w-px bg-border" />
           </>}
           <IconButton label="Flip board (F)" onClick={() => setFlipped(!flipped)}><FlipVertical2 size={18} /></IconButton>
@@ -117,20 +146,21 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
         </div>
       </section>
 
-      <Sidebar game={game} analysed={analysed} ply={dPly} fens={fens} userIsWhite={userIsWhite} mistakes={mistakes} retryOn={retryOn} onRetry={() => setRetryOn(true)} goto={goto} retryPanel={retry ? retry.panel : null} />
+      <Sidebar game={game} analysed={analysed} ply={dPly} fens={fens} userIsWhite={userIsWhite} mistakes={mistakes} retryOn={retryOn} onRetry={() => setRetryOn(true)} goto={goto} retryPanel={retry ? retry.panel : null}
+        tryLine={tryLine} fenNow={fenNow} engine={{ on: engineOn, setOn: toggleEngine, live, multipv, setMultipv }} onPlay={playUci} />
     </div>
   );
 }
 
-type SideProps = { game: GameDetail; analysed: boolean; ply: number; fens: string[]; userIsWhite: boolean; mistakes: { m: AnalysedMove; i: number }[]; retryOn: boolean; onRetry: () => void; goto: (p: number) => void; retryPanel: React.ReactNode };
+type SideProps = { tryLine: (fromPly: number, ucis: string[]) => void; fenNow: string; engine: { on: boolean; setOn: (v: boolean) => void; live: Live; multipv: number; setMultipv: (n: number) => void }; onPlay: (uci: string) => void; game: GameDetail; analysed: boolean; ply: number; fens: string[]; userIsWhite: boolean; mistakes: { m: AnalysedMove; i: number }[]; retryOn: boolean; onRetry: () => void; goto: (p: number) => void; retryPanel: React.ReactNode };
 
-const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, mistakes, retryOn, onRetry, goto, retryPanel }: SideProps) {
+const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, mistakes, retryOn, onRetry, goto, retryPanel, fenNow, engine, onPlay, tryLine }: SideProps) {
+  const [showEvals, setShowEvals] = useState(false);
   const analyse = useAnalyse();
   const fen = fens[ply];
   const moves = game.moves;
   const last = ply > 0 ? moves[ply - 1] : null;
   const next = moves[ply];
-  const cp = ply === 0 ? 20 : moves[ply - 1]?.cp ?? 0;
   const you = game.accuracy ? game.accuracy[userIsWhite ? "white" : "black"] : null;
   return (
     <aside className="flex min-h-0 flex-col gap-4 lg:h-full">
@@ -157,12 +187,15 @@ const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, 
       <Panel className="flex min-h-[220px] flex-1 flex-col overflow-hidden">
         <Tabs.Root defaultValue={analysed ? "summary" : "moves"} className="flex min-h-0 flex-1 flex-col">
           <Tabs.List className="flex gap-1 border-b border-border px-3 pt-2" aria-label="Review sections">
-            {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"]].filter(([v]) => analysed || v === "moves").map(([v, l]) => (
-              <Tabs.Trigger key={v} value={v} className="rounded-t-md px-3 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-text data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
+            {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"], ["engine", "Engine"], ["explorer", "Explorer"]].filter(([v]) => analysed || ["moves", "engine", "explorer"].includes(v)).map(([v, l]) => (
+              <Tabs.Trigger key={v} value={v} className="rounded-t-md px-2.5 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-text data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
             ))}
           </Tabs.List>
           {analysed && <Tabs.Content value="summary" className={TAB_BODY}><Summary game={game} /></Tabs.Content>}
-          <Tabs.Content value="moves" className={TAB_BODY + " p-2"}><MoveList moves={moves} ply={ply} onSelect={goto} plain={!analysed} /></Tabs.Content>
+          <Tabs.Content value="moves" className={TAB_BODY + " p-2"}>
+            {analysed && <label className="mb-1 flex cursor-pointer items-center justify-end gap-2 px-2 text-[12px] text-muted"><input type="checkbox" checked={showEvals} onChange={(e) => setShowEvals(e.target.checked)} className="accent-[var(--accent)]" /> Show evaluations</label>}
+            <MoveList moves={moves} ply={ply} onSelect={goto} plain={!analysed} evals={showEvals} />
+          </Tabs.Content>
           {analysed && <Tabs.Content value="moments" className={TAB_BODY + " p-2"}>
             {mistakes.length === 0 ? <p className="p-3 text-muted">No mistakes of yours in this game.</p> : mistakes.map(({ m, i }) => (
               <button key={i} onClick={() => goto(i)} className="flex w-full items-center justify-between rounded-[8px] px-3 py-2 text-left transition-colors hover:bg-surface-2 cursor-pointer">
@@ -171,11 +204,13 @@ const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, 
               </button>
             ))}
           </Tabs.Content>}
+          <Tabs.Content value="engine" className={TAB_BODY}><EngineTab enabled={engine.on} onToggle={engine.setOn} live={engine.live} multipv={engine.multipv} onMultipv={engine.setMultipv} onPlay={onPlay} /></Tabs.Content>
+          <Tabs.Content value="explorer" className={TAB_BODY}><ExplorerTab fen={fenNow} active onPlay={onPlay} /></Tabs.Content>
         </Tabs.Root>
       </Panel>
 
       <Panel className="min-h-[132px] p-5 text-[13.5px]">
-        {retryPanel ?? (analysed ? <MoveExplanation fen={ply > 0 ? fens[ply - 1] : fen} move={last} cp={cp} next={next ? uciToSan(fen, next.best) : null} /> : <p className="text-muted">{last ? <><b className="text-text">{last.san}</b> was played. Analyse the game to see how good it was.</> : "Step through the game with the arrow keys."}</p>)}
+        {retryPanel ?? (analysed ? <MoveCard fenBefore={ply > 0 ? fens[ply - 1] : fen} move={last} cpBefore={ply > 1 ? moves[ply - 2].cp : 20} next={next ? uciToSan(fen, next.best) : null} onTry={(ucis) => tryLine(ply - 1, ucis)} /> : <p className="text-muted">{last ? <><b className="text-text">{last.san}</b> was played. Analyse the game to see how good it was.</> : "Step through the game with the arrow keys."}</p>)}
       </Panel>
     </aside>
   );
@@ -187,22 +222,5 @@ function PlayerStrip({ name, elo, acc, colour }: { name: string; elo: number | n
       <span className="flex min-w-0 items-center gap-2"><span className="h-3 w-3 shrink-0 rounded-[3px] border" style={{ background: colour === "white" ? "#fff" : "#2b3139", borderColor: "var(--border-strong)" }} aria-hidden /><span className="truncate font-medium">{name}</span>{elo ? <span className="tnum text-muted">{elo}</span> : null}</span>
       {acc !== null && <span className="tnum font-display text-[12px] text-muted">{acc.toFixed(0)}%</span>}
     </div>
-  );
-}
-
-function MoveExplanation({ fen, move, cp, next }: { fen: string; move: AnalysedMove | null; cp: number; next: string | null }) {
-  if (!move) return <p className="text-muted">Step through the game with the arrow keys. {next && <>The engine would start with <b className="text-text">{next}</b>.</>}</p>;
-  const bad = BAD.includes(move.cls);
-  const better = bad ? uciToSan(fen, move.best) : null;
-  return (
-    <>
-      <div className="flex items-center gap-2"><ClassIcon cls={move.cls} size={18} /><b className="font-semibold" style={{ color: CLASS_VAR[move.cls] }}>{move.san} · {CLASS_LABEL[move.cls]}</b><span className="tnum font-display ml-auto text-muted">{formatEval(cp)}</span></div>
-      <p className="mt-2 text-muted">
-        {bad ? <>Gave away about <b className="text-text">{Math.round(move.loss * 100)}%</b> of the win chance. Better was <b className="text-text">{better}</b>.</>
-          : move.cls === "best" || move.cls === "brilliant" || move.cls === "great" ? "The engine's top choice." : "A sound move."}
-        {next && <> From here the engine likes <b className="text-text">{next}</b>.</>}
-      </p>
-      {bad && <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-faint"><Lightbulb size={14} /> Press <kbd className="rounded border border-border px-1 font-mono text-[11px]">B</kbd> to see it on the board.</p>}
-    </>
   );
 }

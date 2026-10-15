@@ -83,7 +83,8 @@ def analyse_game(game, search, *, book=None, thresholds=C.DEFAULT):
         out.append({"ply": i + 1, "move": b.san(mv), "uci": mv.uci(), "color": "white" if mover == chess.WHITE else "black",
                     "class": cls, "loss": round(loss, 4), "best_move": top[0].move, "best_cp": best_cp, "played_cp": played_cp,
                     "win_before": round(C.win_prob(best_cp), 4), "win_after": round(wa, 4),
-                    "accuracy": round(C.move_accuracy(C.win_prob(best_cp, cap=C.LICHESS_CP_CAP), C.win_prob(played_cp, cap=C.LICHESS_CP_CAP)), 2), "phase": phase(b)})
+                    "accuracy": round(C.move_accuracy(C.win_prob(best_cp, cap=C.LICHESS_CP_CAP), C.win_prob(played_cp, cap=C.LICHESS_CP_CAP)), 2), "phase": phase(b),
+                    "top": [{"uci": l.move, "cp": l.cp, "pv": list(l.pv)[:7]} for l in top[:3]]})            # the engine's best lines in the position before the move (mover's point of view)
     return {"moves": out, "summary": summarise(out, game.headers)}
 
 

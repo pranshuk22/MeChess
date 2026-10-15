@@ -1,7 +1,10 @@
 import { Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useAccounts, useSaveAccounts, useSaveSettings, useSettings, useThemes, useWorkspace } from "@/api/hooks";
+import { useAccounts, useBuildCache, useCacheStats, useClearCache, useSaveAccounts, useSaveSettings, useSettings, useThemes, useWorkspace } from "@/api/hooks";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Stat } from "@/components/ui/Misc";
+import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import { Board } from "@/board/Board";
 import { BoardAndPieces, SiteAppearance } from "@/components/Appearance";
@@ -22,6 +25,7 @@ export function SettingsPage() {
         <PageHeader title="Settings" sub="Everything is stored on this computer." />
         <Accounts />
         <Engine />
+        <EngineCache />
         <Panel>
           <PanelTitle sub="Light, dark or follow the system; every colour theme has both.">Website</PanelTitle>
           <div className="px-5 pb-5"><SiteAppearance /></div>
@@ -159,6 +163,45 @@ function CustomThemes() {
         </div>
         {msg && <p role="status" className="text-[13px]" style={{ color: msg.ok ? "var(--q-best)" : "var(--q-blunder)" }}>{msg.text}</p>}
       </div>
+    </Panel>
+  );
+}
+
+const kb = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
+
+function EngineCache() {
+  const stats = useCacheStats().data, settings = useSettings().data, save = useSaveSettings(), build = useBuildCache(), clear = useClearCache(), nav = useNavigate();
+  const [confirm, setConfirm] = useState(false);
+  const [theory, setTheory] = useState(false);
+  const max = Math.max(1, ...(stats?.byMove.map((m) => m.positions) ?? [1]));
+  return (
+    <Panel>
+      <PanelTitle sub="The engine's verdicts on opening positions (the first ten moves) are kept, so the openings you play are not searched again. Everything is stored in your database.">Opening cache</PanelTitle>
+      <div className="space-y-5 px-5 pb-5">
+        <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
+          <Stat label="Positions" value={(stats?.positions ?? 0).toLocaleString()} />
+          <Stat label="Used" value={(stats?.hits ?? 0).toLocaleString()} sub="times" />
+          <Stat label="Size" value={kb(stats?.bytes ?? 0)} />
+        </div>
+        {!!stats?.positions && (
+          <div>
+            <div className="mb-1.5 text-[12px] font-medium text-muted">Positions by move number</div>
+            <div className="flex h-14 items-end gap-1.5" role="img" aria-label="Cached positions by move number">
+              {stats.byMove.map((m) => <div key={m.move} className="flex-1 rounded-t-[3px] bg-accent/70" style={{ height: `${Math.max(3, (m.positions / max) * 100)}%` }} title={`move ${m.move}: ${m.positions} positions`} />)}
+            </div>
+            <div className="mt-1 flex justify-between text-[11px] text-faint"><span>start</span><span>move {stats.maxMoves}</span></div>
+          </div>
+        )}
+        <label className="flex items-center justify-between gap-4 text-[13.5px]"><span><b className="font-medium">Use the cache</b><span className="block text-[12.5px] text-muted">Look openings up here when analysing games and when you step through a game.</span></span>
+          <input type="checkbox" checked={settings?.use_cache ?? true} onChange={(e) => save.mutate({ use_cache: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /></label>
+        <div className="flex flex-wrap items-center gap-3 border-t border-border/70 pt-4">
+          <Button disabled={build.isPending} onClick={() => build.mutate({ min_count: 2, limit: 300, include_theory: theory }, { onSuccess: () => nav("/activity") })}>Build for my openings</Button>
+          <label className="flex items-center gap-2 text-[12.5px] text-muted"><input type="checkbox" checked={theory} onChange={(e) => setTheory(e.target.checked)} className="accent-[var(--accent)]" /> also the main opening lines</label>
+          <Button variant="danger" className="ml-auto" disabled={!stats?.positions || clear.isPending} onClick={() => setConfirm(true)}><Trash2 size={15} /> Delete all</Button>
+        </div>
+        {build.isError && <p role="alert" className="text-[13px] text-[var(--q-blunder)]">{(build.error as Error).message}</p>}
+      </div>
+      <ConfirmDialog open={confirm} onOpenChange={setConfirm} title="Delete the opening cache?" text="The stored engine evaluations are removed. Nothing else changes; they are searched again when needed." confirm="Delete" onConfirm={() => clear.mutate(undefined)} />
     </Panel>
   );
 }

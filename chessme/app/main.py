@@ -9,7 +9,8 @@ from . import db as DB
 from .config import AppConfig
 from .jobs import JobManager
 from . import importers
-from .routers import api, themes
+from .live import LiveManager
+from .routers import api, live, themes
 from .security import LocalOnly, allowed
 
 HERE = Path(__file__).parent
@@ -34,7 +35,9 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.engine = engine
         app.state.sessions = DB.session_factory(engine)
         app.state.jobs = JobManager(app.state.sessions)
+        app.state.live = LiveManager()
         yield
+        app.state.live.close()
         app.state.jobs.shutdown()
         engine.dispose()
 
@@ -45,6 +48,7 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     hosts, origins = allowed(config.host, config.port, extra_hosts, extra_origins)
     app.add_middleware(LocalOnly, hosts=hosts, origins=origins)
     app.include_router(api.router)
+    app.include_router(live.router)
     app.include_router(themes.router)
 
     root = static_dir() if static is True else (static or None)

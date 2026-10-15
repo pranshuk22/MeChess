@@ -4,6 +4,7 @@ export interface AnalysedMove {
   winBefore: number; winAfter: number;
   cp: number;                                   // evaluation after the move, white's point of view, centipawns
   acc?: number; phase?: string;                 // the move's accuracy (0..100) and the phase of the game
+  lines?: { uci: string; cp: number; pv: string[] }[] | null;      // the engine's best lines in the position BEFORE this move (cp: white's point of view)
 }
 import type * as S from "@/api/schema";
 

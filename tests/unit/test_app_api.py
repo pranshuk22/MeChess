@@ -13,7 +13,8 @@ BASE = "http://127.0.0.1:8765"
 
 
 def analysed_move(ply, san, uci, color, loss=0.0, cls="best", best=None, cp=20):
-    return {"ply": ply, "move": san, "uci": uci, "color": color, "class": cls, "loss": loss, "best_move": best or uci, "best_cp": cp, "played_cp": cp,
+    sign = 1 if color == "white" else -1
+    return {"top": [{"uci": best or uci, "cp": 33, "pv": [best or uci, "e7e5"]}, {"uci": "a2a3", "cp": -10, "pv": ["a2a3"]}],"ply": ply, "move": san, "uci": uci, "color": color, "class": cls, "loss": loss, "best_move": best or uci, "best_cp": cp, "played_cp": cp,
             "win_before": 0.5, "win_after": 0.5 - loss, "accuracy": 90.0, "phase": "opening"}
 
 
@@ -66,6 +67,7 @@ def test_games_list_detail_filters_and_delete(client):
     d = client.get("/api/games/t:0").json()
     assert len(d["moves"]) == 4 and d["moves"][2]["cls"] == "mistake" and d["moves"][2]["best"] == "g1f3" and d["moves"][2]["cp"] == -80 and d["pgn"].count("e4") >= 1
     assert d["moves"][0]["acc"] == 90.0 and d["moves"][0]["phase"] == "opening"
+    assert d["moves"][0]["lines"][0] == {"uci": "e2e4", "cp": 33, "pv": ["e2e4", "e7e5"]} and d["moves"][1]["lines"][0]["cp"] == -33        # lines are shown from white's point of view
     assert d["moves"][3]["cp"] == 60                                                                    # black's -60 is +60 for white
     assert client.delete("/api/games/t:0").status_code == 204 and client.get("/api/games/t:0").status_code == 404
     assert client.delete("/api/games/t:0").status_code == 404
@@ -238,3 +240,22 @@ def test_the_generated_typescript_types_are_up_to_date():
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
     import gen_ts_types
     assert (Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "schema.ts").read_text() == gen_ts_types.build(), "run: PYTHONPATH=. python tools/gen_ts_types.py frontend/src/api/schema.ts"
+
+
+def test_insights_cover_calendar_phases_kinds_rating_colours_and_speeds(client):
+    from datetime import date, timedelta
+    s = client.app.state.sessions()
+    today = date.today()
+    for i in range(6):
+        d = (today - timedelta(days=i % 3)).strftime("%Y.%m.%d")
+        G.store(s, id=f"i:{i}", source="test", headers={"White": "a", "Black": "b", "Result": ["1-0", "0-1"][i % 2], "Date": d, "WhiteElo": str(1500 + 10 * i), "BlackElo": "1600", "TimeControl": ["180+0", "600+0"][i % 2]},
+                user_colour="white" if i < 4 else "black", analysis={"moves": game_moves()}, nodes=1, multipv=1)
+    s.commit()
+    s.close()
+    st = client.get("/api/stats").json()
+    assert sum(d["games"] for d in st["perDay"]) == 6 and len(st["perDay"]) == 3 and st["perDay"][0]["date"] < st["perDay"][-1]["date"]
+    assert st["phaseAccuracy"]["opening"] == 90.0 and st["phaseAccuracy"]["endgame"] is None
+    assert st["classCounts"]["mistake"] == 4 and st["classCounts"]["best"] >= 4                                      # the four games the player was white in: one mistake each
+    assert [r["rating"] for r in st["ratingSeries"]][-1] in (1500, 1510, 1520, 1530, 1540, 1550) and len(st["ratingSeries"]) == 6
+    assert {c["name"] for c in st["colours"]} == {"white", "black"} and {c["name"] for c in st["speeds"]} == {"blitz", "rapid"}
+    assert all(0 <= c["score"] <= 1 for c in st["colours"] + st["speeds"])

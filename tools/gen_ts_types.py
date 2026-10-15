@@ -28,7 +28,8 @@ def ts(s: dict) -> str:
         inner = ts(s.get("items", {}))
         return f"({inner})[]" if "|" in inner else f"{inner}[]"
     if t == "object":
-        return "Record<string, unknown>"
+        add = s.get("additionalProperties")
+        return f"Record<string, {ts(add)}>" if isinstance(add, dict) and add else "Record<string, unknown>"
     return "unknown"
 
 

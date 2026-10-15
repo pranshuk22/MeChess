@@ -50,7 +50,7 @@ export function useJobEvents() {
       const job = JSON.parse((e as MessageEvent).data) as Job;
       qc.setQueryData<Job[]>(["jobs"], (old = []) => [job, ...old.filter((j) => j.id !== job.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       if (job.status === "done" || job.status === "failed" || job.status === "cancelled") {
-        for (const k of ["games", "game", "stats", "workspace"]) qc.invalidateQueries({ queryKey: [k] });
+        for (const k of ["games", "game", "stats", "workspace", "cache"]) qc.invalidateQueries({ queryKey: [k] });
       }
     });
     return () => es.close();
@@ -89,3 +89,26 @@ export function useDeleteGame() {
 
 export interface Themes { pieces: { id: string; name: string; files: Record<string, string> }[]; boards: { id: string; name: string; url: string }[]; pieces_dir: string; boards_dir: string }
 export const useThemes = () => useQuery({ queryKey: ["themes"], queryFn: () => api<Themes>("/api/themes"), staleTime: 60_000 });
+
+export interface ExplorerMove { san: string; uci: string; games: number; share: number; white: number; draw: number; black: number; avg_rating: number; eval: number | null }
+export interface ExplorerResult { total: number; other: number; moves: ExplorerMove[] }
+/** what players play in a position; `unavailable` when the explorer database has not been built */
+export function useExplorer(fen: string, enabled: boolean, rating = 1500) {
+  return useQuery({
+    queryKey: ["explorer", fen, rating],
+    enabled,
+    retry: false,
+    staleTime: Infinity,
+    queryFn: async () => {
+      try { return await api<ExplorerResult>(`/api/explorer?${new URLSearchParams({ fen, rating: String(rating) })}`); }
+      catch (e) { if ((e as { status?: number }).status === 404) return null; throw e; }
+    },
+  });
+}
+
+export const useCacheStats = () => useQuery({ queryKey: ["cache"], queryFn: () => api<S.CacheStats>("/api/cache") });
+export const useBuildCache = () => useJobMutation<{ min_count?: number; limit?: number; include_theory?: boolean }>(() => "/api/cache/build", (v) => v);
+export function useClearCache() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (source?: string) => api<{ deleted: number }>(`/api/cache${source ? `?source=${source}` : ""}`, { method: "DELETE" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["cache"] }) });
+}

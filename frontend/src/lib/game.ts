@@ -58,3 +58,13 @@ export function movesFromPgn(pgn: string): { uci: string; san: string }[] {
   try { chess.loadPgn(pgn); } catch { return []; }
   return chess.history({ verbose: true }).map((m) => ({ uci: m.from + m.to + (m.promotion ?? ""), san: m.san }));
 }
+
+/** A line of UCI moves from a position as SAN (stops at the first illegal move; at most `max` half-moves). */
+export function pvToSan(fen: string, ucis: string[], max = 6): string[] {
+  const chess = new Chess(fen);
+  const out: string[] = [];
+  for (const u of ucis.slice(0, max)) {
+    try { out.push(chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }).san); } catch { break; }
+  }
+  return out;
+}

@@ -8,10 +8,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import analysis_job, importers, legacy, workspace
+from .. import analysis_job, cache_job, importers, legacy, workspace
 from ..models import Game, Setting
-from ..schemas import Stats, Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
+from ..schemas import CacheBuild, CacheStats, Stats, Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
 from ..services import games as G
+from ..services import cache as CA
 from ..services import stats as ST
 
 router = APIRouter(prefix="/api")
@@ -151,6 +152,31 @@ def analyse(body: AnalyseRequest, request: Request, s: Session = Depends(db)):
         settings = settings.model_copy(update={"nodes": body.nodes})
     title = f"Analyse {len(ids):,} game{'s' if len(ids) != 1 else ''}"
     job = app.state.jobs.submit("analyse", title, lambda ctx: analysis_job.analyse_games(app.state.config, app.state.sessions, ids, settings, ctx, app.state.engine_factory(settings)), {"ids": len(ids)})
+    return app.state.jobs.get(job)
+
+
+# ---- the opening evaluation cache -----------------------------------------------------------------------------------------------------------------
+
+@router.get("/cache", response_model=CacheStats)
+def cache_stats(s: Session = Depends(db)):
+    return CA.stats(s)
+
+
+@router.delete("/cache")
+def cache_clear(source: str | None = None, s: Session = Depends(db)):
+    n = CA.clear(s, source)
+    s.commit()
+    return {"deleted": n}
+
+
+@router.post("/cache/build", response_model=JobOut, status_code=202)
+def cache_build(body: CacheBuild, request: Request, s: Session = Depends(db)):
+    app = request.app
+    settings = current_settings(s)
+    if body.nodes:
+        settings = settings.model_copy(update={"nodes": body.nodes})
+    job = app.state.jobs.submit("cache-build", "Build the opening cache", lambda ctx: cache_job.build_cache(app.state.config, app.state.sessions, settings, ctx, min_count=body.min_count, limit=body.limit,
+                                                                                                           include_theory=body.include_theory, engine_factory=app.state.engine_factory(settings)))
     return app.state.jobs.get(job)
 
 

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Activity, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords, User } from "lucide-react";
+import { Activity, BarChart3, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { TipProvider, Tip } from "./ui/Tip";
 const GROUPS = [
   { label: "Overview", items: [{ to: "/", label: "Home", icon: Home, end: true }, { to: "/library", label: "Library", icon: Library }] },
   { label: "Train", items: [{ to: "/coach", label: "Coach", icon: GraduationCap }, { to: "/play", label: "Play", icon: Swords }] },
-  { label: "Explore", items: [{ to: "/explorer", label: "Explorer", icon: Compass }, { to: "/style", label: "Profile", icon: User }, { to: "/books", label: "Books", icon: BookOpen }] },
+  { label: "Explore", items: [{ to: "/explorer", label: "Explorer", icon: Compass }, { to: "/insights", label: "Insights", icon: BarChart3 }, { to: "/books", label: "Books", icon: BookOpen }] },
 ];
 
 function Mark({ size = 28 }: { size?: number }) {

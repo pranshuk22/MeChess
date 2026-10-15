@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAnalyse, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
 import { Board } from "@/board/Board";
 import { MiniEval } from "@/components/MiniEval";
+import { Calendar, QualityBar } from "@/components/charts";
 import { Spark } from "@/components/Spark";
 import { Button } from "@/components/ui/Button";
 import { Badge, EmptyState, Skeleton, Stat } from "@/components/ui/Misc";
@@ -39,9 +40,11 @@ export function HomePage() {
             <NextStep ws={ws.data} games={recent.data?.items ?? []} />
             <RecentGames games={recent.data?.items} loading={recent.isLoading} total={recent.data?.total ?? 0} />
             {!!stats.data?.openings.length && <Openings openings={stats.data.openings} />}
+            {stats.data && <Panel><PanelTitle sub="Games per day, last 26 weeks" right={<Link to="/insights" className="text-[12.5px] font-medium text-accent hover:underline">More insights</Link>}>Activity</PanelTitle><div className="px-5 pb-5"><Calendar days={stats.data.perDay} /></div></Panel>}
           </div>
           <div className="space-y-5">
             <Workspace ws={ws.data} loading={ws.isLoading} />
+            {stats.data && Object.keys(stats.data.classCounts).length > 0 && <Panel><PanelTitle sub="Your last 100 analysed games">Move quality</PanelTitle><div className="px-5 pb-5"><QualityBar counts={stats.data.classCounts} /></div></Panel>}
             <Panel>
               <PanelTitle sub="Positions from your own mistakes">Practice</PanelTitle>
               <div className="px-5 pb-5"><p className="text-[13.5px] text-muted">They come back after a day, then after longer gaps once you get them right.</p><Link to="/coach"><Button className="mt-3 w-full">Open the coach</Button></Link></div>

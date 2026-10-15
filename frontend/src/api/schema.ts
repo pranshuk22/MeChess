@@ -22,12 +22,46 @@ export interface AnalyseRequest {
   nodes?: number | null;
 }
 
+export interface CacheBuild {
+  min_count: number;
+  limit: number;
+  include_theory: boolean;
+  nodes: number | null;
+}
+
+export interface CacheMove {
+  move: number;
+  positions: number;
+}
+
+export interface CacheStats {
+  positions: number;
+  hits: number;
+  bytes: number;
+  byMove: CacheMove[];
+  bySource: Record<string, number>;
+  oldest: string | null;
+  newest: string | null;
+  maxMoves: number;
+}
+
 export interface Check {
   id: string;
   title: string;
   state: string;
   detail: string;
   action: string | null;
+}
+
+export interface DayCount {
+  date: string;
+  games: number;
+}
+
+export interface EngineLine {
+  uci: string;
+  cp: number;
+  pv: string[];
 }
 
 export interface GameDetail {
@@ -116,6 +150,7 @@ export interface Move {
   cp: number;
   acc: number | null;
   phase: string | null;
+  lines: EngineLine[] | null;
 }
 
 export interface OpeningStat {
@@ -123,6 +158,17 @@ export interface OpeningStat {
   colour: string;
   games: number;
   score: number;
+}
+
+export interface PhaseAccuracy {
+  opening: number | null;
+  middlegame: number | null;
+  endgame: number | null;
+}
+
+export interface RatingPoint {
+  date: string;
+  rating: number;
 }
 
 export interface Results {
@@ -137,6 +183,7 @@ export interface Settings {
   multipv: number;
   threads: number;
   hash_mb: number;
+  use_cache: boolean;
 }
 
 export interface SettingsPatch {
@@ -145,9 +192,22 @@ export interface SettingsPatch {
   multipv?: number | null;
   threads?: number | null;
   hash_mb?: number | null;
+  use_cache?: boolean | null;
+}
+
+export interface SplitStat {
+  name: string;
+  games: number;
+  score: number;
 }
 
 export interface Stats {
+  perDay: DayCount[];
+  phaseAccuracy: PhaseAccuracy;
+  classCounts: Record<string, number>;
+  ratingSeries: RatingPoint[];
+  colours: SplitStat[];
+  speeds: SplitStat[];
   games: number;
   analysed: number;
   results: Results;

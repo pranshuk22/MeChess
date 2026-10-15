@@ -799,6 +799,11 @@ def cmd_app(args):
 
     import uvicorn
 
+    try:
+        import websockets  # noqa: F401
+    except ImportError:
+        print("(live engine analysis needs the 'websockets' package: pip install websockets)")
+
     from .app.config import AppConfig
     from .app.main import create_app, static_dir
     cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir)

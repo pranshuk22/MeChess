@@ -30,6 +30,7 @@ annotated-types==0.8.0
 annotated-doc==0.0.5
 typing-inspection==0.4.4
 uvicorn==0.54.0
+websockets==17.2        # live engine analysis (WebSocket); uvicorn needs a WebSocket library
 h11==0.16.0
 click==8.5.0
 anyio==4.15.1
