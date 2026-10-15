@@ -58,7 +58,7 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
                 {opts?.stockfish.levels.map((l) => (
                   <button key={l.id} onClick={() => setLevel(l.id)} aria-pressed={level === l.id}
                     className={`rounded-[10px] border px-3 py-2.5 text-left text-[13px] transition-colors cursor-pointer ${level === l.id ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}>
-                    <span className="tnum font-display block text-[11px] text-faint">LEVEL {l.id}</span><span className="font-medium">{l.label}</span>
+                    <span className="tnum font-display block text-[11px] text-muted">LEVEL {l.id}</span><span className="font-medium">{l.label}</span>
                   </button>
                 ))}
               </div>

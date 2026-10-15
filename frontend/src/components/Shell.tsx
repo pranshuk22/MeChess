@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Activity, BarChart3, Bot, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import { useJobEvents, useRunningJobs, useWorkspace } from "@/api/hooks";
@@ -37,20 +37,23 @@ export function Shell() {
   const [collapsed, setCollapsed] = useState(() => { try { return localStorage.getItem("mechess.rail") === "1"; } catch { return false; } });
   const toggle = () => setCollapsed((c) => { try { localStorage.setItem("mechess.rail", c ? "0" : "1"); } catch { /* not remembered */ } return !c; });
 
-  const link = (to: string, label: string, Icon: typeof Home, opts: { end?: boolean; badge?: number } = {}) => (
-    <Tip key={to} label={label} side="right">
-      <NavLink to={to} end={opts.end} aria-label={label}
-        className={({ isActive }) => clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot"].includes(to) && "max-md:hidden",
-          isActive ? "bg-[var(--rail-active)] text-[var(--rail-strong)]" : "text-[var(--rail-text)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-strong)]")}>
-        {({ isActive }) => (<>
+  const { pathname } = useLocation();
+  /** (The active state is worked out here and a plain class string is given to NavLink: a function as className is turned into text by the tooltip trigger around it.) */
+  const link = (to: string, label: string, Icon: typeof Home, opts: { end?: boolean; badge?: number } = {}) => {
+    const isActive = opts.end ? pathname === to : pathname === to || pathname.startsWith(to + "/");
+    return (
+      <Tip key={to} label={label} side="right">
+        <NavLink to={to} end={opts.end} aria-label={label} aria-current={isActive ? "page" : undefined}
+          className={clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot"].includes(to) && "max-md:hidden",
+            isActive ? "bg-[var(--rail-active)] text-[var(--rail-strong)]" : "text-[var(--rail-text)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-strong)]")}>
           {isActive && <span className="absolute -left-3 top-2 h-5 w-[3px] rounded-r-full bg-accent max-md:hidden" />}
           <Icon size={18} strokeWidth={1.7} className="shrink-0" />
           {!collapsed && <span className="truncate">{label}</span>}
           {!!opts.badge && <span className={clsx("grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-semibold text-[var(--accent-text)]", collapsed ? "absolute right-1 top-0.5" : "ml-auto")}>{opts.badge}</span>}
-        </>)}
-      </NavLink>
-    </Tip>
-  );
+        </NavLink>
+      </Tip>
+    );
+  };
 
   return (
     <TipProvider>
@@ -63,7 +66,7 @@ export function Shell() {
           <div className="min-h-0 flex-1 space-y-5 overflow-y-auto max-md:flex max-md:flex-none max-md:space-y-0 max-md:overflow-visible">
             {GROUPS.map((g, i) => (
               <div key={g.label} className="space-y-0.5 max-md:flex max-md:space-y-0">
-                {!collapsed && <div className="mb-1.5 px-2.5 font-display text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--rail-text)] opacity-60 max-md:hidden">{g.label}</div>}
+                {!collapsed && <div className="mb-1.5 px-2.5 font-display text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[var(--rail-text)] max-md:hidden">{g.label}</div>}
                 {collapsed && i > 0 && <div className="mx-2 mb-2 h-px bg-[var(--rail-line)] max-md:hidden" />}
                 {g.items.map((it) => link(it.to, it.label, it.icon, { end: (it as { end?: boolean }).end }))}
               </div>

@@ -78,3 +78,13 @@ test("an unknown page shows a way back instead of a blank screen", async ({ page
   await page.goto("/review/does-not-exist");
   await expect(page.getByText("That game is not in your library")).toBeVisible();
 });
+
+test("the navigation links carry real classes (a function className was once turned into text by the tooltip) and mark the current page", async ({ page }) => {
+  await page.goto("/library");
+  const lib = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Library" });
+  expect(await lib.getAttribute("class")).not.toContain("=>");
+  await expect(lib).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current", "page");
+  await page.goto("/review/s03");
+  await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Library" })).not.toHaveAttribute("aria-current", "page");
+});
