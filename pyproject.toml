@@ -18,6 +18,7 @@ build-backend = "setuptools.build_meta"
 include = ["chessme*"]          # every subpackage (analysis, books, ... included): listing them by hand left two out
 
 [tool.setuptools.package-data]
+"chessme" = ["opening_names.tsv.gz"]
 "chessme.books" = ["sources.json"]
 "chessme.coach" = ["web/*", "reference_rates.json"]
 "chessme.app" = ["migrations/script.py.mako", "static/**/*"]

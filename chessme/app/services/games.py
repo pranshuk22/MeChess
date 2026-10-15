@@ -6,6 +6,7 @@ import chess.pgn
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from ... import openings_db as OD
 from ...analysis import accuracy as ACC
 from ...analysis import runner as AR
 from ...humanlike.testset import parse_tc
@@ -52,6 +53,47 @@ def speed_of(time_control):
     return time_class_of(*tc) if tc else None
 
 
+def opening_name(headers, uci_moves) -> str | None:
+    """The opening of a game: the name the site gave, else the one in Chess.com's ECOUrl, else the longest named line the moves follow."""
+    h = headers or {}
+    given = (h.get("Opening") or "").strip()
+    if given and given not in ("?", "-"):
+        return given
+    url = h.get("ECOUrl") or ""
+    if "/openings/" in url:
+        words = []
+        for w in url.rsplit("/openings/", 1)[1].split("-"):
+            if any(c.isdigit() for c in w):
+                break
+            words.append(w)
+        if words:
+            return " ".join(words)
+    hit = OD.name_for(uci_moves or [])
+    return hit[1] if hit else None
+
+
+def name_missing_openings(session: Session, limit=None) -> int:
+    """Give every game without an opening name the one its moves follow (games from files, Chess.com, games played here). Returns how many were named."""
+    q = select(Game).where(or_(Game.opening.is_(None), Game.opening == "", Game.opening == "?"))
+    if limit:
+        q = q.limit(limit)
+    n = 0
+    for g in session.scalars(q):
+        game = chess.pgn.read_game(io.StringIO(g.pgn)) if g.pgn else None
+        if game is None:
+            continue
+        moves = []
+        for mv in game.mainline_moves():
+            moves.append(mv.uci())
+            if len(moves) >= OD.MAX_PLIES:
+                break
+        name = opening_name(dict(game.headers), moves)
+        if name:
+            g.opening = name
+            n += 1
+    return n
+
+
 def store(session: Session, *, id, source, headers, user_colour, analysis=None, nodes=0, multipv=0, engine=None, pgn=None, uci_moves=None, title=None):
     """Insert a game (and its analysis) unless it exists; returns True when it was new. `analysis` is the dict `analyse_game` returns."""
     if session.get(Game, id) is not None:
@@ -65,7 +107,7 @@ def store(session: Session, *, id, source, headers, user_colour, analysis=None, 
     moves = uci_moves if uci_moves is not None else [m["uci"] for m in (analysis or {}).get("moves", [])]
     elo = lambda k: int(h[k]) if str(h.get(k, "")).isdigit() else None
     session.add(Game(id=id, source=source, white=h.get("White") or "White", black=h.get("Black") or "Black", white_elo=elo("WhiteElo"), black_elo=elo("BlackElo"),
-                     result=h.get("Result") or "*", played_at=date, played_time=clock if clock and len(clock) >= 5 and clock[2] == ":" else None, speed=speed_of(h.get("TimeControl")), opening=h.get("Opening") or None, title=title,
+                     result=h.get("Result") or "*", played_at=date, played_time=clock if clock and len(clock) >= 5 and clock[2] == ":" else None, speed=speed_of(h.get("TimeControl")), opening=opening_name(h, moves), title=title,
                      user_colour=user_colour, pgn=pgn or pgn_from_moves(moves, h), plies=len(moves)))
     session.flush()                                                            # the game row first: the analysis points at it
     if analysis and analysis.get("moves"):

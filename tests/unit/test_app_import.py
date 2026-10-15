@@ -56,7 +56,7 @@ def test_importing_a_pgn_adds_games_once_and_knows_your_side(client):
     page = client.get("/api/games").json()
     assert page["total"] == 2
     a = client.get("/api/games/lichess:AAAAAAAA").json()
-    assert a["user"] == "white" and a["speed"] == "blitz" and a["plies"] == 10 and not a["analysed"] and a["opening"] is None and "Bb5" in a["pgn"]
+    assert a["user"] == "white" and a["speed"] == "blitz" and a["plies"] == 10 and not a["analysed"] and a["opening"] == "Ruy Lopez: Closed" and "Bb5" in a["pgn"]           # no name in the PGN: named from its moves
     assert client.get("/api/games/lichess:BBBBBBBB").json()["user"] == "black"
     again = wait(client, client.post("/api/import/pgn", json={"text": text, "player": "me"}).json())
     assert "0 new games" in again["message"] and "2 already" in again["message"] and client.get("/api/games").json()["total"] == 2

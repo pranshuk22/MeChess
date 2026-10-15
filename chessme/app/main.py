@@ -14,6 +14,7 @@ from . import db as DB
 from .config import AppConfig
 from .jobs import JobManager
 from .models import Prep
+from .services import games as G
 from . import importers
 from .live import LiveManager
 from .play import PlayService
@@ -39,6 +40,15 @@ def _lock_folder(folder: Path):
         f.close()
         raise RuntimeError(f"another MeChess is already using {folder}: close it first (or use another --data-dir)")
     return f
+
+
+def _name_openings(sessions):
+    try:
+        with sessions() as s:
+            if G.name_missing_openings(s):
+                s.commit()
+    except Exception:                                                              # (a failure here only leaves names empty)
+        pass
 
 
 def static_dir() -> Path | None:
@@ -71,6 +81,7 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.modes = CoachModes(config, app.state.sessions, app.state.quick)
         app.state.bot = BotService(config.bot_dir)
         app.state.reference = REF.load()
+        threading.Thread(target=_name_openings, args=(app.state.sessions,), daemon=True, name="name-openings").start()      # games without an opening name get one, in the background
         yield
         app.state.bot.close()
         app.state.modes.close()

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import chess
 import chess.pgn
 
+from .. import openings_db as OD
 from ..ingest.normalize import time_class_of
 from ..humanlike.testset import parse_tc
 
@@ -86,7 +87,8 @@ def parse(pgn_text: str, handles) -> OppGame | None:
     site = h.get("Site") or ""
     link = h.get("Link") or site
     url = link if link.startswith("https://") and ("lichess.org/" in link or "chess.com/" in link) else None
-    opening = opening_from_headers(h)
+    ucis = [n.move.uci() for n in nodes]
+    opening = opening_from_headers(h) or (OD.name_for(ucis) or (None, None))[1]            # a game without a name from the site gets the one its moves follow
     clocks = [node.clock() for node in nodes]
     gid = (re.search(r"(?:lichess\.org|chess\.com)/(?:game/)?(?:live/|daily/)?(\w+)", link) or [None, None])[1]
     return OppGame(id=gid or f"{h.get('White')}-{h.get('Black')}-{date}-{len(nodes)}", colour=colour, moves=[n.move.uci() for n in nodes], score=score, speed=speed, date=date,
