@@ -49,7 +49,7 @@ export const useUi = create<UiState>((set, get) => ({
   boardId: read("mechess.board") ?? DEFAULT_BOARD.id,
   boardSize: storedSize(),
   custom: storedCustom(),
-  grain: read("mechess.grain") !== "0",
+  grain: read("mechess.grain") === "1",                                              // flat squares unless the texture is switched on
   pieceSetId: read("mechess.pieces") ?? DEFAULT_PIECE_SET.id,
   showCoords: read("mechess.coords") !== "0",
   setMode: (m) => { write("mechess.mode", m); applyDocument(m, get().palette); set({ mode: m }); },

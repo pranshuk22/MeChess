@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...analysis import accuracy as ACC
+from ...analysis import performance as PERF
 from ..models import Analysis, Game
 from .games import BAD
 
@@ -49,11 +50,13 @@ def compute(session: Session) -> dict:
             mine_moves = a.moves[0::2] if g.user_colour == "white" else a.moves[1::2]
             mistakes.append(sum(1 for m in mine_moves if m["cls"] in BAD and m["loss"] >= 0.1))
     top = sorted(openings.items(), key=lambda kv: -kv[1][0])[:6]
+    perf = performance(rows[: 60])
     return {
         "games": total, "analysed": analysed, "results": results,
         "accuracy": {"recent": _mean(acc[:RECENT]), "previous": _mean(acc[RECENT:2 * RECENT]), "series": [round(x, 1) for x in reversed(acc[:30])]},
         "mistakesPerGame": {"recent": _mean(mistakes[:RECENT]), "previous": _mean(mistakes[RECENT:2 * RECENT])},
         "openings": [{"name": name, "colour": colour, "games": n, "score": s / n} for (name, colour), (n, s) in top],
+        "performance": perf,
         **insights(session, rows),
     }
 
@@ -148,3 +151,24 @@ def me(session: Session, accounts: dict) -> dict:
 
 
 MIN_OPENING = 5
+
+
+PERF_GAMES = 20
+
+
+def performance(rows) -> dict | None:
+    """The player's performance over their last `PERF_GAMES` analysed games (`rows` newest first): by play (all their moves together, against the reference rates of their most played
+    speed) and by result (the 400 rule over the games with an opponent rating). None when there are no analysed games."""
+    from .games import reference
+    picked = [(g, a) for g, a in rows if a is not None and a.moves and g.user_colour in ("white", "black")][:PERF_GAMES]
+    if not picked:
+        return None
+    losses = [m["loss"] for g, a in picked for m in (a.moves[0::2] if g.user_colour == "white" else a.moves[1::2])]
+    speeds = Counter(g.speed for g, _ in picked if g.speed)
+    est = PERF.estimate(losses, speeds.most_common(1)[0][0] if speeds else None, reference())
+    opp = [(g.black_elo if g.user_colour == "white" else g.white_elo, _outcome(g)) for g, _ in picked]
+    opp = [(e, o) for e, o in opp if e and o]
+    by_result = PERF.by_result(sum(e for e, _ in opp) / len(opp), sum(o == "win" for _, o in opp), sum(o == "loss" for _, o in opp), sum(o == "draw" for _, o in opp)) if opp else None
+    if est is None and by_result is None:
+        return None
+    return {"games": len(picked), "rating": est["rating"] if est else None, "low": est["low"] if est else None, "high": est["high"] if est else None, "moves": est["moves"] if est else 0, "byResult": by_result}

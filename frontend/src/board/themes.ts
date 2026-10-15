@@ -2,7 +2,7 @@ export interface BoardTheme { id: string; name: string; light: string; dark: str
 
 /** Board colour themes: original palettes. A custom pair of colours is also possible (see the settings). */
 export const BOARD_THEMES: BoardTheme[] = [
-  { id: "icy", name: "Icy", light: "#dbe6ee", dark: "#8aa3b8", grain: true },
+  { id: "icy", name: "Icy", light: "#dfe8f0", dark: "#7d98b2", grain: true },
   { id: "moss", name: "Moss", light: "#e6ead3", dark: "#7b9b6c", grain: true },
   { id: "walnut", name: "Walnut", light: "#ecd9b8", dark: "#ad7f58", grain: true },
   { id: "sand", name: "Sand", light: "#f1e6cb", dark: "#c9a676", grain: true },

@@ -7,7 +7,12 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ... import openings_db as OD
+import functools
+
 from ...analysis import accuracy as ACC
+from ...analysis import explain as EXP
+from ...analysis import performance as PERF
+from ...coach import reference as REF
 from ...analysis import runner as AR
 from ...humanlike.testset import parse_tc
 from ...ingest.normalize import time_class_of
@@ -146,6 +151,27 @@ def spark(moves, n=40):
     return [moves[i]["cp"] for i in idx]
 
 
+@functools.lru_cache(maxsize=1)
+def reference():
+    """The packaged reference counts (None when the file is missing); the performance estimates are made against them."""
+    return REF.load()
+
+
+def performance(game: Game, analysis: Analysis | None) -> dict:
+    """{'perf': {colour: estimate or None}, 'resultPerf': {colour: rating by the 400 rule or None}} for a game: how each side played (against the reference rates of the game's
+    speed) and what the result says given the opponent's rating."""
+    perf = {"white": None, "black": None}
+    if analysis and analysis.moves:
+        for colour, mine in (("white", analysis.moves[0::2]), ("black", analysis.moves[1::2])):
+            perf[colour] = PERF.estimate([m["loss"] for m in mine], game.speed, reference())
+    pts = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(game.result)
+    res = {"white": None, "black": None}
+    if pts is not None:
+        for colour, own, opp in (("white", pts, game.black_elo), ("black", 1.0 - pts, game.white_elo)):
+            res[colour] = PERF.by_result(opp, int(own == 1.0), int(own == 0.0), int(own == 0.5))
+    return {"perf": perf, "resultPerf": res}
+
+
 def summary(game: Game, analysis: Analysis | None) -> dict:
     moves = analysis.moves if analysis else []
     mistakes = sum(1 for m in _mine(moves, game.user_colour) if m["cls"] in BAD and m["loss"] >= 0.1) if analysis and game.user_colour else None
@@ -153,11 +179,48 @@ def summary(game: Game, analysis: Analysis | None) -> dict:
             "date": game.played_at, "speed": game.speed, "opening": game.opening, "title": game.title, "user": game.user_colour, "plies": game.plies,
             "analysed": analysis is not None,
             "accuracy": {"white": analysis.accuracy_white, "black": analysis.accuracy_black} if analysis and analysis.accuracy_white is not None else None,
-            "mistakes": mistakes, "spark": spark(moves)}
+            "mistakes": mistakes, "spark": spark(moves), **performance(game, analysis)}
+
+
+def opening_steps(uci_moves) -> tuple[list, int]:
+    """([[ply, eco, name]] where the named opening changes along the game, the last ply that is still a named line)."""
+    steps, last, book_end, table = [], None, 0, OD.table()
+    for p in range(1, min(len(uci_moves), OD.MAX_PLIES) + 1):
+        hit = OD.name_for(uci_moves[:p], max_plies=p)
+        if hit and hit != last:
+            steps.append([p, hit[0], hit[1]])
+            last = hit
+        if tuple(uci_moves[:p]) in table:
+            book_end = p
+    return steps, book_end
+
+
+def clocks_of(pgn: str | None):
+    """(seconds on the clock after each ply or None, base seconds, increment) from the clock comments of the stored PGN."""
+    if not pgn:
+        return [], None, None
+    g = chess.pgn.read_game(io.StringIO(pgn))
+    if g is None:
+        return [], None, None
+    clocks = [None if (c := n.clock()) is None else round(c, 1) for n in g.mainline()]
+    tc = parse_tc(g.headers.get("TimeControl"))
+    return (clocks if any(c is not None for c in clocks) else []), (tc[0] if tc else None), (tc[1] if tc else None)
 
 
 def detail(game: Game, analysis: Analysis | None) -> dict:
-    return {**summary(game, analysis), "moves": analysis.moves if analysis else [], "pgn": game.pgn, "phaseAccuracy": ACC.from_api_moves(analysis.moves)["by_phase"] if analysis and analysis.moves else {}}
+    moves = [dict(m) for m in analysis.moves] if analysis else []
+    if moves:
+        for m, why in zip(moves, EXP.explain_all(moves)):
+            m["why"] = why
+    steps, book_end = opening_steps([m["uci"] for m in moves] if moves else _uci_of_pgn(game.pgn))
+    clocks, base, inc = clocks_of(game.pgn)
+    return {**summary(game, analysis), "moves": moves, "pgn": game.pgn, "phaseAccuracy": ACC.from_api_moves(analysis.moves)["by_phase"] if analysis and analysis.moves else {},
+            "openingSteps": steps, "bookEnd": book_end, "clocks": clocks, "base": base, "inc": inc}
+
+
+def _uci_of_pgn(pgn):
+    g = chess.pgn.read_game(io.StringIO(pgn)) if pgn else None
+    return [m.uci() for m in g.mainline_moves()] if g else []
 
 
 def page(session: Session, *, q=None, colour=None, result=None, analysed=None, limit=100, offset=0):

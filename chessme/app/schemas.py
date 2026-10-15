@@ -20,11 +20,19 @@ class Move(BaseModel):
     acc: float | None = Field(default=None, description="the move's accuracy, 0 to 100")
     phase: str | None = Field(default=None, description="opening, middlegame or endgame")
     lines: list[EngineLine] | None = Field(default=None, description="the engine's best lines in the position BEFORE this move, best first")
+    why: list[str] = Field(default_factory=list, description="plain-language reasons for the move")
 
 
 class Accuracy(BaseModel):
     white: float
     black: float
+
+
+class Perf(BaseModel):
+    rating: int
+    low: int
+    high: int
+    moves: int
 
 
 class GameSummary(BaseModel):
@@ -45,11 +53,18 @@ class GameSummary(BaseModel):
     accuracy: Accuracy | None
     mistakes: int | None = Field(description="the player's moves that gave away at least 10% win chance (mistake, miss, blunder)")
     spark: list[int] = Field(default_factory=list, description="a few evaluation points (centipawns, white's view) for a sparkline")
+    perf: dict[str, Perf | None] = Field(default_factory=dict, description="performance rating of each side from how its moves compare with players of each rating (80% interval)")
+    resultPerf: dict[str, int | None] = Field(default_factory=dict, description="performance by the result and the opponent's rating (the 400 rule)")
 
 
 class GameDetail(GameSummary):
     moves: list[Move]
     pgn: str | None
+    openingSteps: list[list] = Field(default_factory=list, description="[[ply, eco, name]] where the named opening changes along the game")
+    bookEnd: int = Field(0, description="the last half-move that is still a named opening line")
+    clocks: list[float | None] = Field(default_factory=list, description="seconds on the mover's clock after each half-move, when the game has clocks")
+    base: int | None = None
+    inc: int | None = None
     phaseAccuracy: dict[str, dict[str, float | None]] = {}                  # {'white': {'opening': x, ...}, 'black': {...}}: combined like the game accuracy
 
 
@@ -172,6 +187,15 @@ class SplitStat(BaseModel):
     score: float
 
 
+class Performance(BaseModel):
+    games: int
+    rating: int | None
+    low: int | None
+    high: int | None
+    moves: int
+    byResult: int | None
+
+
 class Stats(BaseModel):
     perDay: list[DayCount]
     phaseAccuracy: PhaseAccuracy
@@ -185,6 +209,7 @@ class Stats(BaseModel):
     accuracy: AccuracyStats
     mistakesPerGame: MistakeStats
     openings: list[OpeningStat]
+    performance: Performance | None = None
 
 
 class CacheMove(BaseModel):

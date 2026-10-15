@@ -101,8 +101,15 @@ export interface GameDetail {
   accuracy: Accuracy | null;
   mistakes: number | null;
   spark: number[];
+  perf: Record<string, Perf | null>;
+  resultPerf: Record<string, number | null>;
   moves: Move[];
   pgn: string | null;
+  openingSteps: unknown[][];
+  bookEnd: number;
+  clocks: (number | null)[];
+  base: number | null;
+  inc: number | null;
   phaseAccuracy: Record<string, Record<string, number | null>>;
 }
 
@@ -129,6 +136,8 @@ export interface GameSummary {
   accuracy: Accuracy | null;
   mistakes: number | null;
   spark: number[];
+  perf: Record<string, Perf | null>;
+  resultPerf: Record<string, number | null>;
 }
 
 export interface Handle {
@@ -162,6 +171,12 @@ export interface JobOut {
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
+}
+
+export interface LibraryPick {
+  name: string;
+  colour: string;
+  rating: number;
 }
 
 export interface Me {
@@ -198,6 +213,10 @@ export interface MeRating {
   date: string;
 }
 
+export interface MinePick {
+  colour: string;
+}
+
 export interface MistakeStats {
   recent: number | null;
   previous: number | null;
@@ -215,6 +234,7 @@ export interface Move {
   acc: number | null;
   phase: string | null;
   lines: EngineLine[] | null;
+  why: string[];
 }
 
 export interface MoveBody {
@@ -232,6 +252,22 @@ export interface OpeningStat {
   colour: string;
   games: number;
   score: number;
+}
+
+export interface Perf {
+  rating: number;
+  low: number;
+  high: number;
+  moves: number;
+}
+
+export interface Performance {
+  games: number;
+  rating: number | null;
+  low: number | null;
+  high: number | null;
+  moves: number;
+  byResult: number | null;
 }
 
 export interface PhaseAccuracy {
@@ -318,6 +354,7 @@ export interface Stats {
   accuracy: AccuracyStats;
   mistakesPerGame: MistakeStats;
   openings: OpeningStat[];
+  performance: Performance | null;
 }
 
 export interface SteerStart {
