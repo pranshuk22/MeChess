@@ -88,8 +88,8 @@ class Replay:
         if self.ex is None:
             return {"done": True, "mode": "done", "attempts": len(self.log)}
         return {"done": False, "mode": self.mode, "index": self.index, "of": len(self.exercises), "fen": self.board.fen(), "color": self.ex["color"], "ply": self.ex["ply"],
-                "hints_used": self.hints_used, "tries": self.tries, "can_reveal": self.mode == "find" and self.tries >= MAX_TRIES_BEFORE_OFFER or self.hints_used >= 3,
-                "last_moves_known": None}
+                "hints_used": self.hints_used, "tries": self.tries, "can_reveal": self.mode == "find" and (self.tries >= MAX_TRIES_BEFORE_OFFER or self.hints_used >= 3),
+                "legal": [m.uci() for m in self.board.legal_moves]}
 
     # ---- the find-a-better-move step ----------------------------------------------------------------------------------------------------
     def hint(self):
@@ -142,7 +142,7 @@ class Replay:
         reply = self._reply()
         self.log.append({"index": self.index, "ply": self.ex["ply"], "kind": self.ex["kind"], "phase": self.ex["phase"], "uci": None, "loss": None,
                          "verdict": "revealed", "hints_used": self.hints_used})
-        return {"verdict": "revealed", "message": self.ex["explanation"], "best_uci": self.ex["best_uci"], **reply}
+        return {"verdict": "revealed", "message": self.ex["explanation"], "best_uci": self.ex["best_uci"], "best_san": self.ex["best_san"], **reply}
 
     # ---- playing on ------------------------------------------------------------------------------------------------------------------
     def _reply(self):

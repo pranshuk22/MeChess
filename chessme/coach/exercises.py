@@ -49,7 +49,43 @@ def hints(board, best):
     return [first, second, f"The move is {board.san(best)}."]
 
 
-def explain(board, played, best, kind, win_before, win_after):
+def _san_line(board, first, pv, length):
+    """SAN of `first` followed by the engine's line `pv` (UCI), at most `length` half-moves, stopping at the first illegal move."""
+    b = board.copy(stack=False)
+    out = []
+    for uci in [first] + list(pv):
+        if len(out) >= length:
+            break
+        try:
+            m = chess.Move.from_uci(uci)
+        except ValueError:
+            break
+        if m not in b.legal_moves:
+            break
+        out.append(b.san(m))
+        b.push(m)
+    return out
+
+
+def enrich(ex, search, length=6):
+    """Add the engine's own continuations: `refutation` (what the opponent does after the played move) and `main_line` (the better move and what follows),
+    as short SAN strings, and rebuild the explanation with them. `search(board) -> [Line, ...]` as in `analysis.runner`."""
+    board = chess.Board(ex["fen"])
+    played, best = chess.Move.from_uci(ex["played_uci"]), chess.Move.from_uci(ex["best_uci"])
+    lines = {}
+    for key, move in (("refutation", played), ("main_line", best)):
+        b = board.copy(stack=False)
+        b.push(move)
+        found = [] if b.is_game_over() else search(b)
+        pv = list(found[0].pv) if found else []
+        lines[key] = _san_line(b, pv[0], pv[1:], length - 1) if pv else []
+    ex["refutation"] = " ".join(lines["refutation"])
+    ex["main_line"] = " ".join(lines["main_line"])
+    ex["explanation"] = explain(board, played, best, ex["kind"], ex["win_before"], ex["win_after"], ex["refutation"], ex["main_line"])
+    return ex
+
+
+def explain(board, played, best, kind, win_before, win_after, refutation="", main_line=""):
     """Plain sentences: what the played move allowed, then what the better move does. Only facts from the board and the engine's numbers."""
     san, best_san = board.san(played), board.san(best)
     mover = board.turn
@@ -67,8 +103,12 @@ def explain(board, played, best, kind, win_before, win_after):
                          + (" The same capture was already on before your move, and your move did not stop it." if kind == "ignores a threat" else ""))
     else:
         lines.append("Nothing is hanging at once, so this was not a one-move oversight: the move gave up the advantage over a longer sequence.")
+    if refutation:
+        lines.append(f"The engine expects the game to go on {refutation} after {san}.")
     what = F.describe_move(board, best)
     lines.append(f"A better move was {best_san}" + (": it " + ", and ".join(what) + "." if what else "."))
+    if main_line:
+        lines.append(f"The engine's line after {best_san} is {main_line}.")
     return " ".join(lines)
 
 

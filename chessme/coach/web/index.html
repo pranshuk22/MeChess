@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeChess coach</title>
+<style>
+  :root { --bg:#f6f4ef; --fg:#222; --card:#fff; --muted:#666; --light:#f0d9b5; --dark:#b58863; --sel:#f7ec74; --move:#8fc77a; --bad:#c0392b; --ok:#2e7d32; --accent:#2f6fdb; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1e1d1b; --fg:#e8e6e1; --card:#2a2926; --muted:#a09d95; --light:#c9b087; --dark:#7d5e44; --sel:#a39a3a; --move:#4f8a45; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.45 system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.4rem; margin:0 0 4px; } .sub { color:var(--muted); margin:0 0 16px; }
+  .card { background:var(--card); border-radius:10px; padding:14px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  textarea, input, select { width:100%; font:inherit; padding:8px; border-radius:6px; border:1px solid #9995; background:var(--bg); color:var(--fg); }
+  textarea { height:120px; font-family:ui-monospace, monospace; font-size:13px; }
+  button { font:inherit; padding:8px 14px; border-radius:6px; border:0; background:var(--accent); color:#fff; cursor:pointer; margin:4px 6px 4px 0; }
+  button.secondary { background:#8887; color:var(--fg); } button:disabled { opacity:.45; cursor:default; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; } .row > * { flex:1 1 200px; }
+  #game { display:none; gap:16px; flex-wrap:wrap; } #game.on { display:flex; }
+  #board { width:min(92vw, 480px); aspect-ratio:1; display:grid; grid-template-columns:repeat(8,1fr); border:2px solid #0004; user-select:none; }
+  .sq { display:flex; align-items:center; justify-content:center; font-size:min(8vw, 42px); line-height:1; cursor:pointer; position:relative; }
+  .sq.l { background:var(--light); } .sq.d { background:var(--dark); } .sq.sel { background:var(--sel); }
+  .sq.tgt::after { content:""; width:28%; height:28%; border-radius:50%; background:var(--move); opacity:.85; position:absolute; }
+  .w { color:#fff; text-shadow:0 0 2px #000, 0 0 2px #000, 0 0 3px #000; } .b { color:#111; }
+  #side { flex:1 1 280px; min-width:260px; }
+  #msg { white-space:pre-wrap; min-height:5em; } .good { color:var(--ok); font-weight:600; } .no { color:var(--bad); font-weight:600; }
+  .muted { color:var(--muted); font-size:.9rem; } .hide { display:none; }
+  label.g { display:block; padding:6px 8px; border-radius:6px; cursor:pointer; } label.g:hover { background:#8882; }
+</style>
+</head>
+<body>
+<main>
+  <h1>MeChess coach</h1>
+  <p class="sub">Go back to the moments where your game turned, find a better move, see why it is better, and play on from there. Everything runs on this computer.</p>
+
+  <section id="setup">
+    <div class="card">
+      <b>1. Get a game</b>
+      <div class="row" style="margin-top:8px">
+        <div><label class="muted">Lichess user name (fetches the latest public games)</label><input id="user" placeholder="user name"><button id="fetch">Fetch games</button></div>
+        <div><label class="muted">or paste a PGN (one or more games)</label><textarea id="pgn" placeholder="1. e4 e5 2. Nf3 ..."></textarea><button id="readpgn" class="secondary">Read this PGN</button></div>
+      </div>
+      <p id="setupmsg" class="muted"></p>
+    </div>
+    <div class="card hide" id="gamescard">
+      <b>2. Choose the game and your side</b>
+      <div id="games" style="margin:8px 0"></div>
+      <div class="row"><div><label class="muted">I played</label><select id="color"><option value="white">White</option><option value="black">Black</option></select></div></div>
+      <button id="start">Review my mistakes</button> <span class="muted" id="startmsg"></span>
+    </div>
+  </section>
+
+  <section id="game">
+    <div><div id="board"></div></div>
+    <div id="side">
+      <div class="card">
+        <div class="muted" id="status"></div>
+        <div id="msg">Loading…</div>
+      </div>
+      <div>
+        <button id="hint">Hint</button>
+        <button id="reveal" class="secondary">Show the answer</button>
+        <button id="reset" class="secondary">Try again</button>
+        <button id="next" class="secondary">Next mistake</button>
+        <button id="home" class="secondary">New game</button>
+      </div>
+      <p class="muted">Pawns promote to a queen. The coach never sees your account: only the game you pick is analysed here.</p>
+    </div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const GLYPH = {K:"♔",Q:"♕",R:"♖",B:"♗",N:"♘",P:"♙",k:"♚",q:"♛",r:"♜",b:"♝",n:"♞",p:"♟"};
+let pgnText = "", sid = null, view = null, selected = null, busy = false;
+
+async function api(path, body) {
+  const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body || {})});
+  return r.json();
+}
+function parseFen(fen) {
+  const rows = fen.split(" ")[0].split("/"), grid = [];
+  for (const row of rows) { const g = []; for (const ch of row) { if (/\d/.test(ch)) for (let i = 0; i < +ch; i++) g.push(""); else g.push(ch); } grid.push(g); }
+  return grid;   // grid[0] is rank 8
+}
+function drawBoard() {
+  const el = $("board"); el.innerHTML = "";
+  if (!view || view.done) return;
+  const grid = parseFen(view.fen), flip = view.color === "black";
+  const legalFrom = new Set(view.legal.map(m => m.slice(0,2)));
+  const targets = new Set(selected ? view.legal.filter(m => m.slice(0,2) === selected).map(m => m.slice(2,4)) : []);
+  for (let i = 0; i < 64; i++) {
+    const r = flip ? 7 - Math.floor(i / 8) : Math.floor(i / 8), f = flip ? 7 - (i % 8) : i % 8;
+    const name = "abcdefgh"[f] + (8 - r), piece = grid[r][f];
+    const d = document.createElement("div");
+    d.className = "sq " + ((r + f) % 2 ? "d" : "l") + (name === selected ? " sel" : "") + (targets.has(name) ? " tgt" : "");
+    if (piece) { const s = document.createElement("span"); s.textContent = GLYPH[piece]; s.className = piece === piece.toUpperCase() ? "w" : "b"; d.appendChild(s); }
+    d.onclick = () => clickSquare(name, piece);
+    el.appendChild(d);
+  }
+}
+async function clickSquare(name, piece) {
+  if (busy || !view || view.done) return;
+  if (selected && selected !== name) {
+    const base = selected + name, mv = view.legal.find(m => m === base || m === base + "q");
+    if (mv) { selected = null; return sendMove(mv); }
+  }
+  selected = view.legal.some(m => m.slice(0,2) === name) ? name : null;
+  drawBoard();
+}
+function setMsg(html, cls) { $("msg").innerHTML = ""; const s = document.createElement("span"); if (cls) s.className = cls; s.textContent = html; $("msg").appendChild(s); }
+function refresh(v) {
+  if (v) view = v;
+  selected = null;
+  if (view.done) { setMsg("That was the last mistake. Well done: you went through all of them. Start a new game or come back to retry these.", "good"); $("status").textContent = ""; }
+  else $("status").textContent = `Mistake ${view.index + 1} of ${view.of}  (move ${Math.ceil(view.ply / 2)} of your game)  ·  ` + (view.mode === "find" ? `find a better move for ${view.color}` : "play on from here");
+  $("hint").disabled = view.done || view.mode !== "find"; $("reveal").disabled = view.done || view.mode !== "find";
+  $("reset").disabled = view.done; $("next").disabled = view.done;
+  drawBoard();
+}
+async function sendMove(uci) {
+  busy = true;
+  const act = view.mode === "find" ? "attempt" : "play";
+  const out = await api(`/api/replay/${sid}/${act}`, {uci});
+  busy = false;
+  if (out.error) { setMsg(out.error, "no"); return drawBoard(); }
+  if (act === "attempt") {
+    if (out.verdict === "not yet") { setMsg(out.message, "no"); return refresh(out.view); }
+    setMsg(out.message + (out.reply_san ? `\n\nThe opponent replied ${out.reply_san}. Now play on from here.` : ""), "good");
+  } else {
+    let t = `You played ${out.san}.` + (out.reply_san ? ` The opponent replied ${out.reply_san}.` : "");
+    if (out.game_over) t += `\n\nThe game is over (${out.result}). Press “Next mistake” or “Try again”.`;
+    setMsg(t);
+  }
+  refresh(out.view);
+}
+$("fetch").onclick = async () => {
+  $("setupmsg").textContent = "Fetching…";
+  const out = await api("/api/games", {user: $("user").value.trim(), max: 10});
+  showGames(out);
+};
+$("readpgn").onclick = async () => { showGames(await api("/api/games", {pgn: $("pgn").value})); };
+function showGames(out) {
+  if (out.error || !out.games || !out.games.length) { $("setupmsg").textContent = out.error || "No games found."; return; }
+  pgnText = out.pgn; $("setupmsg").textContent = `${out.games.length} game(s) found.`;
+  const box = $("games"); box.innerHTML = "";
+  out.games.forEach((g, i) => {
+    const l = document.createElement("label"); l.className = "g";
+    const rb = document.createElement("input"); rb.type = "radio"; rb.name = "g"; rb.value = g.index; rb.style.width = "auto"; if (i === 0) rb.checked = true;
+    l.appendChild(rb); l.appendChild(document.createTextNode(` ${g.white} – ${g.black}   ${g.result}   ${g.date}   (${Math.ceil(g.plies/2)} moves)`));
+    box.appendChild(l);
+  });
+  $("gamescard").classList.remove("hide");
+}
+$("start").onclick = async () => {
+  const idx = +(document.querySelector("input[name=g]:checked") || {value: 0}).value;
+  $("startmsg").textContent = "Analysing the game with the engine… this takes a little while.";
+  $("start").disabled = true;
+  const out = await api("/api/start", {pgn: pgnText, index: idx, color: $("color").value});
+  $("start").disabled = false; $("startmsg").textContent = "";
+  if (out.error) { $("startmsg").textContent = out.error; return; }
+  if (out.none) { $("startmsg").textContent = out.message; return; }
+  sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
+  setMsg(`Your accuracy in this game was ${out.accuracy ? out.accuracy.toFixed(0) : "?"}%. We go through ${out.n} moment(s) where you gave away the most. Find a better move than the one you played: click a piece, then its square.`);
+  refresh(out.view);
+};
+$("hint").onclick = async () => { const o = await api(`/api/replay/${sid}/hint`); if (o.error) setMsg(o.error, "no"); else setMsg(`Hint ${o.level} of 3: ${o.hint}`); refresh(o.view); };
+$("reveal").onclick = async () => { const o = await api(`/api/replay/${sid}/reveal`); if (o.error) setMsg(o.error, "no"); else setMsg(`The better move was ${o.best_san}.\n\n${o.message}` + (o.reply_san ? `\n\nThe opponent replied ${o.reply_san}. Play on if you like.` : "")); refresh(o.view); };
+$("reset").onclick = async () => { const o = await api(`/api/replay/${sid}/reset`); setMsg("Back to the position before your mistake. Find a better move."); refresh(o.view); };
+$("next").onclick = async () => { const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
+$("home").onclick = () => { $("game").classList.remove("on"); $("setup").classList.remove("hide"); };
+</script>
+</body>
+</html>

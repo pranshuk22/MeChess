@@ -49,6 +49,7 @@ and [training-resources.md](docs/training-resources.md) for the data.
 | **Game analysis** (`chessme/analysis`) | `chessme analyse`: classes every move in your games (Book, Brilliant, Best, ... Blunder), accuracy by game phase, your worst mistakes. |
 | **Opening explorer** (`chessme/book`) | A Lichess-style "what does everyone play here" lookup, built from a public database, broken down by rating band. |
 | **Chess-book reader** (`chessme/books`) | Reads 100+ public-domain chess books and annotated games, and trains a small language model on how they describe moves. |
+| **Coach** (`chessme/coach`) | `chessme coach`: a local web page that replays the biggest mistakes of a game, lets you find better moves with hints, explains why, and lets you play on ([docs/coach.md](docs/coach.md)). |
 | **Lichess bot** | Runs MeChess as an actual bot account on Lichess. |
 
 ## Quick start

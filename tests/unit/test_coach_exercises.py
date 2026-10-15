@@ -69,3 +69,18 @@ def test_from_analysis_takes_the_biggest_fair_mistakes_apart_from_each_other_in_
     lost = [{**moves[1], "win_before": 0.05}]
     assert X.from_analysis(game, {"moves": lost}, "white") == []           # already lost: no exercise
     assert X.from_analysis(game, {"moves": moves}, "black") == []          # black made no mistake
+
+
+def test_enrich_adds_the_engines_continuations_to_the_explanation():
+    class L:
+        def __init__(self, pv):
+            self.move, self.cp, self.pv = pv[0], 0, pv
+
+    def search(board):
+        if board.fen().startswith("rnbqkbnr/pppp1ppp/8/4p3/6P1/5P2"):         # after g4
+            return [L(["d8h4"])]
+        return [L(["b8c6", "g1e2", "g8f6"])]                                    # after e4 (black to move)
+    ex = X.exercise(AFTER_F3_E5, "g2g4", "e2e4", 0.9, 0.55, 0.0, ply=3)
+    X.enrich(ex, search)
+    assert ex["refutation"] == "Qh4#" and ex["main_line"] == "Nc6 Ne2 Nf6"
+    assert "The engine expects the game to go on Qh4# after g4." in ex["explanation"] and "The engine's line after e4 is Nc6 Ne2 Nf6." in ex["explanation"]

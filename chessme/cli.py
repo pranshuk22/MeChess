@@ -760,6 +760,22 @@ def _stoppable(items, ctl):
         yield it
 
 
+def cmd_coach(args):
+    """Start the local coach (web page on this computer): go back over the mistakes of a game, find better moves, see why, play on."""
+    import webbrowser
+
+    from .coach import server as CS
+    backend = CS.EngineBackend(args.engine, nodes=args.nodes)
+    app = CS.CoachApp(backend.search)
+    if not args.no_browser:
+        import threading
+        threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
+    try:
+        CS.serve(app, port=args.port)
+    finally:
+        backend.close()
+
+
 def cmd_analyse(args):
     """Analyse the games of a PGN file with Stockfish: one JSON file per game (resumable and pausable), then a Markdown report."""
     import io as _io
@@ -2809,6 +2825,9 @@ def main():
     hd.add_argument("--testset", required=True); hd.add_argument("--scores", required=True); hd.add_argument("--judged", required=True)
     hd.add_argument("--adapters-dir", help="the --save-dir of humanlike-adapter: also diagnose the saved adapters (not refitted)"); hd.add_argument("--lambdas", default="0.1,0.5")
     hd.add_argument("--boot", type=int, default=500); hd.add_argument("--out", required=True); hd.set_defaults(func=cmd_humanlike_diagnose)
+    co = sub.add_parser("coach", help="start the local coach: a web page on this computer to go back over the mistakes of a game, find better moves, see why they are better and play on (needs Stockfish)")
+    co.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); co.add_argument("--nodes", type=int, default=100000, help="search budget per position (more is slower and stronger)")
+    co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
