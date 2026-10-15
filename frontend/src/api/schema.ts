@@ -128,6 +128,11 @@ export interface GameSummary {
   spark: number[];
 }
 
+export interface Handle {
+  site: string;
+  name: string;
+}
+
 export interface Hint {
   level: number;
 }
@@ -202,6 +207,15 @@ export interface PlayedMove {
   uci: string;
 }
 
+export interface PrepStart {
+  handles: Handle[];
+  pgn: string | null;
+  depth: string;
+  max_games: number;
+  speeds: string[];
+  rated_only: boolean;
+}
+
 export interface RatingPoint {
   date: string;
   rating: number;
@@ -217,6 +231,11 @@ export interface Results {
   win: number;
   draw: number;
   loss: number;
+}
+
+export interface SaveRepertoire {
+  colour: string;
+  name: string | null;
 }
 
 export interface Settings {

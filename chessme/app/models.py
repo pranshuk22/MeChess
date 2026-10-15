@@ -123,3 +123,28 @@ class BookNote(Base):
     source: Mapped[str | None] = mapped_column(String)
     comment: Mapped[str] = mapped_column(Text)
     concepts: Mapped[str] = mapped_column(String, default=",")                 # ",outpost,zugzwang," so that a concept is found with LIKE
+
+
+class Prep(Base):
+    """A preparation against one opponent: who (their handles), what was asked, and the finished report. Deleting it deletes the opponent's games kept for it."""
+    __tablename__ = "preps"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String, index=True)                    # running, done, failed
+    handles: Mapped[list] = mapped_column(JSON)                                # [{site, name}]
+    params: Mapped[dict] = mapped_column(JSON)                                 # depth, speeds, max games, rated only
+    report: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(Text)
+    job_id: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class PrepGame(Base):
+    """One game of the opponent, kept for a preparation (`chessme.prep.games.OppGame` as data) with its analysis (opening part or whole game)."""
+    __tablename__ = "prep_games"
+    prep_id: Mapped[str] = mapped_column(ForeignKey("preps.id", ondelete="CASCADE"), primary_key=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    data: Mapped[dict] = mapped_column(JSON)
+    analysis: Mapped[list | None] = mapped_column(JSON)
+    full: Mapped[bool] = mapped_column(Integer, default=0)                     # the analysis covers the whole game, not only the opening

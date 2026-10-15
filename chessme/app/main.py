@@ -7,18 +7,20 @@ import threading
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
+from sqlalchemy import select
 
 from ..coach import reference as REF
 from . import db as DB
 from .config import AppConfig
 from .jobs import JobManager
+from .models import Prep
 from . import importers
 from .live import LiveManager
 from .play import PlayService
 from .bot_service import BotService
 from .coach_modes import CoachModes
 from .quick import QuickEngine
-from .routers import api, books, bot, coach, coach_modes, live, play, themes
+from .routers import api, books, bot, coach, coach_modes, live, play, prep, themes
 from .security import COOKIE, LocalOnly, SecurityHeaders, TokenAuth, allowed, key_ok
 
 HERE = Path(__file__).parent
@@ -59,6 +61,10 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.engine = engine
         app.state.sessions = DB.session_factory(engine)
         app.state.jobs = JobManager(app.state.sessions)
+        with app.state.sessions() as s:                                         # a preparation that was running when the app closed did not finish
+            for p in s.scalars(select(Prep).where(Prep.status == "running")):
+                p.status, p.error = "failed", "interrupted: the app was closed while this was running"
+            s.commit()
         app.state.live = LiveManager()
         app.state.play = PlayService(config)
         app.state.quick = QuickEngine(config, app.state.sessions)
@@ -104,6 +110,7 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     app.include_router(bot.router)
     app.include_router(books.router)
     app.include_router(play.router)
+    app.include_router(prep.router)
     app.include_router(themes.router)
 
     root = static_dir() if static is True else (static or None)
