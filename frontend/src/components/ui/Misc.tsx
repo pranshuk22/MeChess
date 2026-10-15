@@ -34,7 +34,7 @@ export function Stat({ label, value, sub, children }: { label: string; value: Re
   return (
     <div className="min-w-0 rounded-[12px] border border-border bg-surface p-4 shadow-[var(--shadow-sm)]">
       <div className="text-[12px] font-medium text-muted">{label}</div>
-      <div className="mt-1.5 flex items-end justify-between gap-3">
+      <div className="mt-1.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
         <div><div className="tnum font-display text-[26px] font-semibold leading-8 tracking-[-0.04em]">{value}</div>{sub && <div className="mt-0.5 text-[12px] text-muted">{sub}</div>}</div>
         {children}
       </div>
