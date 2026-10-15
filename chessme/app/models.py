@@ -78,3 +78,20 @@ class PositionEval(Base):
     hits: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Drill(Base):
+    """A position from the player's own game where they gave away points, repeated on a schedule until they find the better move (Leitner boxes 0 to 5)."""
+    __tablename__ = "drills"
+    id: Mapped[str] = mapped_column(String, primary_key=True)                  # hash of position and best move
+    game_id: Mapped[str | None] = mapped_column(ForeignKey("games.id", ondelete="SET NULL"), index=True)
+    ply: Mapped[int | None] = mapped_column(Integer)
+    fen: Mapped[str] = mapped_column(String)
+    colour: Mapped[str] = mapped_column(String)
+    played_uci: Mapped[str] = mapped_column(String)
+    best_uci: Mapped[str] = mapped_column(String)
+    exercise: Mapped[dict] = mapped_column(JSON)                               # everything `coach.exercises.exercise` made: SAN, loss, kind, hints, explanation
+    box: Mapped[int] = mapped_column(Integer, default=0)
+    due: Mapped[float] = mapped_column(Float, index=True)                      # seconds since the epoch
+    history: Mapped[list] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

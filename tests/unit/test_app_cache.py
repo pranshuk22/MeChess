@@ -14,7 +14,7 @@ from tests.unit.test_app_import import FakeEngine, pgn, wait
 from tests.unit.test_app_live import FAKE, HOST, START  # noqa: F401
 
 BASE = "http://127.0.0.1:8765"
-AFTER_E4_E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
+AFTER_E4_E5 = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2"
 DEEP = "r1bq1rk1/pp2bppp/2n1pn2/2pp4/3P1B2/2PBPN2/PP1N1PPP/R2QK2R w KQ - 0 10"        # white to move on move 10 (ply 18)
 LAST = "r1bq1rk1/pp2bppp/2n1pn2/2pp4/3P1B2/2PBPN2/PP1N1PPP/R2QK2R w KQ - 0 11"                      # white to move on move 11 (ply 20): the last position kept
 TOO_DEEP = "r1bq1rk1/pp2bppp/2n1pn2/2pp4/3P1B2/2PBPN2/PP1N1PPP/R2QK2R w KQ - 0 12"                   # ply 22

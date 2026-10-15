@@ -8,7 +8,9 @@ from ..analysis import runner as AR
 from ..uci_client import UciEngine
 from .config import AppConfig
 from .models import Analysis, Game
+from .models import Analysis
 from .services import cache as CA
+from .services import coach as CO
 from .services import games as G
 from .workspace import find_engine
 
@@ -23,7 +25,7 @@ def analyse_games(config: AppConfig, session_factory, ids, settings, ctx, engine
     if path is None and engine_factory is None:
         raise RuntimeError("Stockfish was not found: install it or set its path in Settings")
     eng = (engine_factory or (lambda: UciEngine([path], options={"Threads": settings.threads, "Hash": settings.hash_mb}).start()))()
-    done = skipped = 0
+    done = skipped = drills = 0
     try:
         search = AR.engine_search(eng, nodes=settings.nodes, multipv=settings.multipv)
         if settings.use_cache:                                                  # opening positions are looked up (and stored) instead of searched again
@@ -40,6 +42,8 @@ def analyse_games(config: AppConfig, session_factory, ids, settings, ctx, engine
                 eng.new_game()
                 res = AR.analyse_game(game, search)
                 G.save_analysis(s, gid, res, nodes=settings.nodes, multipv=settings.multipv, engine=getattr(eng, "name", None))
+                s.flush()
+                drills += CO.add_game_drills(s, g, s.get(Analysis, gid))            # the player's biggest mistakes in this game become drills
                 s.commit()
                 done += 1
                 ctx.progress((i + 1) / len(ids), f"game {i + 1:,} of {len(ids):,}")
@@ -48,4 +52,4 @@ def analyse_games(config: AppConfig, session_factory, ids, settings, ctx, engine
     finally:
         eng.close()
     hits = getattr(search, "hits", 0)
-    return f"{done:,} games analysed" + (f", {skipped:,} skipped" if skipped else "") + (f" ({hits:,} opening positions came from the cache)" if hits else "")
+    return f"{done:,} games analysed" + (f", {skipped:,} skipped" if skipped else "") + (f" ({hits:,} opening positions came from the cache)" if hits else "") + (f"; {drills:,} new practice positions" if drills else "")

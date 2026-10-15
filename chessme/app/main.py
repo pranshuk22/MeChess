@@ -5,12 +5,15 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 
+from ..coach import reference as REF
 from . import db as DB
 from .config import AppConfig
 from .jobs import JobManager
 from . import importers
 from .live import LiveManager
-from .routers import api, live, themes
+from .play import PlayService
+from .quick import QuickEngine
+from .routers import api, coach, live, play, themes
 from .security import LocalOnly, allowed
 
 HERE = Path(__file__).parent
@@ -36,7 +39,12 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.sessions = DB.session_factory(engine)
         app.state.jobs = JobManager(app.state.sessions)
         app.state.live = LiveManager()
+        app.state.play = PlayService(config)
+        app.state.quick = QuickEngine(config, app.state.sessions)
+        app.state.reference = REF.load()
         yield
+        app.state.quick.close()
+        app.state.play.close()
         app.state.live.close()
         app.state.jobs.shutdown()
         engine.dispose()
@@ -49,6 +57,8 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     app.add_middleware(LocalOnly, hosts=hosts, origins=origins)
     app.include_router(api.router)
     app.include_router(live.router)
+    app.include_router(coach.router)
+    app.include_router(play.router)
     app.include_router(themes.router)
 
     root = static_dir() if static is True else (static or None)
