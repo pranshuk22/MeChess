@@ -43,6 +43,11 @@
       <b>Practice my mistakes</b> <span class="muted" id="drillinfo"></span><br>
       <button id="drills">Start</button>
     </div>
+    <div class="card hide" id="endcard">
+      <b>Endgame practice</b> <span class="muted">judged exactly by tablebases: every move is either keeping the result or throwing it away</span>
+      <div class="row" style="margin-top:8px"><div><select id="theme"></select></div><div><button id="endstart">Practise</button></div></div>
+      <p id="endinfo" class="muted"></p>
+    </div>
     <div class="card" id="opencard">
       <b>Opening practice</b> <span class="muted">drill your own repertoire against the replies players of your rating really play (needs the opening explorer database)</span>
       <div class="row" style="margin-top:8px">
@@ -139,6 +144,7 @@ function refresh(v) {
 }
 async function sendMove(uci) {
   if (mode === "opening") return sendOpeningMove(uci);
+  if (mode === "endgame") return sendEndgameMove(uci);
   busy = true;
   const act = view.mode === "find" ? "attempt" : "play";
   const out = await api(`/api/replay/${sid}/${act}`, {uci});
@@ -155,10 +161,47 @@ async function sendMove(uci) {
   refresh(out.view);
 }
 function setButtons() {
-  const op = mode === "opening";
-  $("hint").classList.toggle("hide", op); $("reveal").classList.toggle("hide", op); $("reset").classList.toggle("hide", op);
-  $("next").textContent = op ? "Another line" : "Next mistake";
+  const op = mode === "opening", eg = mode === "endgame";
+  $("hint").classList.toggle("hide", op); $("reveal").classList.toggle("hide", op || eg); $("reset").classList.toggle("hide", op || eg);
+  $("next").textContent = op ? "Another line" : eg ? "Another position" : "Next mistake";
 }
+let endTheme = null, endLevel = 0;
+function endgameRefresh() {
+  selected = null; setButtons(); endLevel = view.over ? 0 : endLevel;
+  $("status").textContent = `Endgame · ${view.goal}` + (view.errors ? ` · wrong tries: ${view.errors}` : "");
+  $("hint").disabled = view.over; $("next").disabled = false;
+  if (view.over) setMsg(view.report.message + (view.errors ? `\nWrong tries: ${view.errors}` : ""), view.report.success ? "good" : "no");
+  drawBoard();
+}
+async function sendEndgameMove(uci) {
+  busy = true;
+  const out = await api(`/api/endgame/${sid}/move`, {uci});
+  busy = false;
+  if (out.error) { setMsg(out.error, "no"); return drawBoard(); }
+  view = out.view;
+  if (out.verdict !== "throws it away") endLevel = 0;
+  if (out.verdict === "throws it away") setMsg(out.message, "no");
+  else if (!view.over) setMsg((out.message ? out.message + "\n" : "") + (out.reply_san ? `The opponent replied ${out.reply_san}.` : "") + "\nYour move.", "good");
+  endgameRefresh();
+}
+async function startEndgame() {
+  const out = await api("/api/endgame/start", {theme: endTheme});
+  if (out.error) { $("endinfo").textContent = out.error; return; }
+  mode = "endgame"; sid = out.session; view = out.view; endLevel = 0;
+  $("setup").classList.add("hide"); $("game").classList.add("on");
+  setMsg(`${view.goal}.\n${view.tip}\nClick a piece, then its square. A hint is always available.`);
+  endgameRefresh();
+}
+async function loadThemes() {
+  const o = await api("/api/endgame/themes");
+  const ok = o.themes.filter(t => t.available);
+  $("endcard").classList.remove("hide");
+  const sel = $("theme"); sel.innerHTML = "";
+  o.themes.forEach(t => { const op = document.createElement("option"); op.value = t.id; op.textContent = t.title + (t.available ? "" : " (needs tablebase files)"); op.disabled = !t.available; sel.appendChild(op); });
+  $("endstart").disabled = ok.length === 0;
+  if (ok.length === 0) $("endinfo").textContent = "Start the coach with --syzygy DIR (a folder with Syzygy tablebase files, 3 to 5 pieces is about 1 GB) to practise endgames.";
+}
+$("endstart").onclick = () => { endTheme = $("theme").value; startEndgame(); };
 function openingRefresh() {
   selected = null; setButtons();
   $("status").textContent = "Opening practice · " + (view.line.length ? view.line.join(" ") : "your move");
@@ -223,10 +266,12 @@ $("start").onclick = async () => {
   setMsg(`Your accuracy in this game was ${out.accuracy ? out.accuracy.toFixed(0) : "?"}%. We go through ${out.n} moment(s) where you gave away the most. Find a better move than the one you played: click a piece, then its square.`);
   refresh(out.view);
 };
-$("hint").onclick = async () => { const o = await api(`/api/replay/${sid}/hint`); if (o.error) setMsg(o.error, "no"); else setMsg(`Hint ${o.level} of 3: ${o.hint}`); refresh(o.view); };
+$("hint").onclick = async () => {
+  if (mode === "endgame") { endLevel = Math.min(endLevel + 1, 3); const o = await api(`/api/endgame/${sid}/hint`, {level: endLevel}); setMsg(`Hint ${endLevel} of 3: ${o.hint}`); return; }
+  const o = await api(`/api/replay/${sid}/hint`); if (o.error) setMsg(o.error, "no"); else setMsg(`Hint ${o.level} of 3: ${o.hint}`); refresh(o.view); };
 $("reveal").onclick = async () => { const o = await api(`/api/replay/${sid}/reveal`); if (o.error) setMsg(o.error, "no"); else setMsg(`The better move was ${o.best_san}.\n\n${o.message}` + (o.reply_san ? `\n\nThe opponent replied ${o.reply_san}. Play on if you like.` : "")); refresh(o.view); };
 $("reset").onclick = async () => { const o = await api(`/api/replay/${sid}/reset`); setMsg("Back to the position before your mistake. Find a better move."); refresh(o.view); };
-$("next").onclick = async () => { if (mode === "opening") { await startOpening(); return; } const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
+$("next").onclick = async () => { if (mode === "opening") { await startOpening(); return; } if (mode === "endgame") { await startEndgame(); return; } const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
 $("home").onclick = () => { mode = "review"; setButtons(); $("game").classList.remove("on"); $("setup").classList.remove("hide"); async function loadProfile() {
   const p = await api("/api/profile");
   if (!p.games) return;
@@ -235,7 +280,7 @@ $("home").onclick = () => { mode = "review"; setButtons(); $("game").classList.r
   const ul = $("proflist"); ul.innerHTML = "";
   p.sentences.forEach(t => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
 }
-loadDrills(); loadProfile(); };
+loadDrills(); loadProfile(); loadThemes(); };
 async function loadDrills() {
   const st = await api("/api/drills");
   if (st.total > 0) { $("drillcard").classList.remove("hide"); $("drillinfo").textContent = `${st.due} due now, ${st.total} saved from your reviews`; $("drills").disabled = st.due === 0; }

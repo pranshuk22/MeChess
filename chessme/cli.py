@@ -772,7 +772,13 @@ def cmd_coach(args):
     if explorer and not explorer.exists():
         print(f"(no opening explorer at {explorer}: opening practice is off; see docs/opening-explorer.md)")
         explorer = None
-    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data, explorer=explorer)
+    tablebase = None
+    if args.syzygy and Path(args.syzygy).is_dir():
+        import chess.syzygy
+        tablebase = chess.syzygy.open_tablebase(args.syzygy)
+    elif args.syzygy:
+        print(f"(no Syzygy folder at {args.syzygy}: endgame practice is off; see docs/coach.md)")
+    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data, explorer=explorer, tablebase=tablebase)
     if not args.no_browser:
         import threading
         threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
@@ -2835,6 +2841,7 @@ def main():
     co.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); co.add_argument("--nodes", type=int, default=100000, help="search budget per position (more is slower and stronger)")
     co.add_argument("--data-dir", default="~/.mechess-coach", help="where your drills and reviewed games are kept (small JSON files on this computer; nothing is sent anywhere)")
     co.add_argument("--explorer", default="data/explorer/explorer.db", help="the opening explorer database (opening practice needs it)")
+    co.add_argument("--syzygy", default="data/syzygy", help="folder with Syzygy tablebase files (endgame practice needs them; the 3 to 5 piece set is about 1 GB)")
     co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)

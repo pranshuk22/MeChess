@@ -17,6 +17,7 @@ import chess.pgn
 
 from ..analysis import runner as AR
 from . import drills as D
+from . import endgames as EG
 from . import exercises as X
 from . import openings as OP
 from . import profile as PR
@@ -47,10 +48,12 @@ class EngineBackend:
 
 
 class CoachApp:
-    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None, explorer=None):
+    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None, explorer=None, tablebase=None):
         self.search = search
         self.explorer = explorer                                       # path of the opening explorer database, or a callable rating -> replies(fen) (tests)
         self.openings = {}
+        self.tablebase = tablebase                                     # a chess.syzygy.Tablebase (or anything with probe_wdl / probe_dtz), or None
+        self.endgames = {}
         self.data_dir = Path(data_dir) if data_dir else None          # reviewed games are kept here (one small JSON each) for the weakness profile
         self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
         self.sessions = {}
@@ -125,6 +128,35 @@ class CoachApp:
             return {"error": "the opening explorer database is not set up"}
         rep = OP.Repertoire.from_pgn(pgn, color)
         return OP.coverage(rep, replies) if rep.size else {"error": "no moves of your colour found in that PGN"}
+
+    def endgame_themes(self):
+        return [{"id": k, "title": v["title"], "available": self.tablebase is not None and EG.available(self.tablebase, k)} for k, v in EG.THEMES.items()]
+
+    def endgame_start(self, theme):
+        if self.tablebase is None:
+            return {"error": "no tablebase set up: download Syzygy files and start the coach with --syzygy DIR"}
+        if theme not in EG.THEMES:
+            return {"error": "unknown theme"}
+        if not EG.available(self.tablebase, theme):
+            return {"error": "the tablebase files for this theme are not in the folder"}
+        g = EG.generate(theme, self.tablebase, __import__("random").Random(secrets.randbits(32)))
+        if g is None:
+            return {"error": "could not find a start position"}
+        sid = secrets.token_urlsafe(8)
+        if len(self.endgames) >= self.max_sessions:
+            self.endgames.pop(next(iter(self.endgames)))
+        self.endgames[sid] = EG.EndgameDrill(theme, self.tablebase, g[0], g[1], seed=secrets.randbits(16))
+        return {"session": sid, "view": self.endgames[sid].view()}
+
+    def endgame_act(self, sid, action, payload):
+        d = self.endgames.get(sid)
+        if d is None:
+            return {"error": "unknown session"}
+        if action == "move":
+            return d.move(str(payload.get("uci", "")))
+        if action == "hint":
+            return {"hint": d.hint(int(payload.get("level", 1))), "view": d.view()}
+        return {"error": "unknown action"}
 
     def _keep(self, game, analysis, color):
         if self.data_dir is None:
@@ -236,6 +268,13 @@ def make_handler(app, fetch=lichess_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/endgame/themes":
+                    return self._send(200, {"themes": app.endgame_themes()})
+                if path == "/api/endgame/start":
+                    return self._send(200, app.endgame_start(body.get("theme", "")))
+                m3 = re.fullmatch(r"/api/endgame/([\w-]+)/(move|hint)", path)
+                if m3:
+                    return self._send(200, app.endgame_act(m3.group(1), m3.group(2), body))
                 if path == "/api/opening/start":
                     return self._send(200, app.opening_start(body.get("pgn", ""), body.get("color", "white"), body.get("rating", 1500)))
                 if path == "/api/opening/coverage":
