@@ -8,9 +8,9 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .. import legacy, workspace
+from .. import analysis_job, importers, legacy, workspace
 from ..models import Game, Setting
-from ..schemas import GameDetail, GamePage, JobOut, Settings, SettingsPatch, Workspace
+from ..schemas import Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
 from ..services import games as G
 
 router = APIRouter(prefix="/api")
@@ -64,6 +64,88 @@ def import_legacy(request: Request):
     app = request.app
     job_id = app.state.jobs.submit("import-legacy", "Import earlier work", lambda ctx: legacy.import_legacy(app.state.config, app.state.sessions, ctx))
     return app.state.jobs.get(job_id)
+
+
+# ---- accounts and importing ---------------------------------------------------------------------------------------------------------------------
+
+def accounts(s: Session) -> dict:
+    row = s.get(Setting, "accounts")
+    return dict(row.value) if row and row.value else {}
+
+
+def players(s: Session) -> list[str]:
+    return [v for v in accounts(s).values() if v]
+
+
+@router.get("/accounts", response_model=Accounts)
+def get_accounts(s: Session = Depends(db)):
+    return Accounts(**accounts(s))
+
+
+@router.put("/accounts", response_model=Accounts)
+def put_accounts(body: Accounts, s: Session = Depends(db)):
+    for v in (body.lichess, body.chesscom):
+        if v and not importers.valid_user(v):
+            raise HTTPException(422, "user names are 2 to 30 letters, digits, dash or underscore")
+    row = s.get(Setting, "accounts")
+    if row is None:
+        s.add(Setting(key="accounts", value=body.model_dump()))
+    else:
+        row.value = body.model_dump()
+    s.commit()
+    return body
+
+
+def _import_user(request: Request, platform: str, body: ImportUser, s: Session):
+    if not importers.valid_user(body.username):
+        raise HTTPException(422, "user names are 2 to 30 letters, digits, dash or underscore")
+    app = request.app
+    fetch = app.state.fetchers[platform]
+    names = [body.username] + players(s)
+    acc = accounts(s)
+    acc[platform] = body.username                                              # remembered for next time and to recognise your side in PGN files
+    row = s.get(Setting, "accounts")
+    if row is None:
+        s.add(Setting(key="accounts", value=acc))
+    else:
+        row.value = acc
+    s.commit()
+    title = f"Import {body.max:,} games from {'Lichess' if platform == 'lichess' else 'Chess.com'}"
+    stop = 30 if body.only_new else None
+    job = app.state.jobs.submit(f"import-{platform}", title, lambda ctx: importers.import_stream(app.state.sessions, fetch(body.username, body.max), names, platform, ctx, total=body.max, stop_after_known=stop))
+    return app.state.jobs.get(job)
+
+
+@router.post("/import/lichess", response_model=JobOut, status_code=202)
+def import_lichess(body: ImportUser, request: Request, s: Session = Depends(db)):
+    return _import_user(request, "lichess", body, s)
+
+
+@router.post("/import/chesscom", response_model=JobOut, status_code=202)
+def import_chesscom(body: ImportUser, request: Request, s: Session = Depends(db)):
+    return _import_user(request, "chesscom", body, s)
+
+
+@router.post("/import/pgn", response_model=JobOut, status_code=202)
+def import_pgn(body: ImportPgn, request: Request, s: Session = Depends(db)):
+    app = request.app
+    names = ([body.player] if body.player else []) + players(s)
+    job = app.state.jobs.submit("import-pgn", "Import PGN games", lambda ctx: importers.import_stream(app.state.sessions, importers.split_pgn(body.text.splitlines()), names, "pgn", ctx))
+    return app.state.jobs.get(job)
+
+
+@router.post("/analyse", response_model=JobOut, status_code=202)
+def analyse(body: AnalyseRequest, request: Request, s: Session = Depends(db)):
+    app = request.app
+    ids = body.ids if body.ids else analysis_job.unanalysed_ids(s, body.limit)
+    if not ids:
+        raise HTTPException(409, "every game is already analysed")
+    settings = current_settings(s)
+    if body.nodes:
+        settings = settings.model_copy(update={"nodes": body.nodes})
+    title = f"Analyse {len(ids):,} game{'s' if len(ids) != 1 else ''}"
+    job = app.state.jobs.submit("analyse", title, lambda ctx: analysis_job.analyse_games(app.state.config, app.state.sessions, ids, settings, ctx, app.state.engine_factory(settings)), {"ids": len(ids)})
+    return app.state.jobs.get(job)
 
 
 # ---- jobs -----------------------------------------------------------------------------------------------------------------------------------------

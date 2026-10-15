@@ -806,7 +806,21 @@ def cmd_app(args):
         print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
     if not args.no_browser:
         threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
-    uvicorn.run(create_app(cfg, extra_hosts=["localhost:5173"], extra_origins=["http://localhost:5173"] if args.dev else ()), host="127.0.0.1", port=args.port, log_level="warning")
+    app = create_app(cfg, extra_hosts=["localhost:5173"] if args.dev else (), extra_origins=["http://localhost:5173"] if args.dev else ())
+    if args.seed_samples:
+        from contextlib import asynccontextmanager
+        from .app import db as DB
+        from .app.demo import seed_samples
+        base = app.router.lifespan_context
+
+        @asynccontextmanager
+        async def with_seed(a):
+            async with base(a):
+                with a.state.sessions() as s:
+                    print(f"{seed_samples(s, args.seed_samples)} sample games loaded")
+                yield
+        app.router.lifespan_context = with_seed
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
 
 
 def cmd_coach_reference_games(args):
@@ -2924,7 +2938,8 @@ def main():
     ap_ = sub.add_parser("app", help="start the MeChess web app: your games, review, coach and play in the browser (local only; needs the built frontend in frontend/dist)")
     ap_.add_argument("--data-dir", default="~/.mechess", help="where the app keeps its database (one SQLite file) and your files"); ap_.add_argument("--research-dir", default=str(config.ROOT / "data"), help="where the command-line tools keep explorer, tablebases, models and older analyses (found automatically)")
     ap_.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); ap_.add_argument("--port", type=int, default=8765); ap_.add_argument("--no-browser", action="store_true")
-    ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)"); ap_.set_defaults(func=cmd_app)
+    ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)")
+    ap_.add_argument("--seed-samples", help="load the sample games of this JSON file (end-to-end tests and demos)"); ap_.set_defaults(func=cmd_app)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)

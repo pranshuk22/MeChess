@@ -8,7 +8,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from . import db as DB
 from .config import AppConfig
 from .jobs import JobManager
-from .routers import api
+from . import importers
+from .routers import api, themes
 from .security import LocalOnly, allowed
 
 HERE = Path(__file__).parent
@@ -39,9 +40,12 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
 
     app = FastAPI(title="MeChess", version="0.1.0", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.config = config
+    app.state.fetchers = {"lichess": importers.lichess_games, "chesscom": importers.chesscom_games}      # replaced in tests
+    app.state.engine_factory = lambda settings: None                                                        # tests pass a fake engine; None: start Stockfish
     hosts, origins = allowed(config.host, config.port, extra_hosts, extra_origins)
     app.add_middleware(LocalOnly, hosts=hosts, origins=origins)
     app.include_router(api.router)
+    app.include_router(themes.router)
 
     root = static_dir() if static is True else (static or None)
     if root:

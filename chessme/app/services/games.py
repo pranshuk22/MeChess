@@ -44,6 +44,8 @@ def pgn_from_moves(uci_moves, headers):
 
 def speed_of(time_control):
     tc = parse_tc(time_control)
+    if tc is None and str(time_control or "").isdigit():                      # Chess.com writes a plain number of seconds: "600"
+        tc = (int(time_control), 0)
     return time_class_of(*tc) if tc else None
 
 
@@ -65,6 +67,19 @@ def store(session: Session, *, id, source, headers, user_colour, analysis=None, 
         session.add(Analysis(game_id=id, nodes=nodes, multipv=multipv, engine=engine, accuracy_white=summary["white"]["accuracy"], accuracy_black=summary["black"]["accuracy"],
                              moves=moves_from_analysis(analysis["moves"])))
     return True
+
+
+def save_analysis(session: Session, game_id: str, analysis: dict, *, nodes: int, multipv: int, engine: str | None = None):
+    """Add (or replace) the analysis of a stored game; `analysis` is the dict `analyse_game` returns."""
+    game = session.get(Game, game_id)
+    summary_ = analysis.get("summary") or AR.summarise(analysis["moves"], {"Result": game.result})
+    row = session.get(Analysis, game_id)
+    values = dict(nodes=nodes, multipv=multipv, engine=engine, accuracy_white=summary_["white"]["accuracy"], accuracy_black=summary_["black"]["accuracy"], moves=moves_from_analysis(analysis["moves"]))
+    if row is None:
+        session.add(Analysis(game_id=game_id, **values))
+    else:
+        for k, v in values.items():
+            setattr(row, k, v)
 
 
 def _mine(moves, user):

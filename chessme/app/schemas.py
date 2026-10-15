@@ -90,3 +90,25 @@ class SettingsPatch(BaseModel):
     multipv: int | None = Field(None, ge=1, le=10)
     threads: int | None = Field(None, ge=1, le=64)
     hash_mb: int | None = Field(None, ge=1, le=65_536)
+
+
+class Accounts(BaseModel):
+    lichess: str | None = None
+    chesscom: str | None = None
+
+
+class ImportUser(BaseModel):
+    username: str
+    max: int = Field(200, ge=1, le=20_000)
+    only_new: bool = Field(True, description="stop when 30 games in a row are already in the library (the games come newest first)")
+
+
+class ImportPgn(BaseModel):
+    text: str = Field(max_length=50_000_000)
+    player: str | None = Field(None, description="the player's name in the PGN, to know which side is theirs")
+
+
+class AnalyseRequest(BaseModel):
+    ids: list[str] | None = Field(None, description="games to analyse; none: every game that has no analysis yet")
+    limit: int | None = Field(None, ge=1, description="with no ids: at most this many, newest first")
+    nodes: int | None = Field(None, ge=1_000, le=50_000_000)
