@@ -43,6 +43,13 @@
       <b>Practice my mistakes</b> <span class="muted" id="drillinfo"></span><br>
       <button id="drills">Start</button>
     </div>
+    <div class="card" id="steercard">
+      <b>Play a game I steer</b> <span class="muted">a normal game; the opponent plays sound moves but leans toward the situations you want to practise, then we review it</span>
+      <div id="focilist" style="margin:8px 0"></div>
+      <div class="row"><div><label class="muted">I play</label><select id="steercolor"><option value="white">White</option><option value="black">Black</option></select></div>
+        <div><button id="steerstart">Start the game</button></div></div>
+      <p id="steerinfo" class="muted"></p>
+    </div>
     <div class="card hide" id="endcard">
       <b>Endgame practice</b> <span class="muted">judged exactly by tablebases: every move is either keeping the result or throwing it away</span>
       <div class="row" style="margin-top:8px"><div><select id="theme"></select></div><div><button id="endstart">Practise</button></div></div>
@@ -86,6 +93,7 @@
         <button id="reveal" class="secondary">Show the answer</button>
         <button id="reset" class="secondary">Try again</button>
         <button id="next" class="secondary">Next mistake</button>
+        <button id="finish" class="hide">Finish and review</button>
         <button id="home" class="secondary">New game</button>
       </div>
       <p class="muted">Pawns promote to a queen. The coach never sees your account: only the game you pick is analysed here.</p>
@@ -145,6 +153,7 @@ function refresh(v) {
 async function sendMove(uci) {
   if (mode === "opening") return sendOpeningMove(uci);
   if (mode === "endgame") return sendEndgameMove(uci);
+  if (mode === "steer") return sendSteerMove(uci);
   busy = true;
   const act = view.mode === "find" ? "attempt" : "play";
   const out = await api(`/api/replay/${sid}/${act}`, {uci});
@@ -161,10 +170,51 @@ async function sendMove(uci) {
   refresh(out.view);
 }
 function setButtons() {
-  const op = mode === "opening", eg = mode === "endgame";
-  $("hint").classList.toggle("hide", op); $("reveal").classList.toggle("hide", op || eg); $("reset").classList.toggle("hide", op || eg);
+  const op = mode === "opening", eg = mode === "endgame", st = mode === "steer";
+  $("hint").classList.toggle("hide", op || st); $("reveal").classList.toggle("hide", op || eg || st); $("reset").classList.toggle("hide", op || eg || st);
+  $("next").classList.toggle("hide", st); $("finish").classList.toggle("hide", !st);
   $("next").textContent = op ? "Another line" : eg ? "Another position" : "Next mistake";
 }
+function steerRefresh() {
+  selected = null; setButtons();
+  $("status").textContent = `Steered game · move ${Math.ceil((view.plies + 1) / 2)}` + (view.over ? " · the game is over" : "");
+  drawBoard();
+}
+async function sendSteerMove(uci) {
+  busy = true;
+  const out = await api(`/api/steer/${sid}/move`, {uci});
+  busy = false;
+  if (out.error) { setMsg(out.error, "no"); return drawBoard(); }
+  view = out.view;
+  setMsg(view.over ? `The game is over (${view.result}). Press “Finish and review”.` : `You played ${out.san}.` + (out.reply_san ? ` The opponent replied ${out.reply_san}.` : "") + " Your move.");
+  steerRefresh();
+}
+async function startSteer() {
+  const foci = {};
+  document.querySelectorAll("input.focus:checked").forEach(c => foci[c.value] = 1);
+  const out = await api("/api/steer/start", {color: $("steercolor").value, foci});
+  if (out.error) { $("steerinfo").textContent = out.error; return; }
+  mode = "steer"; sid = out.session; view = out.view;
+  $("setup").classList.add("hide"); $("game").classList.add("on");
+  setMsg("Play a normal game. " + out.tips.join(" ") + "\nWhen you want to stop, press “Finish and review”.");
+  steerRefresh();
+}
+$("finish").onclick = async () => {
+  setMsg("Analysing the game…");
+  const out = await api(`/api/steer/${sid}/finish`);
+  if (out.error) { setMsg(out.error, "no"); return; }
+  const focus = (out.focus_lines || []).join("\n");
+  if (out.none) { setMsg(focus + "\n\n" + out.message, "good"); $("finish").classList.add("hide"); return; }
+  mode = "review"; setButtons(); sid = out.session;
+  setMsg(focus + `\n\nNow the ${out.n} biggest mistake(s) of the game: find a better move than the one you played.`);
+  refresh(out.view);
+};
+async function loadFoci() {
+  const o = await api("/api/steer/foci"), box = $("focilist"); box.innerHTML = "";
+  o.foci.forEach(f => { const l = document.createElement("label"); l.className = "g"; const c = document.createElement("input"); c.type = "checkbox"; c.className = "focus"; c.value = f.id; c.style.width = "auto";
+    l.appendChild(c); l.appendChild(document.createTextNode(` ${f.title}: ${f.tip}`)); box.appendChild(l); });
+}
+$("steerstart").onclick = startSteer;
 let endTheme = null, endLevel = 0;
 function endgameRefresh() {
   selected = null; setButtons(); endLevel = view.over ? 0 : endLevel;
@@ -271,7 +321,7 @@ $("hint").onclick = async () => {
   const o = await api(`/api/replay/${sid}/hint`); if (o.error) setMsg(o.error, "no"); else setMsg(`Hint ${o.level} of 3: ${o.hint}`); refresh(o.view); };
 $("reveal").onclick = async () => { const o = await api(`/api/replay/${sid}/reveal`); if (o.error) setMsg(o.error, "no"); else setMsg(`The better move was ${o.best_san}.\n\n${o.message}` + (o.reply_san ? `\n\nThe opponent replied ${o.reply_san}. Play on if you like.` : "")); refresh(o.view); };
 $("reset").onclick = async () => { const o = await api(`/api/replay/${sid}/reset`); setMsg("Back to the position before your mistake. Find a better move."); refresh(o.view); };
-$("next").onclick = async () => { if (mode === "opening") { await startOpening(); return; } if (mode === "endgame") { await startEndgame(); return; } const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
+$("next").onclick = async () => { if (mode === "steer") return; if (mode === "opening") { await startOpening(); return; } if (mode === "endgame") { await startEndgame(); return; } const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
 $("home").onclick = () => { mode = "review"; setButtons(); $("game").classList.remove("on"); $("setup").classList.remove("hide"); async function loadProfile() {
   const p = await api("/api/profile");
   if (!p.games) return;
@@ -280,7 +330,7 @@ $("home").onclick = () => { mode = "review"; setButtons(); $("game").classList.r
   const ul = $("proflist"); ul.innerHTML = "";
   p.sentences.forEach(t => { const li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
 }
-loadDrills(); loadProfile(); loadThemes(); };
+loadDrills(); loadProfile(); loadThemes(); loadFoci(); };
 async function loadDrills() {
   const st = await api("/api/drills");
   if (st.total > 0) { $("drillcard").classList.remove("hide"); $("drillinfo").textContent = `${st.due} due now, ${st.total} saved from your reviews`; $("drills").disabled = st.due === 0; }

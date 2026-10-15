@@ -22,6 +22,7 @@ from . import exercises as X
 from . import openings as OP
 from . import profile as PR
 from . import session as S
+from . import steering as ST
 
 WEB = Path(__file__).parent / "web"
 MAX_BODY = 2_000_000
@@ -30,7 +31,7 @@ MAX_BODY = 2_000_000
 class EngineBackend:
     """One Stockfish process shared by the analysis, the judge and the opponent (calls are serialised by a lock)."""
 
-    def __init__(self, path=None, nodes=100_000, multipv=3):
+    def __init__(self, path=None, nodes=100_000, multipv=5):
         from ..uci_client import UciEngine
         path = path or shutil.which("stockfish")
         if not path:
@@ -54,6 +55,7 @@ class CoachApp:
         self.openings = {}
         self.tablebase = tablebase                                     # a chess.syzygy.Tablebase (or anything with probe_wdl / probe_dtz), or None
         self.endgames = {}
+        self.steered = {}
         self.data_dir = Path(data_dir) if data_dir else None          # reviewed games are kept here (one small JSON each) for the weakness profile
         self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
         self.sessions = {}
@@ -83,7 +85,10 @@ class CoachApp:
                 return {"error": "no such game in the PGN"}
         if not any(True for _ in game.mainline_moves()):
             return {"error": "the game has no moves"}
-        analysis = AR.analyse_game(game, self.search)
+        return self._review(game, AR.analyse_game(game, self.search), color, max_n)
+
+    def _review(self, game, analysis, color, max_n=5):
+        """Store the analysed game and open a guided replay of the biggest mistakes of `color`."""
         self._keep(game, analysis, color)
         ex = [X.enrich(e, self.search) for e in X.from_analysis(game, analysis, color, max_n=max_n)]
         summary = analysis["summary"][color]
@@ -96,6 +101,40 @@ class CoachApp:
         replay = S.Replay(ex, S.Judge(self.search), S.EngineOpponent(self.search, seed=self.seed))
         self.sessions[sid] = replay
         return {"session": sid, "n": len(ex), "accuracy": summary["accuracy"], "classes": summary["classes"], "view": replay.view()}
+
+    def steer_start(self, color="white", foci=None, seed=None):
+        foci = {k: float(v) for k, v in (foci or {}).items() if float(v) > 0}
+        if color not in ("white", "black"):
+            return {"error": "color must be white or black"}
+        if not foci:
+            return {"error": "choose at least one thing to practise"}
+        if any(k not in ST.FOCI for k in foci):
+            return {"error": "unknown focus"}
+        sid = secrets.token_urlsafe(8)
+        if len(self.steered) >= self.max_sessions:
+            self.steered.pop(next(iter(self.steered)))
+        self.steered[sid] = ST.SteeredGame(self.search, color, foci, seed=secrets.randbits(16) if seed is None else seed)
+        return {"session": sid, "view": self.steered[sid].view(), "tips": [ST.FOCI[f]["tip"] for f in foci]}
+
+    def steer_move(self, sid, uci):
+        g = self.steered.get(sid)
+        return {"error": "unknown session"} if g is None else g.move(uci)
+
+    def steer_finish(self, sid, max_n=5):
+        """End the game, analyse it, report how the player did in the situations the opponent steered toward and open the guided replay of the biggest mistakes."""
+        g = self.steered.get(sid)
+        if g is None:
+            return {"error": "unknown session"}
+        g.finish()
+        if not g.board.move_stack:
+            return {"error": "no moves were played"}
+        game = chess.pgn.read_game(io.StringIO(g.pgn()))
+        color = "white" if g.player == chess.WHITE else "black"
+        analysis = AR.analyse_game(game, self.search)
+        stats, lines = ST.focus_report(game, analysis, color, g.opponent.hits, g.foci)
+        out = self._review(game, analysis, color, max_n)
+        out["focus"], out["focus_lines"], out["result"] = stats, lines, g.result()
+        return out
 
     def _replies(self, rating):
         if self.explorer is None:
@@ -268,6 +307,13 @@ def make_handler(app, fetch=lichess_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/steer/foci":
+                    return self._send(200, {"foci": [{"id": k, "title": v["title"], "tip": v["tip"]} for k, v in ST.FOCI.items()]})
+                if path == "/api/steer/start":
+                    return self._send(200, app.steer_start(body.get("color", "white"), body.get("foci")))
+                m4 = re.fullmatch(r"/api/steer/([\w-]+)/(move|finish)", path)
+                if m4:
+                    return self._send(200, app.steer_move(m4.group(1), str(body.get("uci", ""))) if m4.group(2) == "move" else app.steer_finish(m4.group(1)))
                 if path == "/api/endgame/themes":
                     return self._send(200, {"themes": app.endgame_themes()})
                 if path == "/api/endgame/start":
