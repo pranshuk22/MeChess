@@ -20,6 +20,8 @@ from . import metrics as M
 VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9, chess.KING: 100}
 WIN = 2                                                    # a capture wins material when its exchange value is at least this (in pawns)
 TYPES = ["mate in 1", "ignores a threat", "walks into a capture", "deeper"]
+TYPE_TEXT = {"mate in 1": "allow a checkmate in one", "ignores a threat": "do not deal with a threat", "walks into a capture": "put a piece where it can be captured",
+             "deeper": "lose the advantage over a longer sequence"}
 
 
 def see(board, move):

@@ -18,6 +18,7 @@ import chess.pgn
 from ..analysis import runner as AR
 from . import drills as D
 from . import exercises as X
+from . import profile as PR
 from . import session as S
 
 WEB = Path(__file__).parent / "web"
@@ -45,8 +46,9 @@ class EngineBackend:
 
 
 class CoachApp:
-    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None):
+    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None):
         self.search = search
+        self.data_dir = Path(data_dir) if data_dir else None          # reviewed games are kept here (one small JSON each) for the weakness profile
         self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
         self.sessions = {}
         self.max_sessions = max_sessions
@@ -76,6 +78,7 @@ class CoachApp:
         if not any(True for _ in game.mainline_moves()):
             return {"error": "the game has no moves"}
         analysis = AR.analyse_game(game, self.search)
+        self._keep(game, analysis, color)
         ex = [X.enrich(e, self.search) for e in X.from_analysis(game, analysis, color, max_n=max_n)]
         summary = analysis["summary"][color]
         if not ex:
@@ -87,6 +90,26 @@ class CoachApp:
         replay = S.Replay(ex, S.Judge(self.search), S.EngineOpponent(self.search, seed=self.seed))
         self.sessions[sid] = replay
         return {"session": sid, "n": len(ex), "accuracy": summary["accuracy"], "classes": summary["classes"], "view": replay.view()}
+
+    def _keep(self, game, analysis, color):
+        if self.data_dir is None:
+            return
+        d = self.data_dir / "games"
+        d.mkdir(parents=True, exist_ok=True)
+        key = AR.game_key(game)                                             # the same game reviewed twice is stored once
+        (d / f"{key}.json").write_text(json.dumps({"color": color, "moves": analysis["moves"]}), encoding="utf-8")
+
+    def profile(self):
+        """The weakness profile over all stored games, with plain sentences."""
+        rows, games = [], 0
+        for path in sorted((self.data_dir / "games").glob("*.json")) if self.data_dir and (self.data_dir / "games").exists() else []:
+            rec = json.loads(path.read_text(encoding="utf-8"))
+            rows += PR.player_rows({"moves": rec["moves"]}, rec["color"])
+            games += 1
+        prof = PR.profile(rows)
+        prof["games"] = games
+        prof["sentences"] = PR.sentences(prof)
+        return prof
 
     def start_drills(self, limit=10):
         """A replay of the mistake positions that are due."""
@@ -178,6 +201,8 @@ def make_handler(app, fetch=lichess_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/profile":
+                    return self._send(200, app.profile())
                 if path == "/api/drills":
                     return self._send(200, app.drills.stats())
                 if path == "/api/drills/start":

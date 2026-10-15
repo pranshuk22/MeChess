@@ -55,3 +55,12 @@ def test_the_app_records_first_try_successes_and_misses_and_serves_due_drills(tm
     assert started["n"] == 1 and started["view"]["mode"] == "find"
     app.act(started["session"], "attempt", {"uci": "e2e4"})                   # first try without a hint: success
     assert next(iter(app.drills.items.values()))["box"] == 1
+
+
+def test_reviewed_games_are_kept_once_and_feed_the_profile(tmp_path):
+    app = CS.CoachApp(fake_search, data_dir=tmp_path / "coach")
+    assert app.profile()["games"] == 0 and app.profile()["moves"] == 0
+    app.start(PGN, 0, "white")
+    app.start(PGN, 0, "white")                                                # the same game again: stored once
+    prof = app.profile()
+    assert prof["games"] == 1 and prof["moves"] == 2 and prof["sentences"] and "kinds" in prof
