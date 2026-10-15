@@ -1,0 +1,137 @@
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "tailwindcss";
+
+/* ---- tokens: one neutral scale, one accent, semantic colours only for move quality ------------------------------------------------------ */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-2: #eaeef1;
+  --border: #d9e0e5;
+  --text: #1b242b;
+  --muted: #5b6a75;
+  --faint: #8794a0;
+  --accent: #2b6a8c;
+  --accent-text: #ffffff;
+  --accent-soft: #dcebf3;
+  --focus: #2b6a8c;
+
+  /* move quality: always paired with a symbol, never colour alone */
+  --q-brilliant: #1a97ab;
+  --q-great: #3a7bd0;
+  --q-best: #3a8a5a;
+  --q-good: #6f9444;
+  --q-book: #8a7a62;
+  --q-inaccuracy: #b8921d;
+  --q-mistake: #d27a22;
+  --q-blunder: #c4443a;
+
+  /* board: "Icy" theme (own palette and texture) */
+  --sq-light: #dbe6ee;
+  --sq-dark: #8aa3b8;
+  --sq-light-text: #8aa3b8;
+  --sq-dark-text: #dbe6ee;
+  --hl-move: rgba(255, 214, 79, 0.42);
+  --hl-select: rgba(255, 214, 79, 0.6);
+  --hl-check: rgba(214, 64, 52, 0.75);
+  --arrow-best: #3a8a5a;
+  --arrow-played: #d27a22;
+  --arrow-user: #2b6a8c;
+  --mark-user: rgba(43, 106, 140, 0.55);
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgba(20, 30, 40, 0.06), 0 4px 14px rgba(20, 30, 40, 0.05);
+  --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
+}
+:root[data-theme="dark"] {
+  --bg: #111417;
+  --surface: #181d21;
+  --surface-2: #20272d;
+  --border: #2a333b;
+  --text: #e4eaee;
+  --muted: #95a3ae;
+  --faint: #6c7a85;
+  --accent: #6fb0d2;
+  --accent-text: #0c1620;
+  --accent-soft: #1d3038;
+  --focus: #6fb0d2;
+  --q-brilliant: #3cc0d4;
+  --q-great: #6a9ee6;
+  --q-best: #5cb77f;
+  --q-good: #92b564;
+  --q-book: #a5957c;
+  --q-inaccuracy: #d4ad3a;
+  --q-mistake: #e69443;
+  --q-blunder: #e06a5f;
+  --sq-light: #c9d7e2;
+  --sq-dark: #6f8aa1;
+  --sq-light-text: #6f8aa1;
+  --sq-dark-text: #c9d7e2;
+  --arrow-best: #5cb77f;
+  --arrow-played: #e69443;
+  --arrow-user: #6fb0d2;
+  --mark-user: rgba(111, 176, 210, 0.6);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.tnum { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
+
+/* ---- board ------------------------------------------------------------------------------------------------------------------------------------- */
+.board { position: relative; width: 100%; aspect-ratio: 1; user-select: none; touch-action: none; border-radius: 6px; overflow: hidden;
+  background-color: var(--sq-light);
+  background-image: conic-gradient(var(--sq-dark) 25%, transparent 0 50%, var(--sq-dark) 0 75%, transparent 0);
+  background-size: 25% 25%; cursor: default; contain: layout paint; }
+.board::after { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: 0.16; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='320' height='320'><filter id='n' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.012 0.02' numOctaves='3' seed='4'/><feColorMatrix values='0 0 0 0 0.35  0 0 0 0 0.42  0 0 0 0 0.5  0 0 0 1.4 -0.35'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-size: 320px 320px; }
+.board.flipped { background-image: conic-gradient(var(--sq-dark) 25%, transparent 0 50%, var(--sq-dark) 0 75%, transparent 0); }
+.board .layer { position: absolute; inset: 0; pointer-events: none; }
+.sq { position: absolute; width: 12.5%; height: 12.5%; }
+.sq.move { background: var(--hl-move); }
+.sq.select { background: var(--hl-select); }
+.sq.check { background: radial-gradient(circle, var(--hl-check) 0%, rgba(214, 64, 52, 0.35) 45%, transparent 72%); }
+.sq.mark { background: var(--mark-user); }
+.sq.dot::after { content: ""; position: absolute; left: 35%; top: 35%; width: 30%; height: 30%; border-radius: 50%; background: rgba(20, 40, 55, 0.28); }
+.sq.ring::after { content: ""; position: absolute; inset: 4%; border-radius: 50%; border: 5px solid rgba(20, 40, 55, 0.28); box-sizing: border-box; }
+.sq.hover { box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.65); }
+.coord { position: absolute; font-size: 11px; font-weight: 600; line-height: 1; pointer-events: none; font-variant-numeric: tabular-nums; }
+.piece { position: absolute; width: 12.5%; height: 12.5%; top: 0; left: 0; background-size: 100% 100%; background-repeat: no-repeat; will-change: transform;
+  transition: transform 150ms cubic-bezier(0.2, 0.7, 0.2, 1); pointer-events: none; }
+.piece.drag { transition: none; z-index: 20; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.3)); }
+.piece.fresh { transition: none; }
+.promo { position: absolute; width: 12.5%; z-index: 30; background: var(--surface); border-radius: 6px; box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
+.promo button { aspect-ratio: 1; background-size: 90%; background-position: center; background-repeat: no-repeat; border: 0; background-color: transparent; cursor: pointer; }
+.promo button:hover { background-color: var(--accent-soft); }
+
+/* eval bar */
+.evalbar { position: relative; width: 14px; border-radius: 4px; overflow: hidden; background: #2a323a; box-shadow: 0 0 0 1px var(--border); }
+.evalbar > div { position: absolute; left: 0; right: 0; bottom: 0; background: #f2f4f5; transition: height 200ms ease; }

@@ -1,0 +1,53 @@
+import { Chess } from "chess.js";
+
+export const START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/** Legal destination squares per origin square for the side to move. */
+export function legalMap(fen: string): Map<string, string[]> {
+  const map = new Map<string, string[]>();
+  const chess = new Chess(fen);
+  for (const m of chess.moves({ verbose: true })) {
+    const list = map.get(m.from);
+    if (list) list.push(m.to); else map.set(m.from, [m.to]);
+  }
+  return map;
+}
+
+/** The king's square when the side to move is in check, else null. */
+export function checkSquare(fen: string): string | null {
+  const chess = new Chess(fen);
+  if (!chess.inCheck()) return null;
+  const turn = chess.turn();
+  for (const row of chess.board()) for (const p of row) if (p && p.type === "k" && p.color === turn) return p.square;
+  return null;
+}
+
+/** FENs after each ply of a UCI move list (index 0 = start position). */
+export function fensFromUci(uci: string[]): string[] {
+  const chess = new Chess();
+  const fens = [chess.fen()];
+  for (const u of uci) {
+    chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    fens.push(chess.fen());
+  }
+  return fens;
+}
+
+export function isPromotion(fen: string, from: string, to: string): boolean {
+  const chess = new Chess(fen);
+  const p = chess.get(from as never);
+  return !!p && p.type === "p" && (to[1] === "8" || to[1] === "1");
+}
+
+/** The position after a UCI move, or null when the move is not legal there. */
+export function applyUci(fen: string, uci: string): string | null {
+  const chess = new Chess(fen);
+  try { chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }); } catch { return null; }
+  return chess.fen();
+}
+
+/** "g1f3" in a position as "Nf3" (the UCI text when the move is not legal there). */
+export function uciToSan(fen: string, uci: string): string {
+  const chess = new Chess(fen);
+  try { return chess.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: uci[4] }).san; } catch { return uci; }
+}
