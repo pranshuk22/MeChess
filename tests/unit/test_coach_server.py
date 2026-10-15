@@ -61,14 +61,14 @@ def post(base, path, body):
 
 def test_http_server_serves_the_page_and_the_api_on_localhost_only():
     app = CS.CoachApp(fake_search)
-    srv = CS.make_server(app, fetch=lambda user, n: PGN)
+    srv = CS.make_server(app, fetch=lambda platform, user, n: PGN)
     assert srv.server_address[0] == "127.0.0.1"
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{srv.server_address[1]}"
     try:
         page = urllib.request.urlopen(base + "/", timeout=10).read().decode()
         assert "MeChess coach" in page and "http://" not in page.replace("http://www.w3.org", "") and "https://" not in page          # no outside resources
-        g = post(base, "/api/games", {"user": "someone"})                     # fetched through the injected function
+        g = post(base, "/api/games", {"user": "someone", "platform": "chesscom"})                     # fetched through the injected function
         assert g["games"][0]["white"] == "alice"
         s = post(base, "/api/start", {"pgn": g["pgn"], "index": 0, "color": "white"})
         sid = s["session"]
@@ -83,3 +83,39 @@ def test_http_server_serves_the_page_and_the_api_on_localhost_only():
     finally:
         srv.shutdown()
         srv.server_close()
+
+
+def test_user_names_are_validated_before_any_request_is_made():
+    import pytest
+    for bad in ("", "a", "x/../y", "name with space", "a" * 40):
+        with pytest.raises(ValueError):
+            CS.lichess_games(bad)
+        with pytest.raises(ValueError):
+            CS.chesscom_games(bad)
+
+
+def test_chesscom_archives_are_read_newest_first_and_only_standard_chess(monkeypatch):
+    calls = []
+
+    class Resp:
+        def __init__(self, data):
+            self.data = data
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.data
+    archives = {"archives": ["https://api.chess.com/a/2026/08", "https://api.chess.com/a/2026/09"]}
+    months = {"https://api.chess.com/a/2026/09": {"games": [{"pgn": "[White \"a\"]\n\n1. e4 *", "rules": "chess"}, {"pgn": "[White \"v\"]\n\n1. e4 *", "rules": "chess960"}]},
+              "https://api.chess.com/a/2026/08": {"games": [{"pgn": "[White \"old\"]\n\n1. d4 *", "rules": "chess"}]}}
+
+    def fake_get(url, headers=None, timeout=None):
+        calls.append(url)
+        return Resp(archives if url.endswith("/games/archives") else months[url])
+    import requests
+    monkeypatch.setattr(requests, "get", fake_get)
+    text = CS.chesscom_games("Someone", 5)
+    assert text.index('"a"') < text.index('"old"') and "chess960" not in text and '"v"' not in text
+    assert calls[0] == "https://api.chess.com/pub/player/someone/games/archives" and len(calls) == 3
+    assert len(CS.chesscom_games("Someone", 1).split("\n\n[")) == 1                 # stops at the requested number

@@ -68,7 +68,7 @@
     <div class="card">
       <b>1. Get a game</b>
       <div class="row" style="margin-top:8px">
-        <div><label class="muted">Lichess user name (fetches the latest public games)</label><input id="user" placeholder="user name"><button id="fetch">Fetch games</button></div>
+        <div><label class="muted">User name on <select id="platform" style="width:auto;display:inline-block"><option value="lichess">Lichess</option><option value="chesscom">Chess.com</option></select> (fetches the latest public games)</label><input id="user" placeholder="user name"><button id="fetch">Fetch games</button></div>
         <div><label class="muted">or paste a PGN (one or more games)</label><textarea id="pgn" placeholder="1. e4 e5 2. Nf3 ..."></textarea><button id="readpgn" class="secondary">Read this PGN</button></div>
       </div>
       <p id="setupmsg" class="muted"></p>
@@ -288,10 +288,14 @@ $("repcov").onclick = async () => {
 };
 $("fetch").onclick = async () => {
   $("setupmsg").textContent = "Fetching…";
-  const out = await api("/api/games", {user: $("user").value.trim(), max: 10});
+  const out = await api("/api/games", {user: $("user").value.trim(), platform: $("platform").value, max: 10});
   showGames(out);
 };
 $("readpgn").onclick = async () => { showGames(await api("/api/games", {pgn: $("pgn").value})); };
+function guessColor(g) {            // preselect the side when the typed user name is one of the players
+  const u = $("user").value.trim().toLowerCase();
+  if (u && g.white.toLowerCase() === u) $("color").value = "white"; else if (u && g.black.toLowerCase() === u) $("color").value = "black";
+}
 function showGames(out) {
   if (out.error || !out.games || !out.games.length) { $("setupmsg").textContent = out.error || "No games found."; return; }
   pgnText = out.pgn; $("setupmsg").textContent = `${out.games.length} game(s) found.`;
@@ -299,10 +303,12 @@ function showGames(out) {
   out.games.forEach((g, i) => {
     const l = document.createElement("label"); l.className = "g";
     const rb = document.createElement("input"); rb.type = "radio"; rb.name = "g"; rb.value = g.index; rb.style.width = "auto"; if (i === 0) rb.checked = true;
+    rb.onchange = () => guessColor(g);
     l.appendChild(rb); l.appendChild(document.createTextNode(` ${g.white} – ${g.black}   ${g.result}   ${g.date}   (${Math.ceil(g.plies/2)} moves)`));
     box.appendChild(l);
   });
   $("gamescard").classList.remove("hide");
+  guessColor(out.games[0]);
 }
 $("start").onclick = async () => {
   const idx = +(document.querySelector("input[name=g]:checked") || {value: 0}).value;

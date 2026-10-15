@@ -274,7 +274,33 @@ def lichess_games(user, max_games=10, timeout=30):
     return r.text
 
 
-def make_handler(app, fetch=lichess_games):
+def chesscom_games(user, max_games=10, timeout=30):
+    """Public games of a Chess.com user as PGN text: the latest monthly archives, newest first, until `max_games` games are collected."""
+    import requests
+    if not re.fullmatch(r"[A-Za-z0-9_-]{2,30}", user or ""):
+        raise ValueError("not a Chess.com user name")
+    headers = {"User-Agent": "MeChess-coach (local study tool)"}
+    base = f"https://api.chess.com/pub/player/{user.lower()}/games/archives"
+    r = requests.get(base, headers=headers, timeout=timeout)
+    r.raise_for_status()
+    pgns = []
+    for url in reversed(r.json().get("archives", [])):
+        if len(pgns) >= max_games:
+            break
+        a = requests.get(url, headers=headers, timeout=timeout)
+        a.raise_for_status()
+        games = [g["pgn"] for g in a.json().get("games", []) if g.get("pgn") and g.get("rules", "chess") == "chess"]
+        pgns += list(reversed(games))
+    return "\n\n".join(pgns[:max(1, min(int(max_games), 30))])
+
+
+def fetch_games(platform, user, max_games=10):
+    if platform == "chesscom":
+        return chesscom_games(user, max_games)
+    return lichess_games(user, max_games)
+
+
+def make_handler(app, fetch=fetch_games):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
@@ -305,7 +331,7 @@ def make_handler(app, fetch=lichess_games):
             path = self.path.split("?")[0]
             try:
                 if path == "/api/games":
-                    text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
+                    text = body.get("pgn") or fetch(body.get("platform", "lichess"), body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
                 if path == "/api/steer/foci":
                     return self._send(200, {"foci": [{"id": k, "title": v["title"], "tip": v["tip"]} for k, v in ST.FOCI.items()]})
@@ -345,7 +371,7 @@ def make_handler(app, fetch=lichess_games):
     return Handler
 
 
-def serve(app, host="127.0.0.1", port=8765, fetch=lichess_games):
+def serve(app, host="127.0.0.1", port=8765, fetch=fetch_games):
     """Run the app (blocking). Returns the server object when `port` is 0 is not supported here: use `make_server` in tests."""
     srv = ThreadingHTTPServer((host, port), make_handler(app, fetch))
     print(f"MeChess coach on http://{host}:{srv.server_address[1]}  (Ctrl+C to stop)", flush=True)
@@ -357,5 +383,5 @@ def serve(app, host="127.0.0.1", port=8765, fetch=lichess_games):
         srv.server_close()
 
 
-def make_server(app, host="127.0.0.1", port=0, fetch=lichess_games):
+def make_server(app, host="127.0.0.1", port=0, fetch=fetch_games):
     return ThreadingHTTPServer((host, port), make_handler(app, fetch))

@@ -8,7 +8,7 @@ sentences what went wrong and why the better move is better, and lets you play o
 .venv/bin/python -m chessme coach --nodes 300000 --port 9000 --no-browser
 ```
 
-1. **Get a game**: type a Lichess user name (fetches the latest public games, one request) or paste a PGN.
+1. **Get a game**: type a Lichess or Chess.com user name (fetches the latest public games) or paste a PGN. When the name is one of the players, your side is preselected.
 2. **Choose the game and your side**; the engine analyses it once (a few seconds to a minute, more nodes is slower and stronger).
 3. For each of up to five mistakes: the board shows the position **before** your move. Click a piece, then its square.
    * *Hint* gives three steps: the theme, the piece, the move.
