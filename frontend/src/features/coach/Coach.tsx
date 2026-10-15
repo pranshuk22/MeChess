@@ -18,9 +18,9 @@ export function CoachPage() {
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
       <PageHeader title="Coach" sub="Practice that comes from your own games." />
       <Tabs.Root defaultValue="practice">
-        <Tabs.List className="mb-5 inline-flex rounded-[9px] bg-sunken p-0.5" aria-label="Coach sections">
+        <Tabs.List className="mb-5 flex max-w-full overflow-x-auto rounded-[9px] bg-sunken p-0.5 [scrollbar-width:none] md:inline-flex" aria-label="Coach sections">
           {[["practice", "Practice"], ["openings", "Openings"], ["endgames", "Endgames"], ["steered", "Steered game"], ["weaknesses", "Weaknesses"]].map(([v, l]) => (
-            <Tabs.Trigger key={v} value={v} className="h-8 rounded-[7px] px-4 text-[13px] font-medium text-muted data-[state=active]:bg-surface data-[state=active]:text-text data-[state=active]:shadow-[var(--shadow-sm)] cursor-pointer">{l}</Tabs.Trigger>
+            <Tabs.Trigger key={v} value={v} className="h-8 shrink-0 whitespace-nowrap rounded-[7px] px-4 text-[13px] font-medium text-muted data-[state=active]:bg-surface data-[state=active]:text-text data-[state=active]:shadow-[var(--shadow-sm)] cursor-pointer">{l}</Tabs.Trigger>
           ))}
         </Tabs.List>
         <Tabs.Content value="practice" className="outline-none"><PracticeHome /></Tabs.Content>

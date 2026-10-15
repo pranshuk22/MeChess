@@ -4,10 +4,12 @@ per-game summary (accuracy, class counts, critical moments, opportunism / luck, 
 The engine is passed in as a `search(board) -> [Line, ...]` callable (best line first, scores from the side to move's point of view,
 each Line with `.move` (UCI), `.cp` and `.pv`), so the logic runs and is tested without a real engine."""
 import hashlib
+import math
 
 import chess
 import chess.pgn
 
+from . import accuracy as ACC
 from . import classify as C
 
 PIECE_VALUE = {chess.PAWN: 1, chess.KNIGHT: 3, chess.BISHOP: 3, chess.ROOK: 5, chess.QUEEN: 9}
@@ -92,15 +94,25 @@ def _mean(xs):
     return sum(xs) / len(xs) if xs else None
 
 
+def _played_cp(m):
+    """The evaluation after the move (mover's view); rebuilt from the win chance for rows that do not carry it."""
+    if m.get("played_cp") is not None:
+        return m["played_cp"]
+    p = min(max(m["win_after"], 1e-6), 1 - 1e-6)
+    return math.log(p / (1 - p)) / C.LICHESS_K
+
+
 def summarise(moves, headers=None, critical=5):
     """Per colour: accuracy overall and by phase, class counts, opportunism / luck, conversion / resourcefulness moments;
     plus the `critical` biggest losses of the whole game."""
     out = {"critical": [{k: m[k] for k in ("ply", "color", "move", "class", "loss", "best_move")}
                         for m in sorted(moves, key=lambda m: -m["loss"])[:critical] if m["loss"] >= 0.1]}
+    game_acc = ACC.game_accuracy([_played_cp(m) if m["color"] == "white" else -_played_cp(m) for m in moves], [m["accuracy"] for m in moves],
+                                 [m["phase"] for m in moves], [m["color"] for m in moves])
     for color in ("white", "black"):
         mine = [m for m in moves if m["color"] == color]
         theirs = [m for m in moves if m["color"] != color]
-        by_phase = {ph: _mean([m["accuracy"] for m in mine if m["phase"] == ph]) for ph in ("opening", "middlegame", "endgame")}
+        by_phase = game_acc["by_phase"][color]
         counts = {c: sum(m["class"] == c for m in mine) for c in CLASSES}
         # opportunism: after an opponent's mistake or worse (loss >= 0.10), did we take the gain (loss <= inaccuracy threshold)?
         opp_slips = [m for m in theirs if m["loss"] >= 0.10]
@@ -116,7 +128,7 @@ def summarise(moves, headers=None, critical=5):
         peak = max((v for m in mine for v in (m["win_before"], m["win_after"])), default=None)
         low = min((v for m in mine for v in (m["win_before"], m["win_after"])), default=None)
         out[color] = {
-            "moves": len(mine), "accuracy": _mean([m["accuracy"] for m in mine]), "accuracy_by_phase": by_phase, "classes": counts,
+            "moves": len(mine), "accuracy": game_acc[color], "accuracy_by_phase": by_phase, "classes": counts,
             "opportunism": taken / replied if replied else None, "luck": unpunished / replied_me if replied_me else None,
             "peak_win": peak, "low_win": low, "score": score,
             # Lichess Tutor definitions: conversion = won after reaching >= 66.6% win chance; resourcefulness = not lost after falling <= 33.3%

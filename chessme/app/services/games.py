@@ -6,6 +6,7 @@ import chess.pgn
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from ...analysis import accuracy as ACC
 from ...analysis import runner as AR
 from ...humanlike.testset import parse_tc
 from ...ingest.normalize import time_class_of
@@ -114,7 +115,7 @@ def summary(game: Game, analysis: Analysis | None) -> dict:
 
 
 def detail(game: Game, analysis: Analysis | None) -> dict:
-    return {**summary(game, analysis), "moves": analysis.moves if analysis else [], "pgn": game.pgn}
+    return {**summary(game, analysis), "moves": analysis.moves if analysis else [], "pgn": game.pgn, "phaseAccuracy": ACC.from_api_moves(analysis.moves)["by_phase"] if analysis and analysis.moves else {}}
 
 
 def page(session: Session, *, q=None, colour=None, result=None, analysed=None, limit=100, offset=0):

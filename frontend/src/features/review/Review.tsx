@@ -188,9 +188,9 @@ const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, 
 
       <Panel className="flex min-h-[220px] flex-1 flex-col overflow-hidden">
         <Tabs.Root defaultValue={analysed ? "summary" : "moves"} className="flex min-h-0 flex-1 flex-col">
-          <Tabs.List className="flex gap-1 border-b border-border px-3 pt-2" aria-label="Review sections">
+          <Tabs.List className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-2 [scrollbar-width:none]" aria-label="Review sections">
             {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"], ["engine", "Engine"], ["explorer", "Explorer"]].filter(([v]) => analysed || ["moves", "engine", "explorer"].includes(v)).map(([v, l]) => (
-              <Tabs.Trigger key={v} value={v} className="rounded-t-md px-2.5 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-text data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
+              <Tabs.Trigger key={v} value={v} className="shrink-0 whitespace-nowrap rounded-t-md px-2.5 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-text data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
             ))}
           </Tabs.List>
           {analysed && <Tabs.Content value="summary" className={TAB_BODY}><Summary game={game} /></Tabs.Content>}

@@ -8,15 +8,12 @@ const PHASES = [["opening", "Opening"], ["middlegame", "Middlegame"], ["endgame"
 export const Summary = memo(function Summary({ game }: { game: GameDetail }) {
   const { counts, phase } = useMemo(() => {
     const counts = CLASS_ORDER.map((cls) => ({ cls, white: 0, black: 0 }));
-    const acc: Record<string, { white: number[]; black: number[] }> = {};
     game.moves.forEach((m, i) => {
-      const side = i % 2 === 0 ? "white" : "black";
       const row = counts.find((c) => c.cls === m.cls);
-      if (row) row[side]++;
-      if (m.acc !== undefined && m.phase) (acc[m.phase] ??= { white: [], black: [] })[side].push(m.acc);
+      if (row) row[i % 2 === 0 ? "white" : "black"]++;
     });
-    const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-    return { counts, phase: PHASES.map(([id, label]) => ({ label, white: mean(acc[id]?.white ?? []), black: mean(acc[id]?.black ?? []) })).filter((p) => p.white !== null || p.black !== null) };
+    const pa = game.phaseAccuracy ?? {};                                                  // combined on the server like the game accuracy (weighted and harmonic mean)
+    return { counts, phase: PHASES.map(([id, label]) => ({ label, white: pa.white?.[id] ?? null, black: pa.black?.[id] ?? null })).filter((p) => p.white !== null || p.black !== null) };
   }, [game]);
   const side = (colour: "white" | "black") => ({ name: colour === "white" ? game.white : game.black, elo: colour === "white" ? game.whiteElo : game.blackElo, acc: game.accuracy?.[colour] ?? 0, you: game.user === colour });
   const [w, b] = [side("white"), side("black")];

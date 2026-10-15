@@ -5,6 +5,7 @@ from datetime import date, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ...analysis import accuracy as ACC
 from ..models import Analysis, Game
 from .games import BAD
 
@@ -83,8 +84,10 @@ def insights(session: Session, rows) -> dict:
             mine = a.moves[0::2] if g.user_colour == "white" else a.moves[1::2]
             for m in mine:
                 classes[m["cls"]] += 1
-                if m.get("acc") is not None and m.get("phase") in PHASES:
-                    phase_acc[m["phase"]].append(m["acc"])
+            if g.user_colour in ("white", "black") and a.moves:
+                for ph, v in ACC.from_api_moves(a.moves)["by_phase"][g.user_colour].items():
+                    if v is not None and ph in PHASES:
+                        phase_acc[ph].append(v)
     return {
         "perDay": per_day,
         "phaseAccuracy": {p: _mean(phase_acc[p]) for p in PHASES},

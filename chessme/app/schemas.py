@@ -50,6 +50,7 @@ class GameSummary(BaseModel):
 class GameDetail(GameSummary):
     moves: list[Move]
     pgn: str | None
+    phaseAccuracy: dict[str, dict[str, float | None]] = {}                  # {'white': {'opening': x, ...}, 'black': {...}}: combined like the game accuracy
 
 
 class GamePage(BaseModel):

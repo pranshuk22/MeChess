@@ -94,6 +94,7 @@ export interface GameDetail {
   spark: number[];
   moves: Move[];
   pgn: string | null;
+  phaseAccuracy: Record<string, Record<string, number | null>>;
 }
 
 export interface GamePage {
