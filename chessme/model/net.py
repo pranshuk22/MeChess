@@ -1,4 +1,5 @@
 """The "me" network: a small residual conv net (Maia / Leela style) with a policy head and a result head."""
+from . import safe_load
 from dataclasses import asdict, dataclass
 
 import math
@@ -71,7 +72,7 @@ def save_checkpoint(path, model, meta=None):
 
 
 def load_checkpoint(path, device="cpu"):
-    ck = torch.load(path, map_location=device, weights_only=False)
+    ck = safe_load.load(path, map_location=device)
     model = MeNet(NetConfig(**ck["net_config"]))
     model.load_state_dict(ck["model"])
     return model.to(device), ck.get("meta", {})

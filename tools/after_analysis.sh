@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 LOG=data/style/logs/cohort_analyze.log
 echo "$(date +%H:%M:%S) waiting for the cohort analysis to finish (watching $LOG)"
 while ! grep -q "cohort analysis finished" "$LOG"; do
+  if ! pgrep -f "chessme style-cohort-analyze" >/dev/null; then echo "$(date +%H:%M:%S) the cohort analysis is not running and never finished: NOT starting the report (see $LOG)"; exit 1; fi
   done_n=$(ls data/style/cohort/cands 2>/dev/null | wc -l | tr -d ' ')
   total=$(python3 -c "import json;print(len(json.load(open('data/style/cohort/players.json'))))" 2>/dev/null)
   echo "$(date +%H:%M:%S) still analysing: ${done_n}/${total} players; last log line: $(tail -1 "$LOG" | cut -c1-90)"

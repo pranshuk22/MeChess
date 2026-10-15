@@ -2941,7 +2941,7 @@ def main():
     co.add_argument("--explorer", default="data/explorer/explorer.db", help="the opening explorer database (opening practice needs it)")
     co.add_argument("--syzygy", default="data/syzygy", help="folder with Syzygy tablebase files (endgame practice needs them; the 3 to 5 piece set is about 1 GB)")
     co.add_argument("--reference", help="reference rates of players by rating (made by coach-reference-build; default: the file that ships with the coach, if any)")
-    co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
+    co.add_argument("--port", type=int, default=8766, help="(the web app, `chessme app`, uses 8765)"); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
     cg = sub.add_parser("coach-reference-games", help="pick games for the coach's reference rates: a quota per speed and rating band from byte windows of a Lichess dump (or a PGN file), written as one PGN")
     cg.add_argument("--source", required=True, help="URL or file of a Lichess .pgn.zst dump, or a plain .pgn file"); cg.add_argument("--parts", type=int, default=700)
     cg.add_argument("--windows", default="14,43,72,101,130,159,188,217,246,275,304,333,362,391,420,449,478,507,536,565,594,623,652,681")

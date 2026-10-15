@@ -1,6 +1,6 @@
 # The web app (frontend)
 
-A single-page app in `frontend/` (React, Vite, TypeScript, Tailwind CSS). Status: **prototype** (home, library, review with the retry-your-mistakes loop, settings) running on bundled sample games; the Python backend (FastAPI + SQLite) that replaces the samples comes next.
+A single-page app in `frontend/` (React, Vite, TypeScript, Tailwind CSS). The server side (FastAPI + SQLite, jobs, live engine analysis) and what the app does are described in [app.md](app.md); this page is about the frontend.
 
 ## Run it
 

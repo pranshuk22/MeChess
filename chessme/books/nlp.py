@@ -12,6 +12,7 @@ Training text: the comments of annotated games (all three tasks), plus Stack Exc
 Two encoders: `bow` (hashed word and bigram embeddings; small, fast, runs anywhere) and `transformer` (any Hugging Face encoder, e.g.
 distilroberta-base; needs a GPU for real use). Training is resumable, has a wall-clock budget (`deadline_minutes`: it stops cleanly and
 saves a checkpoint), and a dry-run mode that runs the same code on a few hundred examples for a few steps."""
+from ..model import safe_load
 import gzip
 import hashlib
 import json
@@ -379,7 +380,7 @@ def train(examples, out_dir, *, backend="bow", model_name="distilroberta-base", 
     step, history, parts_log, ema, skipped, best_score, best_step = 0, [], [], None, 0, float("-inf"), None
     best_ap, best_ap_step, no_improve, early = float("-inf"), None, 0, False
     if ckpt.exists() and not dry_run:
-        st = torch.load(ckpt, weights_only=False, map_location=device)
+        st = safe_load.load(ckpt, map_location=device)
         if st["cfg"] != cfg:
             raise ValueError(f"{ckpt} was made with a different configuration; use another --out or delete it")
         model.load_state_dict(st["model"])
@@ -542,8 +543,8 @@ def load(out_dir, device=None, variant="composite"):
     device = device or _device()
     model = Tagger(make_encoder(cfg["backend"], cfg["model_name"], cfg["dim"], cfg["max_len"], cfg.get("buckets")), cfg.get("dropout", 0.1)).to(device)
     final = out / "model_concepts.pt" if variant == "concepts" and (out / "model_concepts.pt").exists() else out / "model.pt"                                                  # the evaluated (best or last) weights; older runs only have ckpt.pt
-    model.load_state_dict(torch.load(final, map_location=device, weights_only=False) if final.exists()
-                          else torch.load(out / "ckpt.pt", map_location=device, weights_only=False)["model"])
+    model.load_state_dict(safe_load.load(final, map_location=device) if final.exists()
+                          else safe_load.load(out / "ckpt.pt", map_location=device)["model"])
     model.eval()
     th = out / ("thresholds_concepts.json" if final.name == "model_concepts.pt" else "thresholds.json")
     cfg["thresholds"] = json.loads(th.read_text()) if th.exists() else None

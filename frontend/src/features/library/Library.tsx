@@ -54,9 +54,9 @@ export function LibraryPage() {
         <Segmented size="sm" label="Analysis" value={analysed} onChange={setAnalysed} options={[["all", "All"], ["yes", "Analysed"], ["no", "Not analysed"]]} />
       </div>
 
-      <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden" role="table" aria-label="Games" aria-rowcount={total + 1}>
         <div className={clsx("grid items-center gap-4 border-b border-border bg-surface-2/60 px-5 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.06em] text-muted", COLS)} role="row">
-          <span>Result</span><span>Opponent</span><span className="max-lg:hidden">Accuracy</span><span className="max-lg:hidden">Opening</span><span className="max-lg:hidden">Speed</span><span>Evaluation</span><span className="text-right">Date</span>
+          <span role="columnheader">Result</span><span role="columnheader">Opponent</span><span role="columnheader" className="max-lg:hidden">Accuracy</span><span role="columnheader" className="max-lg:hidden">Opening</span><span role="columnheader" className="max-lg:hidden">Speed</span><span role="columnheader">Evaluation</span><span role="columnheader" className="text-right">Date</span>
         </div>
         <div ref={scroller} className="min-h-0 flex-1 overflow-auto" role="rowgroup">
           {query.isLoading && Array.from({ length: 9 }, (_, i) => <div key={i} className="border-b border-border/60 px-5 py-3.5"><Skeleton className="h-7" /></div>)}
@@ -72,18 +72,18 @@ export function LibraryPage() {
               return (
                 <Link key={g.id} to={`/review/${encodeURIComponent(g.id)}`} role="row" style={{ position: "absolute", top: 0, left: 0, right: 0, height: it.size, transform: `translateY(${it.start}px)` }}
                   className={clsx("grid items-center gap-4 border-b border-border/60 px-5 text-[13.5px] transition-colors hover:bg-surface-2/70", COLS)}>
-                  <Badge tone={tone} className="justify-center">{label}</Badge>
-                  <span className="min-w-0">
+                  <span role="cell"><Badge tone={tone} className="justify-center">{label}</Badge></span>
+                  <span role="cell" className="min-w-0">
                     <span className="flex items-center gap-2"><span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full border", side === "white" ? "border-[var(--border-strong)] bg-white" : "border-transparent bg-[#2b3139]")} title={`You played ${side}`} /><span className="truncate font-medium">{opp.name}</span></span>
                     <span className="tnum block truncate pl-[18px] text-[12px] text-muted">{opp.elo ?? "unrated"} · you {me(g).elo ?? ""}</span>
                   </span>
-                  <span className="max-lg:hidden">
+                  <span role="cell" className="max-lg:hidden">
                     {acc === null ? <span className="text-[12.5px] text-faint">not analysed</span> : <span className="flex items-center gap-2"><span className="tnum w-9 text-[13px] font-medium">{acc.toFixed(0)}%</span><span className="h-1 w-12 overflow-hidden rounded-full bg-sunken"><span className="block h-full rounded-full bg-accent" style={{ width: `${acc}%` }} /></span></span>}
                   </span>
-                  <span className="min-w-0 max-lg:hidden"><span className="block truncate">{g.title ?? (g.opening || "—")}</span>{g.title && g.opening && <span className="block truncate text-[12px] text-muted">{g.opening}</span>}</span>
-                  <span className="text-muted capitalize max-lg:hidden">{g.speed ?? ""}</span>
-                  <span><MiniEval cps={g.spark} /></span>
-                  <span className="tnum text-right text-[12.5px] text-muted">{formatDate(g.date)}</span>
+                  <span role="cell" className="min-w-0 max-lg:hidden"><span className="block truncate">{g.title ?? (g.opening || "—")}</span>{g.title && g.opening && <span className="block truncate text-[12px] text-muted">{g.opening}</span>}</span>
+                  <span role="cell" className="text-muted capitalize max-lg:hidden">{g.speed ?? ""}</span>
+                  <span role="cell"><MiniEval cps={g.spark} /></span>
+                  <span role="cell" className="tnum text-right text-[12.5px] text-muted">{formatDate(g.date)}</span>
                 </Link>
               );
             })}

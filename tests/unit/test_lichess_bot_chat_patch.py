@@ -182,6 +182,18 @@ def test_elo_needs_a_number_and_a_limited_number_of_changes(bot_dir):
     assert len(eng.set) == P.CHANGES and "enough changes" in li.sent[-1]
 
 
+@pytest.mark.parametrize("text", ["!", "! ", "!   ", "!\t", "!elo\u00b2", "!elo \u00b2", "!elo \u0663\u0664"])
+def test_chat_messages_that_are_only_an_exclamation_mark_or_odd_digits_do_not_crash(bot_dir, text):
+    # Regression (audit 2026-10-15, #5): "!" made `"".split()[0]` raise IndexError inside the game loop; superscript and Arabic-Indic digits passed
+    # str.isdigit() and then raised ValueError in int().
+    P.main([str(bot_dir)])
+    mod = load(bot_dir)
+    eng = FakeEngine()
+    conv, li = conversation(mod, eng)
+    say(mod, conv, text)
+    assert eng.set == []
+
+
 def test_engine_without_elo_option_or_a_failing_engine_is_handled(bot_dir, caplog):
     P.main([str(bot_dir)])
     mod = load(bot_dir)

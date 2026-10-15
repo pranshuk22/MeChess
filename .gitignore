@@ -42,3 +42,7 @@ frontend/dist/
 frontend/test-results/
 frontend/playwright-report/
 *.tsbuildinfo
+
+# the built frontend copied into the package by `make wheel`
+chessme/app/static/
+dist-wheel/

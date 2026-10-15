@@ -119,3 +119,34 @@ def test_chesscom_archives_are_read_newest_first_and_only_standard_chess(monkeyp
     assert text.index('"a"') < text.index('"old"') and "chess960" not in text and '"v"' not in text
     assert calls[0] == "https://api.chess.com/pub/player/someone/games/archives" and len(calls) == 3
     assert len(CS.chesscom_games("Someone", 1).split("\n\n[")) == 1                 # stops at the requested number
+
+
+def test_other_sites_and_other_host_names_are_refused(tmp_path):
+    """Regression (audit 2026-10-15, #4): the coach server answered any Host and any Origin, and parsed text/plain bodies as JSON."""
+    import http.client
+    import threading
+    srv = CS.make_server(CS.CoachApp(fake_search))
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        def call(method, path, headers=None, body=b""):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+            c.putrequest(method, path, skip_host=True)
+            h = {"Host": f"127.0.0.1:{port}", "Content-Length": str(len(body)), **(headers or {})}
+            for k, v in h.items():
+                c.putheader(k, v)
+            c.endheaders(body)
+            r = c.getresponse()
+            out = r.status
+            r.read()
+            c.close()
+            return out
+        assert call("GET", "/") == 200 and call("POST", "/api/drills", body=b"{}") == 200                       # the page and tools without an Origin
+        assert call("POST", "/api/drills", {"Origin": f"http://127.0.0.1:{port}"}, b"{}") == 200 and call("POST", "/api/drills", {"Origin": f"http://localhost:{port}"}, b"{}") == 200
+        assert call("POST", "/api/drills", {"Origin": "https://evil.example", "Content-Type": "text/plain"}, b"{}") == 403
+        assert call("POST", "/api/drills", {"Host": "evil.example:8765"}, b"{}") == 403 and call("GET", "/", {"Host": "evil.example"}) == 403      # DNS rebinding
+        assert call("POST", "/api/drills", {"Content-Length": "-1"}) == 400
+        assert call("POST", "/api/drills", {"Content-Length": "abc"}) == 400
+    finally:
+        srv.shutdown()
+        srv.server_close()

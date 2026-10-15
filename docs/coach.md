@@ -4,7 +4,7 @@ A local web page that takes you back over the game you just played, finds the mo
 sentences what went wrong and why the better move is better, and lets you play on from the corrected position against the engine. Everything runs on your computer.
 
 ```bash
-.venv/bin/python -m chessme coach            # opens http://127.0.0.1:8765 ; needs Stockfish on the PATH (or --engine PATH)
+.venv/bin/python -m chessme coach            # opens http://127.0.0.1:8766 ; needs Stockfish on the PATH (or --engine PATH)
 .venv/bin/python -m chessme coach --nodes 300000 --port 9000 --no-browser
 ```
 

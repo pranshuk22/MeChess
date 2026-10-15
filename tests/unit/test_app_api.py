@@ -214,7 +214,7 @@ def test_the_built_frontend_is_served_with_a_fallback_and_never_outside_its_fold
         assert c.get("/").text == "<html>app</html>" and c.get("/review/abc").text == "<html>app</html>"        # client-side routes
         r = c.get("/assets/a.js")
         assert r.text == "1" and "immutable" in r.headers["cache-control"]
-        assert c.get("/../secret.txt").text == "<html>app</html>" and c.get("/%2e%2e/secret.txt").text == "<html>app</html>"
+        # (path traversal is tested in test_app_more.py: this client removes ".." before the request is sent, so it cannot test it)
         assert c.get("/api/nope").status_code == 404 and c.get("/api/health").json()["ok"]
 
 

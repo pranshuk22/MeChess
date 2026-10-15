@@ -126,7 +126,9 @@ def bootstrap(qs, y, gids, mask, n_boot=500, seed=0, difficulty=None):
 
 def render(rows, title=""):
     """Markdown: {label: bootstrap() result} for one subset each."""
+    from .errors import POOLED_NOTE
     lines = [title] if title else []
+    lines += [POOLED_NOTE, ""] if any("all judged" in k for k in rows) else []
     lines += ["| subset | positions | human blunder rate % | model | AUC | Brier x100 | skill vs base rate | skill vs difficulty-only | slope |", "|---|---|---|---|---|---|---|---|---|"]
     for label, r in rows.items():
         for name in [k for k in r if k not in ("n", "base_rate")]:

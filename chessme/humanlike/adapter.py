@@ -213,8 +213,8 @@ def save_adapter(path, net, mean, std, *, hidden, mode="full", meta=None):
 
 def load_adapter(path):
     """(network, mean, std, meta) from `save_adapter`."""
-    import torch
-    d = torch.load(path, map_location="cpu", weights_only=False)
+    from ..model import safe_load
+    d = safe_load.load(path)
     if d["features"] != list(FEATURES):
         raise ValueError(f"{path} was trained with other features: {d['features']}")
     net = Adapter(len(FEATURES), d["hidden"], d["mode"])

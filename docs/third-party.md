@@ -19,6 +19,7 @@ MeChess uses the following. **None of it is bundled, copied or redistributed by 
 | Chess piece images "cburnett" by Colin M.L. Burnett (Wikimedia Commons) | BSD 3-clause (the author offers GFDL, CC BY-SA, BSD and GPL "of your choice"); notice in `frontend/src/assets/pieces/cburnett/LICENSE.txt` | **bundled**: the default piece set of the web app |
 | Piece sets "Chessnut" (Alexis Luengas, Apache-2.0), "Rhos" (RhosGFX, CC0), "Celtic" (Maurizio Monge, MIT), "Kiwen Suwi" (neverRare, CC BY 4.0), "Papercut" (Nikolay Anzarov, CC BY 4.0), taken unchanged from the Lichess repository | as stated; notices beside the files in `frontend/src/assets/pieces/*/LICENSE.txt`; credits are also shown in the app settings | **bundled**: selectable piece sets of the web app |
 | Frontend libraries (React, Vite, Tailwind CSS, Radix UI, TanStack, chess.js, zustand, lucide-react, Inter and JetBrains Mono fonts) | MIT / BSD / OFL | **bundled** in the built web app through npm; versions pinned in `frontend/package-lock.json` |
+| FastAPI, Starlette, uvicorn, websockets, pydantic, SQLAlchemy, Alembic, httpx | MIT / BSD | the web app's server (`chessme app`); installed with pip, pinned in `requirements.txt` |
 
 Notes:
 

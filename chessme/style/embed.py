@@ -6,6 +6,7 @@ held-out players are only used to evaluate: identification (half A vs half B amo
 
 Training is resumable: a checkpoint holds the weights, the optimiser, the step and the sampler's random state, so a stopped run
 continues exactly where it was (same result as an uninterrupted run)."""
+from ..model import safe_load
 import json
 from pathlib import Path
 
@@ -106,7 +107,7 @@ def sample_batch(games_norm, idx, rng, batch, bag):
 
 def load(out_dir):
     """(model, normaliser, cfg) of a trained embedding (`out_dir/ckpt.pt`), ready for `embed_bags`."""
-    st = torch.load(Path(out_dir) / "ckpt.pt", weights_only=False)
+    st = safe_load.load(Path(out_dir) / "ckpt.pt")
     norm = Normaliser.from_state(st["norm"])
     model = BagEncoder(norm.dim, st["cfg"]["hidden"], st["cfg"]["dim"])
     model.load_state_dict(st["model"])
@@ -173,7 +174,7 @@ def train(players, out_dir, *, steps=2000, batch=64, bag=20, hidden=128, dim=32,
     step, history = 0, []
     rng = np.random.default_rng(seed + 1)
     if ckpt.exists():
-        st = torch.load(ckpt, weights_only=False)
+        st = safe_load.load(ckpt)
         if st["cfg"] != cfg or st["split"] != [ids[i] for i in test_idx]:
             raise ValueError(f"{ckpt} was made with a different configuration or player set; use another --out or delete it")
         norm = Normaliser.from_state(st["norm"])

@@ -32,7 +32,7 @@ assert len(HELP_BASE + HELP_ADDED) <= CHAT_LIMIT, \
 HELP_OLD = '"!eval (or any text starting with !eval), !queue")'
 HELP_NEW = HELP_OLD[:-2] + HELP_ADDED + '")'
 BRANCH_ANCHOR = '        elif cmd == "wait" and self.game.is_abortable():'
-BRANCH = f'        elif cmd.split()[0] == "elo":  {MARK}\n            self.set_elo(line, cmd)\n'
+BRANCH = f'        elif cmd.split()[:1] == ["elo"]:  {MARK}\n            self.set_elo(line, cmd)\n'
 METHOD_ANCHOR = "    def send_reply(self, line: ChatLine, reply: str) -> None:"
 METHOD = f'''    MECHESS_ELO_RANGE = {RANGE}  {MARK}
     MECHESS_ELO_CHANGES = {CHANGES}
@@ -50,7 +50,7 @@ METHOD = f'''    MECHESS_ELO_RANGE = {RANGE}  {MARK}
         if not arg:
             self.send_reply(line, f"I'm playing at about {{current}} Elo. Say !elo {{lo + 600}} to change it ({{lo}} to {{hi}}).")
             return
-        if not arg.isdigit():
+        if not (arg.isascii() and arg.isdigit()):
             self.send_reply(line, f"Say !elo followed by a number from {{lo}} to {{hi}}.")
             return
         if getattr(self, "mechess_changes", 0) >= self.MECHESS_ELO_CHANGES:

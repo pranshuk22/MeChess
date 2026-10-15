@@ -186,6 +186,7 @@ def compare_types(model, human, arr, mask, n_boot=500, seed=0):
 def render_types(rows, title=""):
     """Markdown: {label: compare_types() result}; rates in points (x100 per position), shares of the blunders in %."""
     lines = [title] if title else []
+    lines += [E.POOLED_NOTE, ""] if any("all judged" in k for k in rows) else []
     lines += ["| subset | positions | blunder type | humans | model | model - humans | share of humans' blunders % | share of model's % |", "|---|---|---|---|---|---|---|---|"]
     for label, r in rows.items():
         for name in TYPES:

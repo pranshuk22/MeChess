@@ -21,3 +21,9 @@ test-deep:
 app:
 	cd frontend && npm install && npm run build
 	PYTHONPATH=. .venv/bin/python -m chessme app
+
+# a wheel that contains the built frontend (so `pip install` gives a working `chessme app`)
+wheel:
+	cd frontend && npm install && npm run build
+	rm -rf chessme/app/static && cp -R frontend/dist chessme/app/static
+	.venv/bin/pip wheel . --no-deps -w dist-wheel

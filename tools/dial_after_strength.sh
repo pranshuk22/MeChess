@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 WAIT_LOG=data/calibration/strength_engine_2.log
 echo "$(date +%H:%M:%S) waiting for the strength measurement to finish (watching $WAIT_LOG)"
 while ! grep -q "Elo on the" "$WAIT_LOG" 2>/dev/null; do
+  if ! pgrep -f "chessme strength" >/dev/null; then echo "$(date +%H:%M:%S) the strength run is not running and never printed its result: NOT starting the dial calibration (see $WAIT_LOG)"; exit 1; fi
   echo "$(date +%H:%M:%S) strength run still going: $(tail -1 "$WAIT_LOG" | cut -c1-100)"
   sleep 60
 done

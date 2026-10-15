@@ -326,9 +326,26 @@ def fetch_games(platform, user, max_games=10):
 
 
 def make_handler(app, fetch=fetch_games):
+    from ..app.security import allowed
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *a):
             pass
+
+        def _local_only(self):
+            """Only this computer's own page may talk to the server: the Host header must be ours (DNS rebinding) and a write from a page must come from our own origin
+            (another site's form or script). Returns False after answering 403."""
+            host, port = self.server.server_address[:2]
+            hosts, origins = allowed(host, port)
+            hosts |= {f"{host}:{port}"}
+            if (self.headers.get("Host") or "").lower() not in hosts:
+                self._send(403, {"error": "forbidden host"})
+                return False
+            origin = self.headers.get("Origin")
+            if self.command == "POST" and origin is not None and origin.lower() not in origins | {f"http://{host}:{port}"}:
+                self._send(403, {"error": "forbidden origin"})
+                return False
+            return True
 
         def _send(self, code, body, ctype="application/json"):
             data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -340,13 +357,22 @@ def make_handler(app, fetch=fetch_games):
             self.wfile.write(data)
 
         def do_GET(self):
+            if not self._local_only():
+                return
             path = self.path.split("?")[0]
             if path in ("/", "/index.html"):
                 return self._send(200, (WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
             return self._send(404, {"error": "not found"})
 
         def do_POST(self):
-            n = int(self.headers.get("Content-Length") or 0)
+            if not self._local_only():
+                return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                return self._send(400, {"error": "bad Content-Length"})
+            if n < 0:                                                    # (read(-1) would wait for the client to close)
+                return self._send(400, {"error": "bad Content-Length"})
             if n > MAX_BODY:
                 return self._send(413, {"error": "too large"})
             try:

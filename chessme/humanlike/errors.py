@@ -71,6 +71,8 @@ def model_values(prep, tau=1.0, tail=None):
         out[name] = (q * (prep["cand_loss"] > thr)).sum(axis=1)
     if tail is not None:
         t = np.clip(prep["tail"], 0.0, 1.0)
+        # A regime without enough tail positions has no stand-in (NaN) and its values stay NaN, on purpose: an uncorrected number must never be reported as corrected,
+        # and the pooled rows then show NaN too (visibly) until the regime has enough positions (audit 2026-10-15, #17: kept by design).
         out = {k: (1.0 - t) * v + t * tail[k] for k, v in out.items()}
     return out
 
@@ -127,9 +129,13 @@ def _ci(t, scale=100.0, digits=2):
     return f"{scale * t[0]:.{digits}f} [{scale * t[1]:.{digits}f}, {scale * t[2]:.{digits}f}]"
 
 
+POOLED_NOTE = "*The row \"all judged positions\" pools the clock regimes in the quotas the sample was drawn with (the same number of positions per regime), so its levels are not rates of the whole population; the differences between model and humans are paired on the same positions and are valid.*"
+
+
 def render(rows, floor=None, title=""):
     """Markdown: {label: compare() result}; values in points (loss and rates x 100)."""
     lines = [title] if title else []
+    lines += [POOLED_NOTE, ""] if any("all judged" in k for k in rows) else []
     lines += ["| subset | positions | measure | humans | model | model - humans | gap / noise floor |", "|---|---|---|---|---|---|---|"]
     for label, r in rows.items():
         for name in [k for k in r if k != "n"]:
