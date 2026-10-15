@@ -96,3 +96,13 @@ class Drill(Base):
     due: Mapped[float] = mapped_column(Float, index=True)                      # seconds since the epoch
     history: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class Repertoire(Base):
+    """An opening repertoire of the player (a PGN with variations for one colour), practised against the replies players of their rating make."""
+    __tablename__ = "repertoires"
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String)
+    colour: Mapped[str] = mapped_column(String)
+    pgn: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)

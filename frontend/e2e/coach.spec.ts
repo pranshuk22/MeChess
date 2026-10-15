@@ -36,3 +36,32 @@ test("the home page shows how many practice positions are due", async ({ page, r
   await page.goto("/");
   await expect(page.getByText(/positions? (is|are) due/)).toBeVisible();
 });
+
+test("opening practice and endgames say what data they need when it is missing", async ({ page }) => {
+  await page.goto("/coach");
+  await page.getByRole("tab", { name: "Openings" }).click();
+  await expect(page.getByText("The opening explorer is not built yet")).toBeVisible();
+  await page.getByRole("tab", { name: "Endgames" }).click();
+  await expect(page.getByText("No endgame tablebases found")).toBeVisible();
+});
+
+test("a steered game: choose a focus, play, finish, see the report, review the saved game", async ({ page, request }) => {
+  const ws = await (await request.get("/api/workspace")).json();
+  test.skip(ws.checks.find((c: { id: string }) => c.id === "engine")?.state !== "ok", "needs Stockfish");
+  const { drag } = await import("./helpers");
+  await page.goto("/coach");
+  await page.getByRole("tab", { name: "Steered game" }).click();
+  const start = page.getByRole("button", { name: "Start the game" });
+  await expect(start).toBeDisabled();                                                              // nothing chosen yet
+  await page.getByRole("group", { name: "Focus" }).getByLabel(/Notice threats/).check();
+  await start.click();
+  const board = page.locator(".board");
+  await expect(board.locator(".piece")).toHaveCount(32);
+  await drag(page, board, "e2", "e4");
+  await expect(board.locator('.piece[data-sq="e4"]')).toHaveCount(1);
+  await page.getByRole("button", { name: /Finish and see how it went/ }).click();
+  await expect(page.getByText("How it went")).toBeVisible({ timeout: 60_000 });
+  await page.getByRole("link", { name: "Review the game" }).click();
+  await expect(page).toHaveURL(/\/review\/steer%3A/);
+  await expect(page.getByRole("tab", { name: "Summary" })).toBeVisible();
+});

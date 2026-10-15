@@ -7,7 +7,10 @@ import { useDrillStats, type Drill } from "@/api/hooks";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, Skeleton } from "@/components/ui/Misc";
 import { PageHeader, Panel, PanelTitle } from "@/components/ui/Panel";
+import { Endgames } from "./Endgames";
+import { Openings } from "./Openings";
 import { Practice } from "./Practice";
+import { Steered } from "./Steered";
 import { Weaknesses } from "./Weaknesses";
 
 export function CoachPage() {
@@ -16,11 +19,14 @@ export function CoachPage() {
       <PageHeader title="Coach" sub="Practice that comes from your own games." />
       <Tabs.Root defaultValue="practice">
         <Tabs.List className="mb-5 inline-flex rounded-[9px] bg-sunken p-0.5" aria-label="Coach sections">
-          {[["practice", "Practice"], ["weaknesses", "Weaknesses"]].map(([v, l]) => (
+          {[["practice", "Practice"], ["openings", "Openings"], ["endgames", "Endgames"], ["steered", "Steered game"], ["weaknesses", "Weaknesses"]].map(([v, l]) => (
             <Tabs.Trigger key={v} value={v} className="h-8 rounded-[7px] px-4 text-[13px] font-medium text-muted data-[state=active]:bg-surface data-[state=active]:text-text data-[state=active]:shadow-[var(--shadow-sm)] cursor-pointer">{l}</Tabs.Trigger>
           ))}
         </Tabs.List>
         <Tabs.Content value="practice" className="outline-none"><PracticeHome /></Tabs.Content>
+        <Tabs.Content value="openings" className="outline-none"><Openings /></Tabs.Content>
+        <Tabs.Content value="endgames" className="outline-none"><Endgames /></Tabs.Content>
+        <Tabs.Content value="steered" className="outline-none"><Steered /></Tabs.Content>
         <Tabs.Content value="weaknesses" className="outline-none"><Weaknesses /></Tabs.Content>
       </Tabs.Root>
     </div>
