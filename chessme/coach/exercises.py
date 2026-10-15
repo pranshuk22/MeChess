@@ -7,6 +7,7 @@ import chess
 
 from ..humanlike import blunders as B
 from . import facts as F
+from .drills import drill_id
 
 MIN_LOSS = 0.10          # expected points a move gave away to become an exercise
 MIN_WIN_BEFORE = 0.15    # skip positions that were lost already
@@ -23,7 +24,7 @@ def exercise(fen, played_uci, best_uci, loss, win_before, win_after, ply=None, p
     board = chess.Board(fen)
     played, best = chess.Move.from_uci(played_uci), chess.Move.from_uci(best_uci)
     kind, _ = B.classify(fen, played_uci)
-    ex = {"fen": fen, "color": "white" if board.turn == chess.WHITE else "black", "ply": ply, "phase": phase, "class": cls,
+    ex = {"id": drill_id(fen, best_uci), "fen": fen, "color": "white" if board.turn == chess.WHITE else "black", "ply": ply, "phase": phase, "class": cls,
           "played_uci": played_uci, "played_san": board.san(played), "best_uci": best_uci, "best_san": board.san(best), "loss": round(float(loss), 4),
           "win_before": round(float(win_before), 4), "win_after": round(float(win_after), 4), "kind": kind}
     ex["hints"] = hints(board, best)

@@ -765,8 +765,9 @@ def cmd_coach(args):
     import webbrowser
 
     from .coach import server as CS
+    from .coach import drills as CD
     backend = CS.EngineBackend(args.engine, nodes=args.nodes)
-    app = CS.CoachApp(backend.search)
+    app = CS.CoachApp(backend.search, drills=CD.DrillStore(Path(args.data_dir).expanduser() / "drills.json"))
     if not args.no_browser:
         import threading
         threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
@@ -2827,6 +2828,7 @@ def main():
     hd.add_argument("--boot", type=int, default=500); hd.add_argument("--out", required=True); hd.set_defaults(func=cmd_humanlike_diagnose)
     co = sub.add_parser("coach", help="start the local coach: a web page on this computer to go back over the mistakes of a game, find better moves, see why they are better and play on (needs Stockfish)")
     co.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); co.add_argument("--nodes", type=int, default=100000, help="search budget per position (more is slower and stronger)")
+    co.add_argument("--data-dir", default="~/.mechess-coach", help="where your drills are kept (a small JSON file; nothing is sent anywhere)")
     co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)

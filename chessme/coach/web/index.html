@@ -35,6 +35,10 @@
   <p class="sub">Go back to the moments where your game turned, find a better move, see why it is better, and play on from there. Everything runs on this computer.</p>
 
   <section id="setup">
+    <div class="card hide" id="drillcard">
+      <b>Practice my mistakes</b> <span class="muted" id="drillinfo"></span><br>
+      <button id="drills">Start</button>
+    </div>
     <div class="card">
       <b>1. Get a game</b>
       <div class="row" style="margin-top:8px">
@@ -169,7 +173,19 @@ $("hint").onclick = async () => { const o = await api(`/api/replay/${sid}/hint`)
 $("reveal").onclick = async () => { const o = await api(`/api/replay/${sid}/reveal`); if (o.error) setMsg(o.error, "no"); else setMsg(`The better move was ${o.best_san}.\n\n${o.message}` + (o.reply_san ? `\n\nThe opponent replied ${o.reply_san}. Play on if you like.` : "")); refresh(o.view); };
 $("reset").onclick = async () => { const o = await api(`/api/replay/${sid}/reset`); setMsg("Back to the position before your mistake. Find a better move."); refresh(o.view); };
 $("next").onclick = async () => { const o = await api(`/api/replay/${sid}/next`); if (!o.view.done) setMsg("Next moment. Find a better move than the one you played."); refresh(o.view); };
-$("home").onclick = () => { $("game").classList.remove("on"); $("setup").classList.remove("hide"); };
+$("home").onclick = () => { $("game").classList.remove("on"); $("setup").classList.remove("hide"); loadDrills(); };
+async function loadDrills() {
+  const st = await api("/api/drills");
+  if (st.total > 0) { $("drillcard").classList.remove("hide"); $("drillinfo").textContent = `${st.due} due now, ${st.total} saved from your reviews`; $("drills").disabled = st.due === 0; }
+}
+$("drills").onclick = async () => {
+  const out = await api("/api/drills/start", {limit: 10});
+  if (out.none) { $("drillinfo").textContent = out.message; return; }
+  sid = out.session; $("setup").classList.add("hide"); $("game").classList.add("on");
+  setMsg(`${out.n} position(s) from your own games are due. Find the better move without a hint if you can: that moves a position to a later review.`);
+  refresh(out.view);
+};
+loadDrills();
 </script>
 </body>
 </html>

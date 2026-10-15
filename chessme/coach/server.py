@@ -16,6 +16,7 @@ import chess
 import chess.pgn
 
 from ..analysis import runner as AR
+from . import drills as D
 from . import exercises as X
 from . import session as S
 
@@ -44,8 +45,9 @@ class EngineBackend:
 
 
 class CoachApp:
-    def __init__(self, search, max_sessions=20, opponent_seed=0):
+    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None):
         self.search = search
+        self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
         self.sessions = {}
         self.max_sessions = max_sessions
         self.seed = opponent_seed
@@ -86,6 +88,18 @@ class CoachApp:
         self.sessions[sid] = replay
         return {"session": sid, "n": len(ex), "accuracy": summary["accuracy"], "classes": summary["classes"], "view": replay.view()}
 
+    def start_drills(self, limit=10):
+        """A replay of the mistake positions that are due."""
+        ex = self.drills.due(limit=limit)
+        if not ex:
+            return {"none": True, "message": "Nothing is due. Review a game, and the positions you missed come back here.", "stats": self.drills.stats()}
+        sid = secrets.token_urlsafe(8)
+        if len(self.sessions) >= self.max_sessions:
+            self.sessions.pop(next(iter(self.sessions)))
+        replay = S.Replay(ex, S.Judge(self.search), S.EngineOpponent(self.search, seed=self.seed))
+        self.sessions[sid] = replay
+        return {"session": sid, "n": len(ex), "view": replay.view(), "stats": self.drills.stats()}
+
     # ---- a session ------------------------------------------------------------------------------------------------------------------------
     def act(self, sid, action, payload=None):
         r = self.sessions.get(sid)
@@ -95,14 +109,22 @@ class CoachApp:
         if action == "hint":
             out = r.hint()
         elif action == "attempt":
+            ex, hints, tries = r.ex, r.hints_used, r.tries
             out = r.attempt(str(payload.get("uci", "")))
+            if ex is not None and out.get("verdict") in ("found", "ok"):
+                self.drills.record(ex, success=hints == 0 and tries == 0)         # first try, no hint (tries counts attempts before this one)
         elif action == "reveal":
+            ex = r.ex
             out = r.reveal()
+            if ex is not None and out.get("verdict") == "revealed":
+                self.drills.record(ex, success=False)
         elif action == "play":
             out = r.play(str(payload.get("uci", "")))
         elif action == "reset":
             out = r.reset()
         elif action == "next":
+            if r.ex is not None and r.mode == "find":                                # skipped without finding it: counts as missed
+                self.drills.record(r.ex, success=False)
             out = r.next()
         elif action == "view":
             out = {}
@@ -156,6 +178,10 @@ def make_handler(app, fetch=lichess_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/drills":
+                    return self._send(200, app.drills.stats())
+                if path == "/api/drills/start":
+                    return self._send(200, app.start_drills(int(body.get("limit", 10))))
                 if path == "/api/start":
                     return self._send(200, app.start(body.get("pgn", ""), int(body.get("index", 0)), body.get("color", "white"), int(body.get("max_n", 5))))
                 m = re.fullmatch(r"/api/replay/([\w-]+)/(\w+)", path)

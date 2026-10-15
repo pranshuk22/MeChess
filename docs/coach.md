@@ -21,6 +21,8 @@ capture wins material by static exchange, whether the opponent can mate in one. 
 (allowed a mate in one, did not deal with a threat, put a piece where it can be captured, or a deeper loss) use the same rules as the human-likeness benchmark
 (`chessme/humanlike/blunders.py`).
 
+Drills: the positions you try are saved in `~/.mechess-coach/drills.json` (`--data-dir` to change). A position you find on the first try without a hint comes back later (1, 3, 7, 16, 35 days); anything else brings it back in ten minutes. "Practice my mistakes" on the start page replays what is due.
+
 Privacy: the server listens on 127.0.0.1 only; your games and attempts stay in memory on this machine; the only network use is the optional Lichess fetch. The page loads no outside
 scripts, fonts or images.
 
