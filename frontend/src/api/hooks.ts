@@ -109,7 +109,7 @@ export function useExplorer(fen: string, enabled: boolean, rating = 1500) {
 }
 
 export const useCacheStats = () => useQuery({ queryKey: ["cache"], queryFn: () => api<S.CacheStats>("/api/cache") });
-export const useBuildCache = () => useJobMutation<{ min_count?: number; limit?: number; include_theory?: boolean }>(() => "/api/cache/build", (v) => v);
+export const useBuildCache = () => useJobMutation<{ min_count?: number; limit?: number; include_theory?: boolean; nodes?: number }>(() => "/api/cache/build", (v) => v);
 export function useClearCache() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (source?: string) => api<{ deleted: number }>(`/api/cache${source ? `?source=${source}` : ""}`, { method: "DELETE" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["cache"] }) });

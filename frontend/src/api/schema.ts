@@ -50,6 +50,8 @@ export interface CacheStats {
   oldest: string | null;
   newest: string | null;
   maxMoves: number;
+  deepest: number;
+  deep: number;
 }
 
 export interface Check {

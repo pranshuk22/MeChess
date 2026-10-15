@@ -192,3 +192,17 @@ def test_live_analysis_stores_deep_opening_lines_and_shows_them_at_once_next_tim
         with c.websocket_connect("/api/ws/analysis", headers=HOST) as ws:
             ws.send_json({"fen": START, "multipv": 1})
             assert ws.receive_json()["cached"] is False                                               # with the cache off nothing stored is shown
+
+
+def test_a_deeper_build_replaces_shallower_entries_and_the_stats_show_the_deepest_search(client):
+    wait(client, client.post("/api/import/pgn", json={"text": two_games() + "\n" + two_games().replace("AAAAAAAA", "CCCCCCCC").replace("BBBBBBBB", "DDDDDDDD"), "player": "me"}).json())
+    client.app.state.engine_factory = lambda settings: (lambda: FakeEngine())
+    client.patch("/api/settings", json={"nodes": 1000, "multipv": 1})
+    wait(client, client.post("/api/cache/build", json={"min_count": 2, "limit": 50}).json())
+    shallow = client.get("/api/cache").json()
+    assert shallow["deepest"] == 1000 and shallow["deep"] == 0
+    deeper = wait(client, client.post("/api/cache/build", json={"min_count": 2, "limit": 50, "nodes": 2_000_000}).json())
+    assert deeper["status"] == "done" and "opening positions added" in deeper["message"]               # every stored position is searched again, deeper
+    deep = client.get("/api/cache").json()
+    assert deep["positions"] == shallow["positions"] and deep["deepest"] == 2_000_000 and deep["deep"] == deep["positions"]
+    assert "nothing to add" in wait(client, client.post("/api/cache/build", json={"min_count": 2, "nodes": 2_000_000}).json())["message"]       # and not searched a third time

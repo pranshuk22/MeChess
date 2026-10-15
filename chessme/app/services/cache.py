@@ -13,6 +13,7 @@ from ...analysis.runner import SimpleLine
 from ..models import PositionEval
 
 MAX_PLY = 20
+DEEP_NODES = 1_000_000                       # positions searched at least this far are counted as deep
 KEEP_PV = 8
 
 
@@ -71,9 +72,11 @@ def stats(session: Session) -> dict:
     by_ply = {int(p): c for p, c in session.execute(select(PositionEval.ply, func.count()).group_by(PositionEval.ply))}
     by_source = {s: c for s, c in session.execute(select(PositionEval.source, func.count()).group_by(PositionEval.source))}
     size = sum(len(str(l)) for (l,) in session.execute(select(PositionEval.lines))) if n and n <= 50_000 else n * 400                 # about, in bytes
+    deepest = session.scalar(select(func.coalesce(func.max(PositionEval.nodes), 0))) or 0
+    deep = session.scalar(select(func.count()).select_from(PositionEval).where(PositionEval.nodes >= DEEP_NODES)) or 0
     oldest, newest = session.execute(select(func.min(PositionEval.created_at), func.max(PositionEval.updated_at))).one()
     return {"positions": n, "hits": int(hits), "bytes": int(size), "byMove": [{"move": m, "positions": sum(c for p, c in by_ply.items() if (p + 1) // 2 == m)} for m in range(0, MAX_PLY // 2 + 1)],
-            "bySource": by_source, "oldest": oldest.isoformat() if oldest else None, "newest": newest.isoformat() if newest else None, "maxMoves": MAX_PLY // 2}
+            "bySource": by_source, "oldest": oldest.isoformat() if oldest else None, "newest": newest.isoformat() if newest else None, "maxMoves": MAX_PLY // 2, "deepest": int(deepest), "deep": int(deep)}
 
 
 def clear(session: Session, source: str | None = None) -> int:

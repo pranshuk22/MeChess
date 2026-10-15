@@ -174,6 +174,10 @@ function EngineCache() {
   const stats = useCacheStats().data, settings = useSettings().data, save = useSaveSettings(), build = useBuildCache(), clear = useClearCache(), nav = useNavigate();
   const [confirm, setConfirm] = useState(false);
   const [theory, setTheory] = useState(false);
+  const [strength, setStrength] = useState("settings");                          // how hard each position is searched when the cache is built
+  const [count, setCount] = useState("300");
+  const nodes = strength === "settings" ? settings?.nodes ?? 100_000 : Number(strength);
+  const minutes = Math.max(1, Math.round((Number(count) * nodes) / 1_000_000 / 60));    // about a million nodes a second on one thread
   const max = Math.max(1, ...(stats?.byMove.map((m) => m.positions) ?? [1]));
   return (
     <Panel>
@@ -184,6 +188,7 @@ function EngineCache() {
           <Stat label="Used" value={(stats?.hits ?? 0).toLocaleString()} sub="times" />
           <Stat label="Size" value={kb(stats?.bytes ?? 0)} />
         </div>
+        {!!stats?.positions && <p className="-mt-2 text-[12.5px] text-muted">Deepest search stored: <b className="tnum text-text">{stats.deepest.toLocaleString()}</b> nodes; <b className="tnum text-text">{stats.deep.toLocaleString()}</b> positions searched to a million nodes or more. A deeper search replaces a shallower one, never the other way round.</p>}
         {!!stats?.positions && (
           <div>
             <div className="mb-1.5 text-[12px] font-medium text-muted">Positions by move number</div>
@@ -195,8 +200,17 @@ function EngineCache() {
         )}
         <label className="flex items-center justify-between gap-4 text-[13.5px]"><span><b className="font-medium">Use the cache</b><span className="block text-[12.5px] text-muted">Look openings up here when analysing games and when you step through a game.</span></span>
           <input type="checkbox" checked={settings?.use_cache ?? true} onChange={(e) => save.mutate({ use_cache: e.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /></label>
-        <div className="flex flex-wrap items-center gap-3 border-t border-border/70 pt-4">
-          <Button disabled={build.isPending} onClick={() => build.mutate({ min_count: 2, limit: 300, include_theory: theory }, { onSuccess: () => nav("/activity") })}>Build for my openings</Button>
+        <div className="space-y-3 border-t border-border/70 pt-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div><div className="mb-1.5 text-[12.5px] font-medium">How deep to search</div>
+              <Segmented label="Search depth for the cache" value={strength} onChange={setStrength} options={[["settings", `Analysis setting (${(settings?.nodes ?? 100_000).toLocaleString()})`], ["1000000", "Deep (1 million)"], ["5000000", "Very deep (5 million)"]]} /></div>
+            <div className="w-36"><div className="mb-1.5 text-[12.5px] font-medium">Positions</div>
+              <Select aria-label="How many positions" value={count} onChange={(e) => setCount(e.target.value)}>{["100", "300", "1000", "3000"].map((n) => <option key={n}>{n}</option>)}</Select></div>
+          </div>
+          <p className="text-[12.5px] text-muted">The most common positions of your own games first, up to the number chosen; positions already searched this deep are skipped. About {minutes < 60 ? `${minutes} minute${minutes === 1 ? "" : "s"}` : `${(minutes / 60).toFixed(1)} hours`} on one thread: it runs in the background and can be cancelled in Activity.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button disabled={build.isPending} onClick={() => build.mutate({ min_count: 2, limit: Number(count), include_theory: theory, nodes: strength === "settings" ? undefined : Number(strength) }, { onSuccess: () => nav("/activity") })}>Build for my openings</Button>
           <label className="flex items-center gap-2 text-[12.5px] text-muted"><input type="checkbox" checked={theory} onChange={(e) => setTheory(e.target.checked)} className="accent-[var(--accent)]" /> also the main opening lines</label>
           <Button variant="danger" className="ml-auto" disabled={!stats?.positions || clear.isPending} onClick={() => setConfirm(true)}><Trash2 size={15} /> Delete all</Button>
         </div>

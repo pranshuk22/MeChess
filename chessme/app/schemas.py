@@ -201,6 +201,8 @@ class CacheStats(BaseModel):
     oldest: str | None
     newest: str | None
     maxMoves: int
+    deepest: int = 0                                                      # the largest search (nodes) behind any stored position
+    deep: int = 0                                                         # positions searched at least a million nodes
 
 
 class CacheBuild(BaseModel):
