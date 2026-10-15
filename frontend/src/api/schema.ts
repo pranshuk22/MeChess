@@ -3,6 +3,7 @@
 export interface Accounts {
   lichess?: string | null;
   chesscom?: string | null;
+  rating?: number | null;
 }
 
 export interface Accuracy {
@@ -170,6 +171,7 @@ export interface Me {
   mainSpeed: string | null;
   rating: number | null;
   band: number | null;
+  ratingSource: string | null;
   stockfishLevel: number;
   openings: Record<string, MeOpenings>;
 }

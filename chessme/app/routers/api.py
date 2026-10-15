@@ -87,7 +87,8 @@ def accounts(s: Session) -> dict:
 
 
 def players(s: Session) -> list[str]:
-    return [v for v in accounts(s).values() if v]
+    acc = accounts(s)
+    return [acc[k] for k in ("lichess", "chesscom") if acc.get(k)]
 
 
 @router.get("/accounts", response_model=Accounts)

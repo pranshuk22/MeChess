@@ -132,7 +132,9 @@ def me(session: Session, accounts: dict) -> dict:
         ratings.append({"speed": speed, "rating": latest, "games": len(pts), "change": latest - old[0] if old else None, "date": latest_day})
     ratings.sort(key=lambda r: -r["games"])
     main = ratings[0] if ratings else None
-    band = min(BANDS, key=lambda b: abs(b - main["rating"])) if main else None
+    declared = accounts.get("rating")
+    rating = main["rating"] if main else declared                              # the rating in the games, else the one the player gave in Settings
+    band = min(BANDS, key=lambda b: abs(b - rating)) if rating else None
     out_open = {}
     for colour, d in opens.items():
         rows_ = [{"name": n, "games": c, "score": s / c} for n, (c, s) in d.items()]
@@ -140,8 +142,8 @@ def me(session: Session, accounts: dict) -> dict:
         solid = [r for r in rows_ if r["games"] >= MIN_OPENING]
         out_open[colour] = {"top": rows_[:4], "best": max(solid, key=lambda r: r["score"]) if solid else None, "weakest": min(solid, key=lambda r: r["score"]) if len(solid) > 1 else None}
     first = min((g.played_at for g in rows if g.played_at), default=None)
-    return {"name": next((v for v in (accounts.get("lichess"), accounts.get("chesscom")) if v), None), "handles": {k: v for k, v in accounts.items() if v}, "games": len(rows), "since": first,
-            "ratings": ratings, "mainSpeed": main["speed"] if main else None, "rating": main["rating"] if main else None, "band": band, "stockfishLevel": stockfish_level_for(main["rating"] if main else None),
+    return {"name": next((v for v in (accounts.get("lichess"), accounts.get("chesscom")) if v), None), "handles": {k: v for k, v in accounts.items() if v and k in ("lichess", "chesscom")}, "games": len(rows), "since": first,
+            "ratings": ratings, "mainSpeed": main["speed"] if main else None, "rating": rating, "ratingSource": "games" if main else "settings" if declared else None, "band": band, "stockfishLevel": stockfish_level_for(rating),
             "openings": out_open}
 
 

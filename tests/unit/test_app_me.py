@@ -18,6 +18,7 @@ def client(tmp_path):
 
 
 def add(client, i, date, speed, elo, result, opening, colour="white"):
+    elo = elo or ""
     s = client.app.state.sessions()
     tc = {"blitz": "180+0", "rapid": "600+0"}[speed]
     headers = {"White": "me" if colour == "white" else "x", "Black": "x" if colour == "white" else "me", "Result": result, "TimeControl": tc, "Date": date.replace("-", "."), "Opening": opening,
@@ -54,3 +55,16 @@ def test_ratings_by_speed_the_main_speed_the_band_and_the_openings(client):
 
 def test_the_suggested_stockfish_level_follows_the_rating():
     assert [ST.stockfish_level_for(r) for r in (None, 700, 1000, 1200, 1500, 1800, 2000, 2200, 2500)] == [4, 1, 2, 3, 4, 5, 6, 7, 8]
+
+
+def test_a_rating_given_in_settings_is_used_when_the_games_carry_none_and_is_not_taken_for_a_name(client):
+    """Regression: the rating is stored with the accounts; it must not end up in the list of names that mark the player's side."""
+    add(client, 0, "2026-09-01", "blitz", None, "1-0", "Italian Game")
+    assert client.get("/api/me").json()["rating"] is None
+    client.put("/api/accounts", json={"lichess": "mypal", "chesscom": None, "rating": 1480})
+    me = client.get("/api/me").json()
+    assert me["rating"] == 1480 and me["ratingSource"] == "settings" and me["band"] == 1500 and me["stockfishLevel"] == 4 and me["handles"] == {"lichess": "mypal"}
+    from chessme.app.routers import api
+    with client.app.state.sessions() as s:
+        assert api.players(s) == ["mypal"]
+    assert client.put("/api/accounts", json={"rating": 50}).status_code == 422

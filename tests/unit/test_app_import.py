@@ -73,7 +73,7 @@ def test_importing_from_lichess_and_chesscom_uses_the_fetchers_and_remembers_the
     client.app.state.fetchers = {"lichess": fake("lichess"), "chesscom": fake("chesscom")}
     j = wait(client, client.post("/api/import/lichess", json={"username": "Magnus_C", "max": 50}).json())
     assert j["status"] == "done" and calls == [("lichess", "Magnus_C", 50)] and "1 new games" in j["message"]
-    assert client.get("/api/accounts").json() == {"lichess": "Magnus_C", "chesscom": None}
+    assert client.get("/api/accounts").json() == {"lichess": "Magnus_C", "chesscom": None, "rating": None}
     assert client.get("/api/games/lichess:LLLLLLLL").json()["user"] == "white"
     assert client.post("/api/import/chesscom", json={"username": "bad name!", "max": 5}).status_code == 422
     assert client.post("/api/import/lichess", json={"username": "ok_name", "max": 0}).status_code == 422

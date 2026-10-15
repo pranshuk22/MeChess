@@ -56,18 +56,19 @@ export function SettingsPage() {
 }
 
 function Accounts() {
-  const { data } = useAccounts(), save = useSaveAccounts();
-  const [v, setV] = useState({ lichess: "", chesscom: "" });
+  const { data } = useAccounts(), save = useSaveAccounts(), qc = useQueryClient();
+  const [v, setV] = useState({ lichess: "", chesscom: "", rating: "" });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => { if (data) setV({ lichess: data.lichess ?? "", chesscom: data.chesscom ?? "" }); }, [data]);
+  useEffect(() => { if (data) setV({ lichess: data.lichess ?? "", chesscom: data.chesscom ?? "", rating: data.rating ? String(data.rating) : "" }); }, [data]);
   return (
     <Panel>
       <PanelTitle sub="Public user names only, no passwords. Used to import your games and to know which side is yours.">Your accounts</PanelTitle>
       <div className="grid grid-cols-2 gap-4 px-5 pb-5 max-sm:grid-cols-1">
         <Label>Lichess<Input className="mt-1.5" value={v.lichess} onChange={(e) => setV({ ...v, lichess: e.target.value })} placeholder="username" /></Label>
         <Label>Chess.com<Input className="mt-1.5" value={v.chesscom} onChange={(e) => setV({ ...v, chesscom: e.target.value })} placeholder="username" /></Label>
+        <Label hint="Used for the explorer, the practice and the play page when your games carry no rating.">Your rating (optional)<Input className="mt-1.5" type="number" min={400} max={3200} inputMode="numeric" value={v.rating} onChange={(e) => setV({ ...v, rating: e.target.value })} placeholder="for example 1500" /></Label>
         <div className="col-span-2 flex items-center gap-3 max-sm:col-span-1">
-          <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate({ lichess: v.lichess.trim() || null, chesscom: v.chesscom.trim() || null }, { onSuccess: () => setMsg({ ok: true, text: "Saved" }), onError: (e) => setMsg({ ok: false, text: (e as Error).message }) })}>Save</Button>
+          <Button variant="primary" disabled={save.isPending} onClick={() => save.mutate({ lichess: v.lichess.trim() || null, chesscom: v.chesscom.trim() || null, rating: v.rating.trim() ? Number(v.rating) : null }, { onSuccess: () => { setMsg({ ok: true, text: "Saved" }); qc.invalidateQueries({ queryKey: ["me"] }); }, onError: (e) => setMsg({ ok: false, text: (e as Error).message }) })}>Save</Button>
           {msg && <span role="status" className="text-[13px]" style={{ color: msg.ok ? "var(--q-best)" : "var(--q-blunder)" }}>{msg.text}</span>}
         </div>
       </div>

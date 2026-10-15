@@ -61,9 +61,12 @@ test("importing a PGN runs as a job, shows in Activity and lands in the library,
 test("accounts and engine settings are saved by the backend", async ({ page, request }) => {
   await page.goto("/settings");
   await page.getByPlaceholder("username").first().fill("some_lichess_name");
+  await page.getByLabel("Your rating (optional)").fill("1650");
   await page.getByRole("button", { name: "Save" }).first().click();
   await expect(page.getByText("Saved").first()).toBeVisible();
-  expect((await (await request.get("/api/accounts")).json()).lichess).toBe("some_lichess_name");
+  const saved = await (await request.get("/api/accounts")).json();
+  expect(saved.lichess).toBe("some_lichess_name");
+  expect(saved.rating).toBe(1650);
   await page.getByRole("button", { name: "Quick" }).click();
   await page.getByRole("button", { name: "Save" }).nth(1).click();
   await expect.poll(async () => (await (await request.get("/api/settings")).json()).nodes).toBe(20000);

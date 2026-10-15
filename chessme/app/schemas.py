@@ -105,6 +105,7 @@ class SettingsPatch(BaseModel):
 class Accounts(BaseModel):
     lichess: str | None = None
     chesscom: str | None = None
+    rating: int | None = Field(None, ge=400, le=3200, description="your rating, used when your games do not carry one")
 
 
 class ImportUser(BaseModel):
@@ -238,5 +239,6 @@ class Me(BaseModel):
     mainSpeed: str | None
     rating: int | None
     band: int | None
+    ratingSource: str | None
     stockfishLevel: int
     openings: dict[str, MeOpenings]

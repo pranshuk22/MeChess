@@ -30,7 +30,7 @@ export function HomePage() {
   const empty = stats.data && stats.data.games === 0 && !ws.isLoading && !ws.data?.checks.some((c) => c.id === "legacy");
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
-      <PageHeader title="Overview" sub={me?.name ? `Welcome back, ${me.name}.${me.rating ? ` You are rated ${me.rating} in ${me.mainSpeed}.` : ""} How you are playing, from your own analysed games.` : "How you are playing, from your own analysed games."} actions={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />
+      <PageHeader title="Overview" sub={me?.name ? `Welcome back, ${me.name}.${me.rating ? ` You are rated ${me.rating}${me.mainSpeed ? ` in ${me.mainSpeed}` : ""}.` : ""} How you are playing, from your own analysed games.` : "How you are playing, from your own analysed games."} actions={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />
       {empty ? (
         <Panel><EmptyState icon={Swords} title="Bring in your games" text="Import your games from Lichess, Chess.com or a PGN file. They are analysed on this computer and never leave it." action={<Button variant="primary" size="lg" onClick={() => setImportOpen(true)}><Download size={16} /> Import games</Button>} /></Panel>
       ) : (<>
@@ -190,7 +190,8 @@ function YouCard({ me }: { me: S.Me }) {
           {best.map(({ colour, o }) => <p key={"b" + colour}><Badge tone="good">your best</Badge> <span className="ml-1">As {colour}: <b>{o.name}</b>, {Math.round(o.score * 100)}% in {o.games} games</span></p>)}
           {weak.map(({ colour, o }) => <p key={"w" + colour}><Badge tone="warn">needs work</Badge> <span className="ml-1">As {colour}: <b>{o.name}</b>, {Math.round(o.score * 100)}% in {o.games} games</span></p>)}
         </div>}
-        <p className="text-[12.5px] text-muted">The explorer, the opening practice and the play page start from your level.</p>
+        {me.rating ? <p className="text-[12.5px] text-muted">The explorer, the opening practice and the play page start from your level.</p>
+          : <p className="text-[12.5px] text-muted">Your games carry no rating. <Link to="/settings" className="text-accent underline">Add your user name and rating in Settings</Link> and the explorer, the opening practice and the play page start from your level.</p>}
       </div>
     </Panel>
   );

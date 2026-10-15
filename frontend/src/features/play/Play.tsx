@@ -67,12 +67,12 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[12px] text-muted">Stockfish with its strength turned down. Level 1 blunders often; level 8 plays at full strength.{me?.rating ? ` Level ${me.stockfishLevel} is suggested for your rating (${me.rating} in ${me.mainSpeed}); the levels are a first guess, not a rating scale.` : ""}</p>
+              <p className="mt-2 text-[12px] text-muted">Stockfish with its strength turned down. Level 1 blunders often; level 8 plays at full strength.{me?.rating ? ` Level ${me.stockfishLevel} is suggested for your rating (${me.rating}${me.mainSpeed ? ` in ${me.mainSpeed}` : ""}); the levels are a first guess, not a rating scale.` : ""}</p>
             </div>
           ) : (
             <div><div className="mb-1.5 flex items-baseline justify-between text-[12.5px] font-medium"><span>Playing strength</span><span className="tnum font-display text-[15px]">about {elo}</span></div>
               <input type="range" min={opts?.mechess.min ?? 800} max={opts?.mechess.max ?? 2600} step={100} value={elo} onChange={(e) => setElo(Number(e.target.value))} aria-label="Playing strength" className="w-full accent-[var(--accent)]" />
-              <p className="mt-2 text-[12px] text-muted">MeChess picks sound candidate moves and chooses among them the way a player of this strength does, so it also makes human-like mistakes. The number is a rough guide.{me?.rating ? ` It starts at your own rating (${me.rating} in ${me.mainSpeed}).` : ""}</p>
+              <p className="mt-2 text-[12px] text-muted">MeChess picks sound candidate moves and chooses among them the way a player of this strength does, so it also makes human-like mistakes. The number is a rough guide.{me?.rating ? ` It starts at your own rating (${me.rating}${me.mainSpeed ? ` in ${me.mainSpeed}` : ""}).` : ""}</p>
             </div>
           )}
           <div><div className="mb-1.5 text-[12.5px] font-medium">You play</div>
