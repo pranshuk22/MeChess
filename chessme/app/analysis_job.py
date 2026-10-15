@@ -16,7 +16,7 @@ from .workspace import find_engine
 
 
 def unanalysed_ids(session, limit=None):
-    q = select(Game.id).where(Game.id.not_in(select(Analysis.game_id))).order_by(Game.played_at.desc().nulls_last(), Game.created_at.desc())
+    q = select(Game.id).where(Game.id.not_in(select(Analysis.game_id))).order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc())
     return list(session.scalars(q.limit(limit) if limit else q))
 
 

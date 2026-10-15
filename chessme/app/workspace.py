@@ -17,6 +17,19 @@ def find_engine(config: AppConfig, setting: str | None = None) -> str | None:
     return None
 
 
+_NAMES: dict[str, str | None] = {}
+
+
+def engine_label(path: str, stored: str | None = None) -> str | None:
+    """The engine's name for the workspace checklist. A path the player set was checked when they set it (the name is stored); a program found on the PATH or given on the
+    command line is asked once per run. Nothing is started by a plain GET after that."""
+    if stored:
+        return stored
+    if path not in _NAMES:
+        _NAMES[path] = engine_name(path)
+    return _NAMES[path]
+
+
 def engine_name(path: str) -> str | None:
     """The engine's own name line (for example "Stockfish 17"), or None when it does not answer as a UCI engine."""
     try:
@@ -50,7 +63,9 @@ def scan(config: AppConfig, session, engine_setting: str | None = None) -> dict:
     checks = []
     engine = find_engine(config, engine_setting)
     if engine:
-        checks.append({"id": "engine", "title": "Stockfish engine", "state": "ok", "detail": engine_name(engine) or "found", "action": None})
+        row = session.get(Setting, "app")
+        stored = (row.value or {}).get("_engine_name") if row and row.value and engine == str(Path(engine_setting or "").expanduser()) else None
+        checks.append({"id": "engine", "title": "Stockfish engine", "state": "ok", "detail": engine_label(engine, stored) or "found", "action": None})
     else:
         checks.append({"id": "engine", "title": "Stockfish engine", "state": "todo", "detail": "not found: install Stockfish or set its path in Settings", "action": "set-engine"})
     n_games, n_analysed = G.counts(session)

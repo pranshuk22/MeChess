@@ -806,11 +806,16 @@ def cmd_app(args):
 
     from .app.config import AppConfig
     from .app.main import create_app, static_dir
-    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir)
+    import os
+    import secrets
+    token = os.environ.get("MECHESS_TOKEN") or secrets.token_urlsafe(24)                    # the access key of this run (see docs/app.md)
+    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir, token=token)
+    url = f"http://127.0.0.1:{args.port}/?t={token}"
     if static_dir() is None:
         print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
     if not args.no_browser:
-        threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
+        threading.Timer(1.2, lambda: webbrowser.open(url)).start()
+    print(f"MeChess is at {url}\n(the part after ?t= is the access key of this run; the page keeps it in a cookie)")
     dev_hosts = [f"localhost:{p}" for p in range(5173, 5181)] if args.dev else []                    # the Vite dev server picks the next free port when 5173 is taken
     app = create_app(cfg, extra_hosts=dev_hosts, extra_origins=[f"http://{h}" for h in dev_hosts])
     if args.seed_samples or args.seed_stress:
@@ -830,7 +835,7 @@ def cmd_app(args):
                         print(f"{seed_stress(s, args.seed_stress)} plain games added")
                 yield
         app.router.lifespan_context = with_seed
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning", timeout_graceful_shutdown=2)         # open browser tabs must not keep the server alive
 
 
 def cmd_coach_reference_games(args):

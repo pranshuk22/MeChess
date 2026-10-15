@@ -7,7 +7,7 @@ config = context.config
 
 
 def run():
-    engine = create_engine(config.get_main_option("sqlalchemy.url"))
+    engine = create_engine(config.get_main_option("sqlalchemy.url").replace("%%", "%"))
     with engine.connect() as conn:
         context.configure(connection=conn, target_metadata=Base.metadata, render_as_batch=True)
         with context.begin_transaction():

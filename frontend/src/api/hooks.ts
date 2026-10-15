@@ -32,7 +32,7 @@ export function useGamesInfinite(filters: GameFilters) {
   });
 }
 
-export const useGame = (id: string | undefined) => useQuery({ queryKey: ["game", id], queryFn: () => api<GameDetail>(`/api/games/${encodeURIComponent(id!)}`), enabled: !!id });
+export const useGame = (id: string | undefined) => useQuery({ queryKey: ["game", id], queryFn: () => api<GameDetail>(`/api/games/${encodeURIComponent(id!)}`), enabled: !!id, retry: (n, e) => (e as { status?: number }).status !== 404 && n < 2 });
 
 function qs(o: Record<string, unknown>) {
   const p = new URLSearchParams();

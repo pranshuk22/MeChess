@@ -89,7 +89,9 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
   useEffect(() => {
     if (retryOn) return;
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).closest("input, textarea, select, [role=dialog], [role=switch]")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;                                  // Cmd/Ctrl+F (find), Alt+Left (back) and the like belong to the browser
+      const target = e.target as HTMLElement;
+      if (target.closest("input, textarea, select, [role=dialog], [role=switch]") || target.matches(".board[data-kbmode='1']")) return;     // a board reached with the keyboard uses the arrows itself
       if (e.key === "ArrowLeft") { if (variation.length) setVariation((v) => v.slice(0, -1)); else setPly((p) => Math.max(0, p - 1)); }
       else if (e.key === "ArrowRight") { if (!variation.length) setPly((p) => Math.min(n, p + 1)); }
       else if (e.key === "Home") { setVariation([]); setPly(0); }

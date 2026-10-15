@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { RouteError } from "@/components/RouteError";
 import { Shell } from "@/components/Shell";
 import { Planned } from "@/features/Planned";
 import { HomePage } from "@/features/home/Home";
@@ -17,6 +18,7 @@ const wait = (el: React.ReactNode) => <Suspense fallback={<div className="p-8 te
 
 const router = createBrowserRouter([{
   element: <Shell />,
+  errorElement: <RouteError />,
   children: [
     { path: "/", element: <HomePage /> },
     { path: "/library", element: wait(<LibraryPage />) },

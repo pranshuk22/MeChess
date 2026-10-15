@@ -66,7 +66,7 @@ def test_importing_from_lichess_and_chesscom_uses_the_fetchers_and_remembers_the
     calls = []
 
     def fake(platform):
-        def f(user, n):
+        def f(user, n, **kw):
             calls.append((platform, user, n))
             yield pgn(site=f"https://lichess.org/{platform[:1].upper() * 8}", white=user, black="opp")
         return f
@@ -82,7 +82,7 @@ def test_importing_from_lichess_and_chesscom_uses_the_fetchers_and_remembers_the
 
 
 def test_a_sync_stops_after_a_run_of_known_games(client):
-    def stream(user, n):
+    def stream(user, n, **kw):
         for i in range(100):
             yield pgn(site=f"https://lichess.org/{i:08d}", white=user)
     client.app.state.fetchers = {"lichess": stream, "chesscom": stream}
@@ -90,7 +90,7 @@ def test_a_sync_stops_after_a_run_of_known_games(client):
     assert "100 new games" in first["message"]
     seen = []
 
-    def longer(user, n):
+    def longer(user, n, **kw):
         for i in range(300):
             seen.append(i)
             yield pgn(site=f"https://lichess.org/{i:08d}", white=user)
@@ -100,7 +100,7 @@ def test_a_sync_stops_after_a_run_of_known_games(client):
 
 
 def test_a_failing_fetch_is_a_failed_job_with_the_reason(client):
-    def broken(user, n):
+    def broken(user, n, **kw):
         raise ValueError("Lichess has no user nobody")
         yield
     client.app.state.fetchers["lichess"] = broken

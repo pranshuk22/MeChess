@@ -110,6 +110,7 @@ class ImportUser(BaseModel):
     username: str
     max: int = Field(200, ge=1, le=20_000)
     only_new: bool = Field(True, description="stop when 30 games in a row are already in the library (the games come newest first)")
+    rated_only: bool = Field(True, description="rated games only (casual games are left out)")
 
 
 class ImportPgn(BaseModel):

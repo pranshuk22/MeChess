@@ -30,7 +30,7 @@ def compute(session: Session) -> dict:
     total = session.scalar(select(func.count()).select_from(Game)) or 0
     analysed = session.scalar(select(func.count()).select_from(Analysis)) or 0
     rows = session.execute(select(Game, Analysis).outerjoin(Analysis, Analysis.game_id == Game.id).where(Game.user_colour.in_(("white", "black")))
-                           .order_by(Game.played_at.desc().nulls_last(), Game.created_at.desc()).limit(400)).all()
+                           .order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(400)).all()
     results = {"win": 0, "draw": 0, "loss": 0}
     acc, mistakes, openings = [], [], defaultdict(lambda: [0, 0.0])
     for g, a in rows:                                                      # newest first

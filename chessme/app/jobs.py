@@ -13,7 +13,10 @@ from .models import Job
 
 
 def iso(d):
-    return d.astimezone(timezone.utc).isoformat() if d else None
+    """ISO time in UTC. SQLite keeps no zone: what it returns is naive UTC, which `astimezone` would wrongly read as local time."""
+    if not d:
+        return None
+    return (d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d.astimezone(timezone.utc)).isoformat()
 
 
 def to_out(j: Job) -> dict:
@@ -35,6 +38,11 @@ class JobContext:
 
     def check(self):
         if self._cancel.is_set():
+            raise Cancelled()
+
+    def sleep(self, seconds: float):
+        """Wait, but wake at once (and stop the job) when it is cancelled."""
+        if self._cancel.wait(seconds):
             raise Cancelled()
 
     def progress(self, fraction: float, message: str | None = None):
@@ -138,6 +146,6 @@ class JobManager:
             return to_out(j) if j else None
 
     def shutdown(self):
-        for ev in self._cancel.values():
+        for ev in list(self._cancel.values()):                                  # (a copy: a finishing job removes its entry)
             ev.set()
         self._pool.shutdown(wait=False, cancel_futures=True)

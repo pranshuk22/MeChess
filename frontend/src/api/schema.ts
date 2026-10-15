@@ -22,6 +22,12 @@ export interface AnalyseRequest {
   nodes?: number | null;
 }
 
+export interface Attempt {
+  uci: string;
+  tries: number;
+  hints: number;
+}
+
 export interface CacheBuild {
   min_count: number;
   limit: number;
@@ -120,6 +126,7 @@ export interface ImportUser {
   username: string;
   max?: number;
   only_new?: boolean;
+  rated_only?: boolean;
 }
 
 export interface JobOut {
@@ -151,6 +158,10 @@ export interface Move {
   acc: number | null;
   phase: string | null;
   lines: EngineLine[] | null;
+}
+
+export interface MoveBody {
+  uci: string;
 }
 
 export interface OpeningStat {
@@ -199,6 +210,12 @@ export interface SplitStat {
   name: string;
   games: number;
   score: number;
+}
+
+export interface StartBody {
+  colour: string;
+  opponent: string;
+  level: number;
 }
 
 export interface Stats {

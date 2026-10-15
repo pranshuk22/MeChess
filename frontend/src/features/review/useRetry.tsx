@@ -1,5 +1,5 @@
 import { Eye, Lightbulb, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Arrow } from "@/board/Arrows";
 import { Button } from "@/components/ui/Button";
 import { applyUci, fensFromUci, legalMap, uciToSan } from "@/lib/game";
@@ -26,6 +26,7 @@ export function useRetry(game: GameDetail, mistakes: { m: AnalysedMove; i: numbe
   const reset = () => { setFen(null); setLast(null); setStatus("find"); };
   const reveal = () => { const a = applyUci(start, cur.m.best); if (a) { setFen(a); setLast([cur.m.best.slice(0, 2), cur.m.best.slice(2, 4)]); } setStatus("revealed"); };
   const exit = () => { go(0); onExit(); };
+  useEffect(() => { if (!active) { setK(0); setStatus("find"); setHint(0); setTries(0); setFen(null); setLast(null); } }, [active]);      // leaving by any route starts the next retry from the beginning
   const onMove = (from: string, to: string, promotion?: string) => {
     const uci = from + to + (promotion ?? "");
     const after = applyUci(start, uci);

@@ -122,7 +122,7 @@ def profile(session: Session, limit=200, ref=None, nodes=None, multipv=None) -> 
     """The weakness profile from the player's most recent analysed games (see `coach.profile`), with the comparison against players of their rating when possible."""
     rows, games_meta, n = [], [], 0
     q = (select(Game, Analysis).join(Analysis, Analysis.game_id == Game.id).where(Game.user_colour.in_(("white", "black")))
-         .order_by(Game.played_at.desc().nulls_last(), Game.created_at.desc()).limit(limit))
+         .order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(limit))
     for g, a in session.execute(q):
         mine = PR.player_rows({"moves": analysis_moves(g, a)}, g.user_colour)
         rows += mine

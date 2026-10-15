@@ -23,6 +23,7 @@ class Game(Base):
     black_elo: Mapped[int | None] = mapped_column(Integer)
     result: Mapped[str] = mapped_column(String)                                # "1-0", "0-1", "1/2-1/2", "*"
     played_at: Mapped[str | None] = mapped_column(String, index=True)         # ISO date (or just the year)
+    played_time: Mapped[str | None] = mapped_column(String)                    # HH:MM:SS when the source gives it: orders the games of one day
     speed: Mapped[str | None] = mapped_column(String)
     opening: Mapped[str | None] = mapped_column(String)
     title: Mapped[str | None] = mapped_column(String)

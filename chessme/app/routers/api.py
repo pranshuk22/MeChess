@@ -25,7 +25,7 @@ def db(request: Request):
 
 def current_settings(s: Session) -> Settings:
     row = s.get(Setting, "app")
-    return Settings(**(row.value if row else {}))
+    return Settings(**({k: v for k, v in row.value.items() if not k.startswith("_")} if row and row.value else {}))
 
 
 # ---- games ---------------------------------------------------------------------------------------------------------------------------------------
@@ -119,7 +119,16 @@ def _import_user(request: Request, platform: str, body: ImportUser, s: Session):
     s.commit()
     title = f"Import {body.max:,} games from {'Lichess' if platform == 'lichess' else 'Chess.com'}"
     stop = 30 if body.only_new else None
-    job = app.state.jobs.submit(f"import-{platform}", title, lambda ctx: importers.import_stream(app.state.sessions, fetch(body.username, body.max), names, platform, ctx, total=body.max, stop_after_known=stop))
+    lock = app.state.site_locks[platform]
+
+    def run(ctx):
+        while not lock.acquire(timeout=0.5):                                  # one import at a time per site: Lichess and Chess.com ask for that
+            ctx.progress(0.0, "Waiting for the other import from this site to finish")
+        try:
+            return importers.import_stream(app.state.sessions, fetch(body.username, body.max, sleep=ctx.sleep, rated_only=body.rated_only), names, platform, ctx, total=body.max, stop_after_known=stop)
+        finally:
+            lock.release()
+    job = app.state.jobs.submit(f"import-{platform}", title, run)
     return app.state.jobs.get(job)
 
 
@@ -231,17 +240,22 @@ def patch_settings(patch: SettingsPatch, s: Session = Depends(db)):
         p = Path(path).expanduser()
         if not (p.is_file() and os.access(p, os.X_OK)):
             raise HTTPException(422, "that path is not an executable file")
+        name = workspace.engine_name(str(p))                                   # the one place a program is started to ask: here, when the player sets it
+        if name is None:
+            raise HTTPException(422, "that program did not answer as a chess engine (UCI)")
         changes["engine_path"] = str(p)
-    cur.update(changes)
+        changes["_engine_name"] = name
     row = s.get(Setting, "app")
+    if "engine_path" in changes and not changes["engine_path"]:
+        changes["_engine_name"] = None
+    cur.update(changes)
+    stored_name = changes.get("_engine_name", (row.value or {}).get("_engine_name") if row and row.value else None)
+    cur_to_store = {**{k: v for k, v in cur.items() if k != "_engine_name"}, "_engine_name": stored_name}
     if row is None:
-        s.add(Setting(key="app", value=cur))
+        s.add(Setting(key="app", value=cur_to_store))
     else:
-        row.value = cur
+        row.value = cur_to_store
     s.commit()
-    return Settings(**cur)
+    return Settings(**{k: v for k, v in cur.items() if k != "_engine_name"})
 
 
-@router.get("/health")
-def health():
-    return {"ok": True}

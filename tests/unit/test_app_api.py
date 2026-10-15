@@ -46,7 +46,7 @@ def seed(client, n=3):
 
 def test_the_database_is_created_and_migrated_on_start(client, cfg):
     assert cfg.db_path.exists()
-    assert client.get("/api/health").json() == {"ok": True}
+    assert client.get("/api/health").json() == {"ok": True, "auth": True}
     assert client.get("/api/games").json() == {"total": 0, "items": []}
 
 
@@ -96,9 +96,14 @@ def test_settings_defaults_patch_and_validation(client, tmp_path):
     assert client.patch("/api/settings", json={"nodes": 5}).status_code == 422                           # below the allowed range
     assert client.patch("/api/settings", json={"engine_path": str(tmp_path / "nope")}).status_code == 422
     fake = tmp_path / "engine"
-    fake.write_text("#!/bin/sh\n")
+    fake.write_text("#!/bin/sh\necho 'id name Fake Engine 1'\necho uciok\n")
     fake.chmod(0o755)
     assert client.patch("/api/settings", json={"engine_path": str(fake)}).json()["engine_path"] == str(fake)
+    notengine = tmp_path / "notengine"
+    notengine.write_text("#!/bin/sh\necho hello\n")
+    notengine.chmod(0o755)
+    assert client.patch("/api/settings", json={"engine_path": str(notengine)}).status_code == 422                 # an executable that is not a UCI engine is refused when it is set
+    assert next(c for c in client.get("/api/workspace").json()["checks"] if c["id"] == "engine")["detail"] == "Fake Engine 1"
     assert client.get("/api/settings").json()["nodes"] == 50_000                                         # earlier values survive
 
 

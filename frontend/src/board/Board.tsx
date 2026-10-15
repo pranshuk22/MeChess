@@ -5,6 +5,8 @@ import type { MoveClass } from "@/lib/types";
 import { useBoardTheme, usePieceSet } from "@/state/ui";
 import { Arrows, type Arrow } from "./Arrows";
 import { matchPieces, parsePieces, sqToView, viewToSq, type KeyedPiece, type Orientation } from "./geometry";
+
+const ROLE_NAME: Record<string, string> = { p: "pawn", n: "knight", b: "bishop", r: "rook", q: "queen", k: "king" };
 import type { PieceSet, Role } from "./pieces";
 import type { BoardTheme } from "./themes";
 
@@ -57,6 +59,11 @@ export const Board = memo(function Board(props: BoardProps) {
   const [promo, setPromo] = useState<{ from: string; to: string } | null>(null);
   const [shapes, setShapes] = useState<Shapes>(EMPTY);
   const [preview, setPreview] = useState<{ from: string; to: string } | null>(null);
+  const [kb, setKb] = useState<string | null>(null);                                  // the square the keyboard is on
+  const [focused, setFocused] = useState(false);
+  const [kbMode, setKbMode] = useState(false);                                         // focused with the keyboard (Tab), not by a click: only then do the arrows move over the squares
+  const pointerFocus = useRef(false);
+  const [announce, setAnnounce] = useState("");
   const dragEl = useRef<HTMLDivElement>(null);
   const rect = useRef<DOMRect | null>(null);                           // the board's rectangle, read once per gesture (reading it on every move forces a layout)
   const pointer = useRef({ x: 0, y: 0 });
@@ -101,6 +108,8 @@ export const Board = memo(function Board(props: BoardProps) {
   };
 
   const onPointerDown = (e: React.PointerEvent) => {
+    pointerFocus.current = true;
+    setKbMode(false);
     rect.current = root.current!.getBoundingClientRect();
     const sq = squareAt(e.clientX, e.clientY);
     if (!sq) return;
@@ -156,6 +165,28 @@ export const Board = memo(function Board(props: BoardProps) {
     else if (g.wasSelected && sq === g.from) setSelected(null);          // a second click on the selected piece deselects
   };
 
+  const interactive = !!legal && legal.size > 0;
+  const firstMovable = interactive ? [...legal!.keys()].sort()[0] : null;
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || !interactive) return;
+    if (!kbMode) return;                                                                // focus by a click or tap: the arrows keep stepping through the game
+    const cur = kb ?? selected ?? firstMovable;
+    if (!cur) return;
+    const [c, r] = sqToView(cur, orientation);
+    const go = (dc: number, dr: number) => { e.preventDefault(); setKb(viewToSq(Math.max(0, Math.min(7, c + dc)), Math.max(0, Math.min(7, r + dr)), orientation)); };
+    if (e.key === "ArrowLeft") go(-1, 0);
+    else if (e.key === "ArrowRight") go(1, 0);
+    else if (e.key === "ArrowUp") go(0, -1);
+    else if (e.key === "ArrowDown") go(0, 1);
+    else if (e.key === "Escape") { setSelected(null); setAnnounce("Selection cleared"); }
+    else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (selected && attempt(selected, cur, false)) { setAnnounce(`Moved to ${cur}`); return; }
+      const p = bySquare.get(cur);
+      if (p && canMove(p.colour)) { setSelected(cur); setAnnounce(`${ROLE_NAME[p.role]} on ${cur} selected, ${legal!.get(cur)?.length ?? 0} moves: ${(legal!.get(cur) ?? []).join(", ")}`); }
+      else { setSelected(null); setAnnounce(`${cur}: ${p ? ROLE_NAME[p.role] : "empty"}`); }
+    }
+  };
   const dests = selected ? legal?.get(selected) ?? [] : [];
   const view = (sq: string) => sqToView(sq, orientation);
   const pos = (sq: string) => { const [c, r] = view(sq); return { left: `${c * 12.5}%`, top: `${r * 12.5}%` }; };
@@ -163,7 +194,9 @@ export const Board = memo(function Board(props: BoardProps) {
   const badgePos = badge ? (() => { const [c, r] = view(badge.sq); return { left: `calc(${(c + 1) * 12.5}% - 2px)`, top: `calc(${r * 12.5}% + 2px)` }; })() : null;
 
   return (
-    <div ref={root} className="board" data-grain={theme.grain ? "1" : "0"} data-image={theme.image ? "1" : "0"} role="application" aria-label="Chess board" style={{ "--sq-light": theme.light, "--sq-dark": theme.dark, ...(theme.image ? { "--board-image": `url("${theme.image}")` } : {}) } as React.CSSProperties}
+    <div ref={root} className="board" tabIndex={interactive ? 0 : -1} data-kb={focused && kbMode ? kb ?? firstMovable ?? "" : ""} onKeyDown={onKeyDown}
+      onFocus={() => { setFocused(true); setKbMode(!pointerFocus.current); setKb((k) => k ?? selected ?? firstMovable); }} onBlur={() => { setFocused(false); setKbMode(false); pointerFocus.current = false; }} data-kbmode={kbMode ? "1" : "0"}
+      aria-label={interactive ? "Chess board. Arrow keys move over the squares, Enter picks up or puts down a piece, Escape clears." : "Chess board"} data-grain={theme.grain ? "1" : "0"} data-image={theme.image ? "1" : "0"} role="application" style={{ "--sq-light": theme.light, "--sq-dark": theme.dark, ...(theme.image ? { "--board-image": `url("${theme.image}")` } : {}) } as React.CSSProperties}
       onContextMenu={(e) => e.preventDefault()} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={finish} onPointerCancel={() => { gesture.current = null; setDrag(null); setHover(null); setPreview(null); }}>
       <div className="layer">
         {lastMove?.map((sq) => <div key={sq} className="sq move" style={pos(sq)} />)}
@@ -172,7 +205,9 @@ export const Board = memo(function Board(props: BoardProps) {
         {[...marks, ...shapes.marks].map((sq) => <div key={"m" + sq} className="sq mark" style={pos(sq)} />)}
         {dests.map((sq) => <div key={"d" + sq} className={"sq " + (bySquare.has(sq) ? "ring" : "dot")} style={pos(sq)} />)}
         {drag && hover && dests.includes(hover) && <div className="sq hover" style={pos(hover)} />}
+        {focused && kbMode && (kb ?? firstMovable) && <div className="sq kb" style={pos((kb ?? firstMovable)!)} />}
       </div>
+      <div className="sr-only" aria-live="polite">{announce}</div>
       {showCoords && <Coords orientation={orientation} />}
       <div className="layer">
         {pieces.map((p) => {

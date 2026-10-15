@@ -26,7 +26,7 @@ function Mark({ size = 28 }: { size?: number }) {
 
 export function Shell() {
   useJobEvents();
-  const health = useQuery({ queryKey: ["health"], queryFn: () => api("/api/health"), retry: false, refetchInterval: (q) => (q.state.status === "error" ? 3000 : 20000) });
+  const health = useQuery({ queryKey: ["health"], queryFn: () => api<{ ok: boolean; auth: boolean }>("/api/health"), retry: false, refetchInterval: (q) => (q.state.status === "error" ? 3000 : 20000) });
   const { mode, toggleMode } = useUi();
   const dark = resolveMode(mode) === "dark";
   const qc = useQueryClient();
@@ -69,6 +69,7 @@ export function Shell() {
               </div>
             ))}
           </div>
+          <div className="hidden max-md:contents">{link("/settings", "Settings", Settings)}</div>
           <div className="mt-3 space-y-0.5 border-t border-[var(--rail-line)] pt-3 max-md:hidden">
             {link("/activity", "Activity", Activity, { badge: running.length || undefined })}
             {link("/settings", "Settings", Settings)}
@@ -85,7 +86,7 @@ export function Shell() {
             {collapsed && <button onClick={toggle} aria-label="Expand the sidebar" className="mx-auto mt-1 flex h-8 w-8 items-center justify-center rounded-md text-[var(--rail-text)] hover:bg-[var(--rail-hover)] cursor-pointer"><PanelLeft size={16} /></button>}
           </div>
         </nav>
-        <main className="min-h-0 overflow-auto">{health.isError ? <ServerDown onRetry={() => health.refetch()} /> : <Outlet />}</main>
+        <main className="min-h-0 overflow-auto">{health.isError ? <ServerDown onRetry={() => health.refetch()} /> : health.data?.auth === false ? <ServerDown signedOut onRetry={() => health.refetch()} /> : <Outlet />}</main>
       </div>
       <ImportDialog />
     </TipProvider>

@@ -1,8 +1,11 @@
 """The app: API under /api, the built frontend for everything else, one SQLite file, local only."""
+import hmac
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+import threading
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 
 from ..coach import reference as REF
@@ -14,9 +17,24 @@ from .live import LiveManager
 from .play import PlayService
 from .quick import QuickEngine
 from .routers import api, coach, live, play, themes
-from .security import LocalOnly, allowed
+from .security import COOKIE, LocalOnly, SecurityHeaders, TokenAuth, allowed, key_ok
 
 HERE = Path(__file__).parent
+
+
+def _lock_folder(folder: Path):
+    """Hold a lock on the data folder while the app runs, so that a second app cannot mark the first one's jobs as interrupted. (No lock where `fcntl` is missing.)"""
+    try:
+        import fcntl
+    except ImportError:
+        return None
+    f = open(folder / ".lock", "w")
+    try:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        f.close()
+        raise RuntimeError(f"another MeChess is already using {folder}: close it first (or use another --data-dir)")
+    return f
 
 
 def static_dir() -> Path | None:
@@ -33,6 +51,7 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         config.data_dir.mkdir(parents=True, exist_ok=True)
+        lock = _lock_folder(config.data_dir)                                    # one app per data folder
         DB.migrate(config.db_url)
         engine = DB.make_engine(config.db_url)
         app.state.engine = engine
@@ -48,14 +67,31 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.live.close()
         app.state.jobs.shutdown()
         engine.dispose()
+        if lock is not None:
+            lock.close()
 
     app = FastAPI(title="MeChess", version="0.1.0", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
     app.state.config = config
+    app.state.site_locks = {"lichess": threading.Lock(), "chesscom": threading.Lock()}        # one import at a time per site
     app.state.fetchers = {"lichess": importers.lichess_games, "chesscom": importers.chesscom_games}      # replaced in tests
     app.state.engine_factory = lambda settings: None                                                        # tests pass a fake engine; None: start Stockfish
     hosts, origins = allowed(config.host, config.port, extra_hosts, extra_origins)
+    app.add_middleware(TokenAuth, token=config.token)
+    app.add_middleware(SecurityHeaders)
     app.add_middleware(LocalOnly, hosts=hosts, origins=origins)
     app.include_router(api.router)
+
+    @app.get("/api/health")
+    def health(request: Request):
+        return {"ok": True, "auth": key_ok({k.decode().lower(): v.decode() for k, v in request.scope["headers"]}, config.token)}
+
+    @app.post("/api/session", status_code=204)
+    def session(body: dict, response: Response):
+        if config.token is not None:
+            if not hmac.compare_digest(str(body.get("token", "")).encode(), config.token.encode()):
+                raise HTTPException(403, "wrong key")
+            response.set_cookie(COOKIE, config.token, httponly=True, samesite="strict", path="/", max_age=60 * 60 * 24 * 30)
+
     app.include_router(live.router)
     app.include_router(coach.router)
     app.include_router(play.router)

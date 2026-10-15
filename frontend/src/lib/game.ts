@@ -27,7 +27,7 @@ export function fensFromUci(uci: string[]): string[] {
   const chess = new Chess();
   const fens = [chess.fen()];
   for (const u of uci) {
-    chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] });
+    try { chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }); } catch { break; }      // a move that does not fit (a game from another start position) ends the list
     fens.push(chess.fen());
   }
   return fens;

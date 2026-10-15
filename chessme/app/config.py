@@ -12,6 +12,7 @@ class AppConfig:
     legacy_coach_dir: Path = field(default_factory=lambda: Path("~/.mechess-coach").expanduser())
     engine: str | None = None                                                   # path to Stockfish; None: look on the PATH
     port: int = 8765
+    token: str | None = None                                                    # the access key of this run (None: no key, for tests); see security.TokenAuth
     host: str = "127.0.0.1"
 
     def __post_init__(self):

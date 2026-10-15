@@ -33,16 +33,16 @@ def split_pgn(lines: Iterable[str]) -> Iterator[str]:
         yield "\n".join(buf).strip() + "\n"
 
 
-def lichess_games(user: str, max_games: int, timeout=60) -> Iterator[str]:
+def lichess_games(user: str, max_games: int, timeout=60, sleep=time.sleep, rated_only=True) -> Iterator[str]:
     """Newest first; streamed, so a stop (or a few thousand games) costs only what was read."""
     import requests
     if not valid_user(user):
         raise ValueError("that is not a Lichess user name")
     for attempt in range(3):
-        r = requests.get(f"https://lichess.org/api/games/user/{user}", params={"max": max_games, "opening": "true", "clocks": "true", "evals": "false", "rated": "true"},
+        r = requests.get(f"https://lichess.org/api/games/user/{user}", params={"max": max_games, "opening": "true", "clocks": "true", "evals": "false", **({"rated": "true"} if rated_only else {})},
                          headers={**UA, "Accept": "application/x-chess-pgn"}, stream=True, timeout=timeout)
         if r.status_code == 429:
-            time.sleep(65)                                                    # one request at a time per address: wait as asked
+            sleep(65)                                                         # one request at a time per address: wait as asked (the job's own sleep: a cancel ends it at once)
             continue
         if r.status_code == 404:
             raise ValueError(f"Lichess has no user {user}")
@@ -53,7 +53,7 @@ def lichess_games(user: str, max_games: int, timeout=60) -> Iterator[str]:
     raise RuntimeError("Lichess is busy: try again in a few minutes")
 
 
-def chesscom_games(user: str, max_games: int, timeout=30) -> Iterator[str]:
+def chesscom_games(user: str, max_games: int, timeout=30, sleep=time.sleep, rated_only=True) -> Iterator[str]:
     """Newest monthly archives first, standard chess only."""
     import requests
     if not valid_user(user):
@@ -65,11 +65,11 @@ def chesscom_games(user: str, max_games: int, timeout=30) -> Iterator[str]:
     r.raise_for_status()
     n = 0
     for url in reversed(r.json().get("archives", [])):
-        time.sleep(0.3)
+        sleep(0.3)
         a = requests.get(url, headers=UA, timeout=timeout)
         a.raise_for_status()
         for g in reversed(a.json().get("games", [])):
-            if g.get("pgn") and g.get("rules", "chess") == "chess":
+            if g.get("pgn") and g.get("rules", "chess") == "chess" and (g.get("rated", True) or not rated_only):
                 yield g["pgn"]
                 n += 1
                 if n >= max_games:
@@ -103,7 +103,7 @@ def store_pgn(session, pgn_text: str, players: Iterable[str] = (), source: str |
     if game is None or game.errors:
         return "skipped"
     h = dict(game.headers)
-    if h.get("Variant", "Standard") not in ("Standard", "From Position", "Chess"):
+    if h.get("Variant", "Standard") not in ("Standard", "Chess") or "FEN" in h:                # games from another start position are not supported (the review assumes the usual start)
         return "skipped"
     moves = [m.uci() for m in game.mainline_moves()]
     if not moves:
@@ -130,8 +130,8 @@ def import_stream(session_factory, texts: Iterable[str], players, source: str, c
             known += r == "known"
             skipped += r == "skipped"
             run = run + 1 if r == "known" else 0
-            if seen % 25 == 0:
-                s.commit()
+            s.commit()                                                          # (no write lock is held while the next game is awaited from the network)
+            if seen % 10 == 0:
                 ctx.progress(min(0.99, seen / total) if total else 0.0, f"{seen:,} games read")
             if stop_after_known and run >= stop_after_known:
                 break

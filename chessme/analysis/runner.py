@@ -135,7 +135,7 @@ def engine_search(engine, *, nodes=200000, multipv=2):
 
     def search(board):
         root = board.root()
-        res = engine.go(root.fen(), [m.uci() for m in board.move_stack], nodes=nodes)
+        res = engine.go(root.fen(), [m.uci() for m in board.move_stack], nodes=nodes, timeout=max(60, nodes / 100_000))     # a big node budget needs more than the default minute
         return res.lines or ([SimpleLine(res.bestmove, res.score if res.score_kind == "cp" else 0, res.pv)] if res.bestmove else [])
     return search
 

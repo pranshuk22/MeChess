@@ -27,6 +27,20 @@ def check_name(name: str):
         raise HTTPException(422, "use letters, digits, space, dash, underscore or dot in names")
 
 
+async def read_capped(request: Request) -> bytes:
+    """The request body, refused as soon as it is larger than the limit (not after it was all read into memory)."""
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_BYTES:
+        raise HTTPException(413, "the file is larger than 3 MB")
+    chunks, total = [], 0
+    async for chunk in request.stream():
+        total += len(chunk)
+        if total > MAX_BYTES:
+            raise HTTPException(413, "the file is larger than 3 MB")
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def check_content(ext: str, data: bytes):
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "the file is larger than 3 MB")
@@ -76,7 +90,7 @@ async def put_piece(name: str, file: str, request: Request):
     p = Path(file)
     if p.stem not in PIECES or p.suffix.lower() not in EXT:
         raise HTTPException(422, "piece files are named wK, wQ, wR, wB, wN, wP, bK, ... with .svg or .png")
-    data = await request.body()
+    data = await read_capped(request)
     check_content(p.suffix.lower(), data)
     folder = dirs(request)[0] / name
     folder.mkdir(parents=True, exist_ok=True)
@@ -92,7 +106,7 @@ async def put_board(file: str, request: Request):
     ext = Path(file).suffix.lower()
     if ext not in EXT:
         raise HTTPException(422, "board images are .svg, .png, .jpg or .webp")
-    data = await request.body()
+    data = await read_capped(request)
     check_content(ext, data)
     folder = dirs(request)[1]
     folder.mkdir(parents=True, exist_ok=True)

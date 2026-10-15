@@ -58,10 +58,13 @@ def store(session: Session, *, id, source, headers, user_colour, analysis=None, 
     h = headers or {}
     date = (h.get("UTCDate") or h.get("Date") or "").replace(".", "-")
     date = None if not date or "?" in date[:4] else date
+    if date and "?" in date:                                                   # 2024.??.?? : keep what is known
+        date = date.split("-?")[0].rstrip("-") if date[:4].isdigit() else None
+    clock = h.get("UTCTime") or h.get("EndTime") or h.get("StartTime") or h.get("Time")
     moves = uci_moves if uci_moves is not None else [m["uci"] for m in (analysis or {}).get("moves", [])]
     elo = lambda k: int(h[k]) if str(h.get(k, "")).isdigit() else None
     session.add(Game(id=id, source=source, white=h.get("White") or "White", black=h.get("Black") or "Black", white_elo=elo("WhiteElo"), black_elo=elo("BlackElo"),
-                     result=h.get("Result") or "*", played_at=date, speed=speed_of(h.get("TimeControl")), opening=h.get("Opening") or None, title=title,
+                     result=h.get("Result") or "*", played_at=date, played_time=clock if clock and len(clock) >= 5 and clock[2] == ":" else None, speed=speed_of(h.get("TimeControl")), opening=h.get("Opening") or None, title=title,
                      user_colour=user_colour, pgn=pgn or pgn_from_moves(moves, h), plies=len(moves)))
     session.flush()                                                            # the game row first: the analysis points at it
     if analysis and analysis.get("moves"):
@@ -91,10 +94,13 @@ def _mine(moves, user):
 
 
 def spark(moves, n=40):
+    """About `n` evenly spaced evaluation points over the whole game, always including the last one."""
     if not moves:
         return []
-    step = max(1, len(moves) // n)
-    return [m["cp"] for m in moves[::step]][: n + 1]
+    if len(moves) <= n + 1:
+        return [m["cp"] for m in moves]
+    idx = sorted({round(i * (len(moves) - 1) / n) for i in range(n + 1)})
+    return [moves[i]["cp"] for i in idx]
 
 
 def summary(game: Game, analysis: Analysis | None) -> dict:
@@ -115,8 +121,8 @@ def page(session: Session, *, q=None, colour=None, result=None, analysed=None, l
     """(total, [summary dicts]) newest first, with optional filters: text in players/opening/title, the player's colour, the player's result, analysed or not."""
     cond = []
     if q:
-        like = f"%{q.strip().lower()}%"
-        cond.append(or_(func.lower(Game.white).like(like), func.lower(Game.black).like(like), func.lower(func.coalesce(Game.opening, "")).like(like), func.lower(func.coalesce(Game.title, "")).like(like)))
+        like = "%" + q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        cond.append(or_(func.lower(Game.white).like(like, escape="\\"), func.lower(Game.black).like(like, escape="\\"), func.lower(func.coalesce(Game.opening, "")).like(like, escape="\\"), func.lower(func.coalesce(Game.title, "")).like(like, escape="\\")))
     if colour in ("white", "black"):
         cond.append(Game.user_colour == colour)
     if result in ("win", "loss", "draw"):
@@ -132,7 +138,7 @@ def page(session: Session, *, q=None, colour=None, result=None, analysed=None, l
         cond.append(Game.id.not_in(select(Analysis.game_id)))
     total = session.scalar(select(func.count()).select_from(Game).where(*cond)) or 0
     rows = session.execute(select(Game, Analysis).outerjoin(Analysis, Analysis.game_id == Game.id).where(*cond)
-                           .order_by(Game.played_at.desc().nulls_last(), Game.created_at.desc()).limit(limit).offset(offset)).all()
+                           .order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(limit).offset(offset)).all()
     return total, [summary(g, a) for g, a in rows]
 
 

@@ -24,7 +24,7 @@ def migrate(url: str):
     """Bring the database at `url` to the latest version (creating it when needed)."""
     cfg = Config()
     cfg.set_main_option("script_location", str(Path(__file__).parent / "migrations"))
-    cfg.set_main_option("sqlalchemy.url", url)
+    cfg.set_main_option("sqlalchemy.url", url.replace("%", "%%"))                  # (a folder name may contain a percent sign)
     command.upgrade(cfg, "head")
 
 
