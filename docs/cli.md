@@ -122,8 +122,10 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-games-fetch` | Refetch each cohort player's games with clocks and openings and compute the game-level features (resumable; `chessme control pause fetch2`) |
 | `style-games-report` | Reliability of the game-level features, the pre-fixed keep rule, identification of players (with the time-control-only baseline) and held-out factors |
 | `style-embed-train` | Train the contrastive player embedding on the game-level features (resumable, pausable); reports held-out identification, also among rating-matched players, and how much of the embedding is rating |
-| `coach` | Start the local coach (web page on 127.0.0.1): fetch or paste a game, go through its biggest mistakes, find better moves with hints, read why, play on; `--engine`, `--nodes`, `--port`, `--no-browser` ([details](coach.md)) |
-| `analyse PGN` | Analyse the games of a PGN file with Stockfish: every move classed (book, brilliant, great, best, excellent, good, inaccuracy, mistake, miss, blunder), accuracy by phase, opportunism / luck, conversion / resourcefulness, biggest mistakes; one file per game, so a stopped run resumes (`--player NAME` picks a side, `--nodes N` fixes the budget) |
+| `coach` | Start the local coach (web page on 127.0.0.1): fetch or paste a game, go through its biggest mistakes, find better moves with hints, read why, play on; `--engine`, `--nodes`, `--port`, `--no-browser`, `--reference` ([details](coach.md)) |
+| `coach-reference-games` | Pick games for the coach's reference rates: a quota per speed (blitz, rapid) and 200-point rating band from byte windows of a Lichess dump (or a PGN file); standard rated games between players within 200 points; only the headers of games that are not needed are parsed |
+| `coach-reference-build` | Reference rates from those games after `analyse` (same `--nodes` and `--multipv` as the coach): counts of moves, mistakes and blunders by speed, band, phase, situation and kind; `--reference` of `coach` reads the result |
+| `analyse PGN` | Analyse the games of a PGN file with Stockfish: every move classed (book, brilliant, great, best, excellent, good, inaccuracy, mistake, miss, blunder), accuracy by phase, opportunism / luck, conversion / resourcefulness, biggest mistakes; one file per game, so a stopped run resumes (`--player NAME` picks a side, `--nodes N` fixes the budget, `--multipv N` the number of lines) |
 
 ## Engine UCI options
 
