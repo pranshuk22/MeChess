@@ -1,3 +1,4 @@
+import { useMe } from "@/api/hooks";
 import { FlipVertical2, Flag, Loader2, RotateCcw, Swords, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -33,8 +34,12 @@ export function PlayPage() {
 function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
   const opts = useQuery({ queryKey: ["play-options"], queryFn: () => api<Options>("/api/play/options") }).data;
   const [kind, setKind] = useState<"stockfish" | "mechess">("stockfish");
-  const [level, setLevel] = useState(4);
-  const [elo, setElo] = useState(1500);
+  const me = useMe().data;
+  const [chosen, setChosen] = useState<{ level?: number; elo?: number }>({});
+  const level = chosen.level ?? me?.stockfishLevel ?? 4;                                      // matched to your rating until you pick
+  const eloMin = opts?.mechess.min ?? 800, eloMax = opts?.mechess.max ?? 2600;
+  const elo = chosen.elo ?? (me?.rating ? Math.min(eloMax, Math.max(eloMin, Math.round(me.rating / 100) * 100)) : 1500);
+  const setLevel = (l: number) => setChosen((c) => ({ ...c, level: l })), setElo = (e: number) => setChosen((c) => ({ ...c, elo: e }));
   const [colour, setColour] = useState("white");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -62,12 +67,12 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 text-[12px] text-muted">Stockfish with its strength turned down. Level 1 blunders often; level 8 plays at full strength.</p>
+              <p className="mt-2 text-[12px] text-muted">Stockfish with its strength turned down. Level 1 blunders often; level 8 plays at full strength.{me?.rating ? ` Level ${me.stockfishLevel} is suggested for your rating (${me.rating} in ${me.mainSpeed}); the levels are a first guess, not a rating scale.` : ""}</p>
             </div>
           ) : (
             <div><div className="mb-1.5 flex items-baseline justify-between text-[12.5px] font-medium"><span>Playing strength</span><span className="tnum font-display text-[15px]">about {elo}</span></div>
               <input type="range" min={opts?.mechess.min ?? 800} max={opts?.mechess.max ?? 2600} step={100} value={elo} onChange={(e) => setElo(Number(e.target.value))} aria-label="Playing strength" className="w-full accent-[var(--accent)]" />
-              <p className="mt-2 text-[12px] text-muted">MeChess picks sound candidate moves and chooses among them the way a player of this strength does, so it also makes human-like mistakes. The number is a rough guide.</p>
+              <p className="mt-2 text-[12px] text-muted">MeChess picks sound candidate moves and chooses among them the way a player of this strength does, so it also makes human-like mistakes. The number is a rough guide.{me?.rating ? ` It starts at your own rating (${me.rating} in ${me.mainSpeed}).` : ""}</p>
             </div>
           )}
           <div><div className="mb-1.5 text-[12.5px] font-medium">You play</div>

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from .. import analysis_job, cache_job, importers, legacy, workspace
 from ..models import Game, Setting
-from ..schemas import CacheBuild, CacheStats, Stats, Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
+from ..schemas import Me, CacheBuild, CacheStats, Stats, Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
 from ..services import games as G
 from ..services import cache as CA
 from ..services import stats as ST
@@ -52,6 +52,12 @@ def delete_game(game_id: str, s: Session = Depends(db)):
         raise HTTPException(404, "no such game")
     s.delete(g)
     s.commit()
+
+
+@router.get("/me", response_model=Me)
+def get_me(s: Session = Depends(db)):
+    """What the app knows about the player (their ratings, the speed they play, their openings): the pages use it for their defaults."""
+    return ST.me(s, accounts(s))
 
 
 @router.get("/stats", response_model=Stats)

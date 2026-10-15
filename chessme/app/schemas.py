@@ -207,3 +207,36 @@ class CacheBuild(BaseModel):
     limit: int = Field(300, ge=1, le=5000)
     include_theory: bool = Field(False, description="also the positions of named opening lines (needs the opening names folder)")
     nodes: int | None = Field(None, ge=1_000, le=50_000_000)
+
+
+class MeRating(BaseModel):
+    speed: str
+    rating: int
+    games: int
+    change: int | None
+    date: str
+
+
+class MeOpening(BaseModel):
+    name: str
+    games: int
+    score: float
+
+
+class MeOpenings(BaseModel):
+    top: list[MeOpening]
+    best: MeOpening | None
+    weakest: MeOpening | None
+
+
+class Me(BaseModel):
+    name: str | None
+    handles: dict[str, str]
+    games: int
+    since: str | None
+    ratings: list[MeRating]
+    mainSpeed: str | None
+    rating: int | None
+    band: int | None
+    stockfishLevel: int
+    openings: dict[str, MeOpenings]

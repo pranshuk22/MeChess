@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CircleAlert, Download, Minus, Sparkles, Swords } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAnalyse, useDrillStats, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
+import { useAnalyse, useDrillStats, useMe, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
 import { Board } from "@/board/Board";
 import { MiniEval } from "@/components/MiniEval";
 import { Calendar, QualityBar } from "@/components/charts";
@@ -25,12 +25,12 @@ function Delta({ now, before, invert = false, unit = "" }: { now: number | null;
 }
 
 export function HomePage() {
-  const stats = useStats(), ws = useWorkspace(), recent = useGamesPage({}, 7);
+  const stats = useStats(), ws = useWorkspace(), recent = useGamesPage({}, 7), me = useMe().data;
   const setImportOpen = useDialogs((s) => s.setImportOpen);
   const empty = stats.data && stats.data.games === 0 && !ws.isLoading && !ws.data?.checks.some((c) => c.id === "legacy");
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
-      <PageHeader title="Overview" sub="How you are playing, from your own analysed games." actions={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />
+      <PageHeader title="Overview" sub={me?.name ? `Welcome back, ${me.name}.${me.rating ? ` You are rated ${me.rating} in ${me.mainSpeed}.` : ""} How you are playing, from your own analysed games.` : "How you are playing, from your own analysed games."} actions={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} />
       {empty ? (
         <Panel><EmptyState icon={Swords} title="Bring in your games" text="Import your games from Lichess, Chess.com or a PGN file. They are analysed on this computer and never leave it." action={<Button variant="primary" size="lg" onClick={() => setImportOpen(true)}><Download size={16} /> Import games</Button>} /></Panel>
       ) : (<>
@@ -43,6 +43,7 @@ export function HomePage() {
             {stats.data && <Panel><PanelTitle sub="Games per day, last 26 weeks" right={<Link to="/insights" className="text-[12.5px] font-medium text-accent hover:underline">More insights</Link>}>Activity</PanelTitle><div className="px-5 pb-5"><Calendar days={stats.data.perDay} /></div></Panel>}
           </div>
           <div className="space-y-5">
+            {me && me.games > 0 && <YouCard me={me} />}
             <Workspace ws={ws.data} loading={ws.isLoading} />
             {stats.data && Object.keys(stats.data.classCounts).length > 0 && <Panel><PanelTitle sub="Your last 100 analysed games">Move quality</PanelTitle><div className="px-5 pb-5"><QualityBar counts={stats.data.classCounts} /></div></Panel>}
             <PracticeCard />
@@ -164,6 +165,33 @@ function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
           </li>
         ))}
       </ul>
+    </Panel>
+  );
+}
+
+function YouCard({ me }: { me: S.Me }) {
+  const rows = me.ratings.slice(0, 3);
+  const best = ["white", "black"].map((c) => ({ colour: c, o: me.openings[c]?.best })).filter((x) => x.o) as { colour: string; o: S.MeOpening }[];
+  const weak = ["white", "black"].map((c) => ({ colour: c, o: me.openings[c]?.weakest })).filter((x) => x.o && x.o.score < 0.5) as { colour: string; o: S.MeOpening }[];
+  return (
+    <Panel>
+      <PanelTitle sub={me.since ? `${me.games.toLocaleString()} games since ${formatDate(me.since)}` : undefined}>You</PanelTitle>
+      <div className="space-y-4 px-5 pb-5 pt-1">
+        {rows.length > 0 && <ul className="space-y-1.5" aria-label="Your ratings">
+          {rows.map((r) => (
+            <li key={r.speed} className="flex items-baseline gap-2 text-[13.5px]">
+              <span className="w-16 capitalize text-muted">{r.speed}</span><b className="tnum font-display text-[18px]">{r.rating}</b>
+              {r.change !== null && r.change !== 0 && <span className="tnum text-[12px] font-medium" style={{ color: r.change > 0 ? "var(--q-best)" : "var(--q-mistake)" }}>{r.change > 0 ? "+" : ""}{r.change} in 30 days</span>}
+              <span className="ml-auto text-[12px] text-faint">{r.games} games</span>
+            </li>
+          ))}
+        </ul>}
+        {(best.length > 0 || weak.length > 0) && <div className="space-y-1.5 text-[13px]">
+          {best.map(({ colour, o }) => <p key={"b" + colour}><Badge tone="good">your best</Badge> <span className="ml-1">As {colour}: <b>{o.name}</b>, {Math.round(o.score * 100)}% in {o.games} games</span></p>)}
+          {weak.map(({ colour, o }) => <p key={"w" + colour}><Badge tone="warn">needs work</Badge> <span className="ml-1">As {colour}: <b>{o.name}</b>, {Math.round(o.score * 100)}% in {o.games} games</span></p>)}
+        </div>}
+        <p className="text-[12.5px] text-muted">The explorer, the opening practice and the play page start from your level.</p>
+      </div>
     </Panel>
   );
 }

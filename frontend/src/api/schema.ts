@@ -161,6 +161,39 @@ export interface JobOut {
   finishedAt: string | null;
 }
 
+export interface Me {
+  name: string | null;
+  handles: Record<string, string>;
+  games: number;
+  since: string | null;
+  ratings: MeRating[];
+  mainSpeed: string | null;
+  rating: number | null;
+  band: number | null;
+  stockfishLevel: number;
+  openings: Record<string, MeOpenings>;
+}
+
+export interface MeOpening {
+  name: string;
+  games: number;
+  score: number;
+}
+
+export interface MeOpenings {
+  top: MeOpening[];
+  best: MeOpening | null;
+  weakest: MeOpening | null;
+}
+
+export interface MeRating {
+  speed: string;
+  rating: number;
+  games: number;
+  change: number | null;
+  date: string;
+}
+
 export interface MistakeStats {
   recent: number | null;
   previous: number | null;

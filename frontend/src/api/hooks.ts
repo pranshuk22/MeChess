@@ -7,6 +7,8 @@ export type Job = S.JobOut;
 export interface GameFilters { q?: string; colour?: string; result?: string; analysed?: boolean }
 const PAGE = 200;
 
+/** What the app knows about the player (ratings by speed, main speed, explorer band, openings): the defaults of the pages come from it. */
+export const useMe = () => useQuery({ queryKey: ["me"], queryFn: () => api<S.Me>("/api/me"), staleTime: 60_000 });
 export const useStats = () => useQuery({ queryKey: ["stats"], queryFn: () => api<S.Stats>("/api/stats") });
 export const useWorkspace = () => useQuery({ queryKey: ["workspace"], queryFn: () => api<S.Workspace>("/api/workspace") });
 export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: () => api<S.Settings>("/api/settings") });

@@ -1,3 +1,4 @@
+import { useMe } from "@/api/hooks";
 import { BookOpen, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -22,7 +23,9 @@ export function Openings() {
   const reps = useQuery({ queryKey: ["repertoires"], queryFn: () => api<Rep[]>("/api/coach/repertoires") }).data ?? [];
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ name: "", colour: "white", pgn: "" });
-  const [rating, setRating] = useState("1500");
+  const me = useMe().data;
+  const [pickedRating, setRating] = useState<string | null>(null);
+  const rating = pickedRating ?? String(me?.band ?? 1500);                   // the replies of players at your own level until you choose
   const [session, setSession] = useState<Session | null>(null);
   const [message, setMessage] = useState<{ tone: "info" | "bad" | "good"; text: string; fb?: Feedback } | null>(null);
   const [cov, setCov] = useState<{ id: string; c: Coverage } | null>(null);

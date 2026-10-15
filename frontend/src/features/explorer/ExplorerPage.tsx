@@ -1,3 +1,4 @@
+import { useMe } from "@/api/hooks";
 import { BookOpen, FlipVertical2, RotateCcw, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useExplorer } from "@/api/hooks";
@@ -14,7 +15,9 @@ import { applyUci, checkSquare, legalMap, START_FEN, uciToSan } from "@/lib/game
 export function ExplorerPage() {
   const [moves, setMoves] = useState<string[]>([]);
   const [flipped, setFlipped] = useState(false);
-  const [rating, setRating] = useState(1500);
+  const me = useMe().data;
+  const [picked, setPicked] = useState<number | null>(null);
+  const rating = picked ?? me?.band ?? 1500;                          // your own rating band until you choose another
   const fens = useMemo(() => { const out = [START_FEN]; for (const u of moves) { const n = applyUci(out.at(-1)!, u); if (!n) break; out.push(n); } return out; }, [moves]);
   const fen = fens.at(-1)!;
   const q = useExplorer(fen, true, rating);
@@ -25,7 +28,7 @@ export function ExplorerPage() {
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
       <PageHeader title="Opening explorer" sub={q.data?.opening ? `${q.data.opening.name} (${q.data.opening.eco})` : "What players of your rating play in any position."}
-        actions={<div className="w-40"><Select value={rating} onChange={(e) => setRating(Number(e.target.value))} aria-label="Rating">{[1000, 1200, 1400, 1500, 1600, 1800, 2000, 2200, 2400].map((r) => <option key={r} value={r}>around {r}</option>)}</Select></div>} />
+        actions={<div className="w-40"><Select value={rating} onChange={(e) => setPicked(Number(e.target.value))} aria-label="Rating">{[1000, 1200, 1400, 1500, 1600, 1800, 2000, 2200, 2400].map((r) => <option key={r} value={r}>around {r}{r === me?.band ? " (you)" : ""}</option>)}</Select></div>} />
       {q.data === null ? <Panel><EmptyState icon={BookOpen} title="The opening explorer is not built yet" text="It needs the explorer database built from the Lichess games (see docs/opening-explorer.md); the workspace checklist on the home page shows its state." /></Panel> : (
         <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6 max-lg:grid-cols-1">
           <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(100dvh - 240px))" }}>

@@ -96,3 +96,53 @@ def insights(session: Session, rows) -> dict:
         "colours": [{"name": c, "games": n, "score": p / n} for c, (n, p) in sorted(colours.items())],
         "speeds": [{"name": c, "games": n, "score": p / n} for c, (n, p) in sorted(speeds.items(), key=lambda kv: -kv[1][0])],
     }
+
+
+BANDS = (1000, 1200, 1400, 1500, 1600, 1800, 2000, 2200, 2400)              # the opening explorer's rating bands
+STOCKFISH_FOR = ((900, 1), (1100, 2), (1300, 3), (1600, 4), (1900, 5), (2100, 6), (2300, 7))
+
+
+def stockfish_level_for(rating: int | None) -> int:
+    """The play page's level that is about right for a rating (a first guess: the levels are not calibrated to ratings)."""
+    if not rating:
+        return 4
+    return next((lvl for top, lvl in STOCKFISH_FOR if rating < top), 8)
+
+
+def me(session: Session, accounts: dict) -> dict:
+    """What the app knows about the player, from their games (those with their side known): ratings by speed (the latest, and the change over the last 30 days), the
+    speed they play most, the explorer band of that rating, their openings by colour and the best and the weakest of them (at least `MIN_OPENING` games)."""
+    rows = list(session.scalars(select(Game).where(Game.user_colour.in_(("white", "black"))).order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(3000)))
+    by_speed: dict[str, list] = defaultdict(list)
+    opens: dict[str, dict[str, list]] = {"white": defaultdict(lambda: [0, 0.0]), "black": defaultdict(lambda: [0, 0.0])}
+    for g in rows:
+        elo = g.white_elo if g.user_colour == "white" else g.black_elo
+        if g.speed and elo and g.played_at and len(g.played_at) >= 10:
+            by_speed[g.speed].append((g.played_at[:10], elo))
+        o = _outcome(g)
+        if o and g.opening:
+            e = opens[g.user_colour][g.opening.split(":")[0]]
+            e[0] += 1
+            e[1] += {"win": 1.0, "draw": 0.5, "loss": 0.0}[o]
+    ratings = []
+    for speed, pts in by_speed.items():                                      # newest first
+        latest_day, latest = pts[0]
+        cutoff = (date.fromisoformat(latest_day) - timedelta(days=30)).isoformat()
+        old = [r for d, r in pts if d <= cutoff]
+        ratings.append({"speed": speed, "rating": latest, "games": len(pts), "change": latest - old[0] if old else None, "date": latest_day})
+    ratings.sort(key=lambda r: -r["games"])
+    main = ratings[0] if ratings else None
+    band = min(BANDS, key=lambda b: abs(b - main["rating"])) if main else None
+    out_open = {}
+    for colour, d in opens.items():
+        rows_ = [{"name": n, "games": c, "score": s / c} for n, (c, s) in d.items()]
+        rows_.sort(key=lambda r: -r["games"])
+        solid = [r for r in rows_ if r["games"] >= MIN_OPENING]
+        out_open[colour] = {"top": rows_[:4], "best": max(solid, key=lambda r: r["score"]) if solid else None, "weakest": min(solid, key=lambda r: r["score"]) if len(solid) > 1 else None}
+    first = min((g.played_at for g in rows if g.played_at), default=None)
+    return {"name": next((v for v in (accounts.get("lichess"), accounts.get("chesscom")) if v), None), "handles": {k: v for k, v in accounts.items() if v}, "games": len(rows), "since": first,
+            "ratings": ratings, "mainSpeed": main["speed"] if main else None, "rating": main["rating"] if main else None, "band": band, "stockfishLevel": stockfish_level_for(main["rating"] if main else None),
+            "openings": out_open}
+
+
+MIN_OPENING = 5

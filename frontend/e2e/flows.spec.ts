@@ -140,3 +140,20 @@ test("the explorer page, the books page and the bot page say what is missing ins
   await page.goto("/bot");
   await expect(page.getByText("The bot program is not installed")).toBeVisible();
 });
+
+test("the app knows the player: the home page shows their ratings and the pages start from their level", async ({ page, request }) => {
+  const me = await (await request.get("/api/me")).json();
+  expect(me.games).toBeGreaterThan(0);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "You", exact: true })).toBeVisible();
+  expect(me.rating).toBeTruthy();                                                              // the sample games carry ratings
+  {
+    await expect(page.getByLabel("Your ratings")).toContainText(String(me.rating));
+    await page.goto("/explorer");
+    await expect(page.getByLabel("Rating")).toHaveValue(String(me.band));                      // the explorer starts at your own band
+    await expect(page.getByRole("option", { name: new RegExp(`around ${me.band} \\(you\\)`) })).toHaveCount(1);
+    await page.goto("/play");
+    await expect(page.getByText(new RegExp(`Level ${me.stockfishLevel} is suggested for your rating`))).toBeVisible();
+    await expect(page.getByRole("button", { name: new RegExp(`LEVEL ${me.stockfishLevel}`) })).toHaveAttribute("aria-pressed", "true");
+  }
+});
