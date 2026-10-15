@@ -372,3 +372,22 @@ def test_confirm_command_evaluates_saved_adapters_on_a_new_judged_set(tmp_path, 
         run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={tmp_path / 'n.pt'}", "--limit", 30, "--seed", 9, "--out", tmp_path / "s2.npz")
         run(monkeypatch, "humanlike-confirm", "--testset", testset, "--scores", tmp_path / "s2.npz", "--judged", tmp_path / "j.npz", "--adapters-dir", tmp_path / "ad",
             "--train-testset", testset, "--train-scores", tmp_path / "s.npz", "--judged-train", tmp_path / "jt.npz", "--out", tmp_path / "c2.md")
+
+
+def test_diagnose_command_reports_blunder_types_and_calibration_with_and_without_adapters(tmp_path, monkeypatch, testset):
+    torch.manual_seed(1)
+    net.save_checkpoint(tmp_path / "n.pt", net.MeNet(TINY))
+    run(monkeypatch, "humanlike-score", "--testset", testset, "--scorer", f"ours={tmp_path / 'n.pt'}", "--out", tmp_path / "s.npz")
+    judge = ["--per-regime", 12, "--min-ply", 1, "--workers", 1, "--candidates", 8, "--nodes-child", 100, "--nodes-root", 100]
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", *judge, "--split", "test", "--out", tmp_path / "j.npz")
+    run(monkeypatch, "humanlike-judge", "--testset", testset, "--scores", tmp_path / "s.npz", *judge, "--split", "trainval", "--out", tmp_path / "jt.npz")
+    run(monkeypatch, "humanlike-diagnose", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--boot", 20, "--out", tmp_path / "d0.md")
+    plain = (tmp_path / "d0.md").read_text()
+    assert "## 1. Mix of blunder types" in plain and "## 2. Does the model know where humans blunder" in plain and "frozen model" in plain
+    assert "mate in 1" in plain and "walks into a capture" in plain and "Reliability, frozen model" in plain
+    run(monkeypatch, "humanlike-adapter", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--judged-train", tmp_path / "jt.npz",
+        "--lambdas", "0.1", "--epochs", 1, "--boot", 20, "--save-dir", tmp_path / "ad", "--out", tmp_path / "adapter.md")
+    run(monkeypatch, "humanlike-diagnose", "--testset", testset, "--scores", tmp_path / "s.npz", "--judged", tmp_path / "j.npz", "--adapters-dir", tmp_path / "ad",
+        "--lambdas", "0.1", "--boot", 20, "--out", tmp_path / "d1.md")
+    text = (tmp_path / "d1.md").read_text()
+    assert "likelihood adapter" in text and "behaviour-matched adapter (lambda=0.1)" in text and "auc diff vs" not in text.lower() or "AUC" in text

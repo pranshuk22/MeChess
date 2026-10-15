@@ -1990,6 +1990,24 @@ def _arena(args, AR, EL, GS, MD, P, pool, ref_pool, chess, json, hashlib, time):
     print(text)
 
 
+def _model_variants(scores, arr, meta, adapters_dir, lambdas):
+    """(base statistics, {name: (probabilities over the 16 stored slots, adapter meta)}): the frozen model and the saved adapters (likelihood adapter and the
+    behaviour-matched ones for the given weights), applied without refitting."""
+    from .humanlike import adapter as A
+    base = {k: scores[k] for k in ("p", "top1", "conf", "rank", "entropy", "sq_sum")}
+    outs = {"frozen model": ({**base, "probs": scores["topk_p"][:, :A.K]}, None)}
+    x, sl = (A.features(arr, scores), A.slots(scores)) if adapters_dir else (None, None)
+    adapters = {"likelihood adapter": "adapter_all_features_temperature_tail_slot_biases.pt"} if adapters_dir else {}
+    for lam in (lambdas.split(",") if adapters_dir and lambdas else []):
+        adapters[f"behaviour-matched adapter (lambda={float(lam):g})"] = f"behaviour_matched_adapter_lambda_{float(lam):g}.pt"
+    for name, fname in adapters.items():
+        net, mean, std, ameta = A.load_adapter(Path(adapters_dir) / fname)
+        if ameta.get("base_model") not in (None, meta["model"]):
+            raise SystemExit(f"{fname} was trained on {ameta.get('base_model')}, not {meta['model']}")
+        outs[name] = (A.apply(net, mean, std, x, sl), ameta)
+    return base, outs
+
+
 def cmd_humanlike_confirm(args):
     """The confirmation split: trained adapters (not refitted) and the frozen model on a NEW test set, judged by the engine. Nothing is tuned here."""
     import numpy as np
@@ -2026,17 +2044,7 @@ def cmd_humanlike_confirm(args):
     tarr = R.position_arrays(T.read_testset(args.train_testset, tscores["index"][trows]))
     tprep = E.prepare({"topk_p": tscores["topk_p"][trows][:, :A.K]}, tj)
     tail = E.tail_arrays(E.tail_stats(tprep, tscores["rank"][trows], M.clock_regime(tarr["clock"])), regime_j)
-    x, sl = A.features(arr, scores), A.slots(scores)
-    base = {k: scores[k] for k in ("p", "top1", "conf", "rank", "entropy", "sq_sum")}
-    outs = {"frozen model": ({**base, "probs": scores["topk_p"][:, :A.K]}, None)}
-    adapters = {"likelihood adapter": "adapter_all_features_temperature_tail_slot_biases.pt"}
-    for lam in args.lambdas.split(","):
-        adapters[f"behaviour-matched adapter (lambda={float(lam):g})"] = f"behaviour_matched_adapter_lambda_{float(lam):g}.pt"
-    for name, fname in adapters.items():
-        net, mean, std, ameta = A.load_adapter(Path(args.adapters_dir) / fname)
-        if ameta.get("base_model") not in (None, meta["model"]):
-            raise SystemExit(f"{fname} was trained on {ameta.get('base_model')}, not {meta['model']}")
-        outs[name] = (A.apply(net, mean, std, x, sl), ameta)
+    base, outs = _model_variants(scores, arr, meta, args.adapters_dir, args.lambdas)
     masks = R.masks(arr)
     jmasks = {"all judged positions": np.ones(len(jrows), dtype=bool), **{f"clock {r}": regime_j == r for r in ("30s+", "10-30s", "<10s")}}
     lines = [f"# Confirmation split: {meta['model']} on {Path(args.testset).name} ({len(arr['ply']):,} positions, {len(jrows):,} judged)", "",
@@ -2055,6 +2063,86 @@ def cmd_humanlike_confirm(args):
         summary.append(f"| {name} | {b('clock <10s')} | {b('clock 10-30s')} | {b('clock 30s+')} | {b('all judged positions')} | " + " | ".join(nll) + " |")
         details += [E.render(cmp_rows, title=f"### {name}"), ""]
     lines += ["## Summary", ""] + summary + ["", "## Error profile by clock regime", ""] + details
+    text = "\n".join(lines)
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(text, encoding="utf-8")
+    print(text)
+
+
+def _implied_blunder(prep, tail):
+    """The model's probability of a blunder per position, with the mass outside the judged candidates added back at the humans' blunder rate for such moves; where that
+    rate is unknown (a regime with too few positions) the probabilities over the judged candidates are renormalised instead."""
+    import numpy as np
+
+    from .humanlike import errors as E
+    name = "blunder (loss > 0.20)"
+    q = E.model_values(prep, 1.0, tail)[name]
+    return np.where(np.isnan(q), E.model_values(prep, 1.0, None)[name], q)
+
+
+def cmd_humanlike_diagnose(args):
+    """Two diagnostics on judged positions: the MIX of blunder types (humans against the model and the saved adapters) and whether the blunder probability the
+    model implies in each position is calibrated and informative (discrimination, Brier, slope). Nothing is fitted here."""
+    import numpy as np
+
+    from .humanlike import blunders as BL
+    from .humanlike import calibration as CA
+    from .humanlike import errors as E
+    from .humanlike import metrics as M
+    from .humanlike import report as R
+    from .humanlike import score as S
+    from .humanlike import testset as T
+    manifest = json.loads(Path(str(args.testset) + ".manifest.json").read_text())
+    scores, meta = S.load_scores(args.scores)
+    with np.load(args.judged, allow_pickle=False) as z:
+        jmeta, jrows = json.loads(str(z["meta"])), z["rows"]
+        judged = {k: z[k] for k in ("best_cp", "human_cp", "cand_cp")}
+    if meta["testset_sha256"] != manifest["sha256"] or jmeta["testset_sha256"] != manifest["sha256"] or jmeta["model"] != meta["model"]:
+        raise SystemExit("the scores or the judged file belong to another test set or model")
+    chosen = T.read_testset(args.testset, scores["index"][jrows])
+    if S.positions_hash(chosen) != jmeta["positions_sha"]:
+        raise SystemExit("the positions do not match the judged file")
+    arr = R.position_arrays(T.read_testset(args.testset, scores["index"])) if args.adapters_dir else None
+    arr_j = R.position_arrays(chosen)
+    regime = M.clock_regime(arr_j["clock"])
+    _, outs = _model_variants(scores, arr, meta, args.adapters_dir, args.lambdas)
+    masks = {"all judged positions": np.ones(len(jrows), dtype=bool), **{f"clock {r}": regime == r for r in ("30s+", "10-30s", "<10s")}}
+    rank = scores["rank"][jrows]
+    k = judged["cand_cp"].shape[1]
+    preps = {name: E.prepare({"topk_p": np.asarray(out["probs"])[jrows]}, judged) for name, (out, _) in outs.items()}
+    first = next(iter(preps.values()))
+    print(f"classifying the blunders of {len(jrows):,} positions", flush=True)
+    human_type, cand_type, _ = BL.type_arrays([p.fen for p in chosen], [p.played for p in chosen], scores["topk_move"][jrows][:, :k].tolist(), first["cand_loss"],
+                                              first["human_loss"])
+    tail_t = BL.tail_type_rates(human_type, rank, regime, k)
+    tail_b = E.tail_arrays(E.tail_stats(first, rank, regime), regime)
+    lines = [f"# Blunder types and per-position calibration: {meta['model']} on {Path(args.testset).name} ({len(jrows):,} judged positions)", "",
+             "Blunder = the move loses more than 0.20 expected points (Stockfish, the judging of `humanlike-judge`). Types are rules on the position and the move alone: "
+             "**mate in 1** (the opponent can mate next move), **ignores a threat** (the opponent could win two pawns or more by a capture before the move and still can), "
+             "**walks into a capture** (the move allows such a capture that was not there before), **deeper** (none of these: not visible at one move). Rates are per position, x100. "
+             "The model's mass outside the judged candidates is added back at the humans' rates for moves outside them (same clock regime). Intervals resample games.", ""]
+    lines += ["## 1. Mix of blunder types, humans against the model", ""]
+    for name, prep in preps.items():
+        model, human = BL.type_rates(prep, cand_type, human_type, regime, tail=tail_t)
+        rows = {label: BL.compare_types(model, human, arr_j, m, n_boot=args.boot) for label, m in masks.items() if m.sum() >= 5}
+        lines += [BL.render_types(rows, f"### {name}"), ""]
+    lines += ["## 2. Does the model know where humans blunder? Implied blunder probability against what the human did", "",
+              "Per position the model's implied probability of a blunder (its probability on moves losing more than 0.20) against whether the human blundered there. "
+              "**AUC** 0.5 = no information inside the subset; **skill vs base rate** > 0 = better than predicting the subset's blunder rate; **skill vs difficulty-only** = the same against "
+              "the base rate by number of good moves (within 0.02 of the best); **slope** = slope of the outcome on the logit of the implied probability (1 = calibrated spread). "
+              "One human move per position is a noisy outcome: compare models on the same positions rather than reading the absolute values.", ""]
+    y = (first["human_loss"] > BL.BLUNDER).astype(float)
+    rows = {}
+    for label, m in masks.items():
+        if (m & ~np.isnan(first["human_loss"])).sum() < 5:
+            continue
+        qs = {name: _implied_blunder(prep, tail_b) for name, prep in preps.items()}
+        rows[label] = CA.bootstrap(qs, y, arr_j["gid"], m & ~np.isnan(first["human_loss"]), n_boot=args.boot, difficulty=first["n_good"])
+    lines += [CA.render(rows), ""]
+    for label in rows:
+        name = next(iter(preps))
+        rel = CA.reliability(_implied_blunder(preps[name], tail_b)[masks[label]], y[masks[label]], np.ones(masks[label].sum()), bins=8)
+        lines += [f"Reliability, {name}, {label}: " + "; ".join(f"model {100 * a:.1f}% -> humans {100 * b:.1f}%" for a, b, _ in rel), ""]
     text = "\n".join(lines)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(text, encoding="utf-8")
@@ -2717,6 +2805,10 @@ def main():
     hk.add_argument("--adapters-dir", required=True, help="the --save-dir of humanlike-adapter"); hk.add_argument("--lambdas", default="0.1,0.5", help="behaviour weights whose adapters were saved")
     hk.add_argument("--train-testset", required=True); hk.add_argument("--train-scores", required=True); hk.add_argument("--judged-train", required=True, help="judged sample of the TRAINING games (for the tail stand-in)")
     hk.add_argument("--boot", type=int, default=500); hk.add_argument("--out", required=True); hk.set_defaults(func=cmd_humanlike_confirm)
+    hd = sub.add_parser("humanlike-diagnose", help="blunder types (humans against the model, by clock regime) and per-position calibration of the blunder probability the model implies, on judged positions")
+    hd.add_argument("--testset", required=True); hd.add_argument("--scores", required=True); hd.add_argument("--judged", required=True)
+    hd.add_argument("--adapters-dir", help="the --save-dir of humanlike-adapter: also diagnose the saved adapters (not refitted)"); hd.add_argument("--lambdas", default="0.1,0.5")
+    hd.add_argument("--boot", type=int, default=500); hd.add_argument("--out", required=True); hd.set_defaults(func=cmd_humanlike_diagnose)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
