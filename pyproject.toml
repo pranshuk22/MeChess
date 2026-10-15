@@ -18,7 +18,7 @@ include = ["chessme*"]          # every subpackage (analysis, books, ... include
 
 [tool.setuptools.package-data]
 "chessme.books" = ["sources.json"]
-"chessme.coach" = ["web/*"]
+"chessme.coach" = ["web/*", "reference_rates.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

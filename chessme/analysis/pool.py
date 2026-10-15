@@ -13,7 +13,7 @@ from . import runner as AR
 _STATE = {}
 
 
-def _start(engine, nodes, openings_dir):
+def _start(engine, nodes, openings_dir, multipv=2):
     from ..uci_client import UciEngine
     eng = UciEngine([engine], options={"Threads": 1, "Hash": 64}).start()
     book = None
@@ -22,7 +22,7 @@ def _start(engine, nodes, openings_dir):
         from ..book import theory as TH
         positions = TH.theory_positions(TH.load_lines(tsvs))
         book = lambda board, move: TH.is_theory(board, move, positions)
-    return {"engine": eng, "search": AR.engine_search(eng, nodes=nodes, multipv=2), "book": book, "nodes": nodes}
+    return {"engine": eng, "search": AR.engine_search(eng, nodes=nodes, multipv=multipv), "book": book, "nodes": nodes, "multipv": multipv}
 
 
 def _alive(st):
@@ -41,15 +41,16 @@ def _drop():
 
 
 def analyse_task(task):
-    """(key, plies analysed or None, error text or None). `task` = (key, pgn text, output path, engine, nodes, openings dir, player name)."""
-    key, text, path, engine, nodes, openings_dir, player = task
+    """(key, plies analysed or None, error text or None). `task` = (key, pgn text, output path, engine, nodes, openings dir, player name[, MultiPV, default 2])."""
+    key, text, path, engine, nodes, openings_dir, player, *rest = task
+    multipv = rest[0] if rest else 2
     try:
         st = _STATE.get("k")
-        if st is not None and (st["nodes"] != nodes or not _alive(st)):
+        if st is not None and (st["nodes"] != nodes or st["multipv"] != multipv or not _alive(st)):
             _drop()                                              # another budget, or the engine died (crash, timeout kill): start a new one
             st = None
         if st is None:
-            st = _STATE["k"] = _start(engine, nodes, openings_dir)
+            st = _STATE["k"] = _start(engine, nodes, openings_dir, multipv)
         st["engine"].new_game()                                  # a clean transposition table: the analysis of a game does not depend on the games before it
         game = chess.pgn.read_game(io.StringIO(text))
         res = AR.analyse_game(game, st["search"], book=st["book"])

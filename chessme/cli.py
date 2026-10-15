@@ -778,7 +778,11 @@ def cmd_coach(args):
         tablebase = chess.syzygy.open_tablebase(args.syzygy)
     elif args.syzygy:
         print(f"(no Syzygy folder at {args.syzygy}: endgame practice is off; see docs/coach.md)")
-    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data, explorer=explorer, tablebase=tablebase)
+    from .coach import reference as CR
+    reference = CR.load(args.reference)
+    if args.reference and reference is None:
+        print(f"(no reference rates at {args.reference}: the comparison with players of your rating is off; see docs/coach.md)")
+    app = CS.CoachApp(backend.search, drills=CD.DrillStore(data / "drills.json"), data_dir=data, explorer=explorer, tablebase=tablebase, reference=reference, nodes=args.nodes, multipv=backend.multipv)
     if not args.no_browser:
         import threading
         threading.Timer(1.0, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
@@ -786,6 +790,53 @@ def cmd_coach(args):
         CS.serve(app, port=args.port)
     finally:
         backend.close()
+
+
+def cmd_coach_reference_games(args):
+    """Pick the reference games: a quota per speed and rating band."""
+    from .coach import reference as CR
+    src = str(args.source)
+    picker = CR.Picker(args.per_band, min_plies=args.min_plies)
+    if src.startswith("http") or src.endswith(".zst"):
+        games = CR.iter_window_games(src, args.parts, [int(w) for w in args.windows.split(",")], wants=picker.wants)
+    else:
+        games = CR.reader(open(src, errors="replace"), picker.wants)
+    n = 0
+    with open(args.out, "w") as out:
+        for g in games:
+            if g.next() is None or not picker.take(g):
+                continue
+            print(g, file=out, end="\n\n")
+            n += 1
+            if n % 100 == 0:
+                print(f"{n} games picked", flush=True)
+            if picker.done:
+                break
+    print(f"{n} games written to {args.out}")
+    if picker.left:
+        print("quotas not filled (speed|band: games missing): " + ", ".join(f"{s}|{b}: {c}" for (s, b), c in sorted(picker.left.items())))
+
+
+def cmd_coach_reference_build(args):
+    """Reference counts from analysed games."""
+    import json as _json
+
+    import chess.pgn
+
+    from .analysis import runner as AR
+    from .coach import reference as CR
+    items, missing = [], 0
+    with open(args.pgn, errors="replace") as f:
+        while (g := chess.pgn.read_game(f)) is not None:
+            p = Path(args.analysis) / "games" / f"{AR.game_key(g)}.json"
+            if not p.exists():
+                missing += 1
+                continue
+            h = g.headers
+            items.append((CR.speed_of(h), {"white": int(h["WhiteElo"]), "black": int(h["BlackElo"])}, _json.loads(p.read_text())))
+    ref = CR.tally(items, nodes=args.nodes, multipv=args.multipv, source=args.source)
+    CR.save(ref, args.out)
+    print(f"{len(items)} analysed games ({missing} not analysed yet) -> {sum(c['moves'] for c in ref['cells'].values()):,} moves in {len(ref['cells'])} cells; {args.out}")
 
 
 def cmd_analyse(args):
@@ -822,7 +873,7 @@ def cmd_analyse(args):
         else:
             exp = _io.StringIO()
             print(g, file=exp, end="\n\n")
-            todo.append((key, exp.getvalue(), str(path), args.engine, args.nodes, args.openings_dir, args.player))
+            todo.append((key, exp.getvalue(), str(path), args.engine, args.nodes, args.openings_dir, args.player, args.multipv))
     stale = [p.name for p in (out / "games").glob("*.json") if re.fullmatch(r"\d{5}(-.*)?\.json", p.name)]
     if stale:
         log(f"WARNING: {len(stale)} files in {out / 'games'} are named by their position in the PGN (older versions, e.g. {stale[0]}); games are now "
@@ -2664,6 +2715,7 @@ def main():
     an = sub.add_parser("analyse", help="analyse the games of a PGN file with Stockfish: move classes, accuracy, report (resumable, pausable)")
     an.add_argument("pgn"); an.add_argument("--out", default="data/analysis"); an.add_argument("--player", help="report on this player's side (PGN name)")
     an.add_argument("--engine", default="stockfish"); an.add_argument("--nodes", type=int, default=200000, help="nodes per position (fixed, machine independent)")
+    an.add_argument("--multipv", type=int, default=2, help="lines searched (the same budget is shared by them: the coach uses 5, so reference rates for the coach use 5 too)")
     an.add_argument("--openings-dir", default="data/opening_names", help="Lichess opening names (from `theory-book --download`): moves in named theory are classed Book")
     an.add_argument("--workers", type=int, default=1, help="games analysed at the same time (one Stockfish each)")
     an.add_argument("--limit", type=int); an.add_argument("--job", default="analyse"); an.add_argument("--control-dir", default="data/control")
@@ -2842,7 +2894,16 @@ def main():
     co.add_argument("--data-dir", default="~/.mechess-coach", help="where your drills and reviewed games are kept (small JSON files on this computer; nothing is sent anywhere)")
     co.add_argument("--explorer", default="data/explorer/explorer.db", help="the opening explorer database (opening practice needs it)")
     co.add_argument("--syzygy", default="data/syzygy", help="folder with Syzygy tablebase files (endgame practice needs them; the 3 to 5 piece set is about 1 GB)")
+    co.add_argument("--reference", help="reference rates of players by rating (made by coach-reference-build; default: the file that ships with the coach, if any)")
     co.add_argument("--port", type=int, default=8765); co.add_argument("--no-browser", action="store_true"); co.set_defaults(func=cmd_coach)
+    cg = sub.add_parser("coach-reference-games", help="pick games for the coach's reference rates: a quota per speed and rating band from byte windows of a Lichess dump (or a PGN file), written as one PGN")
+    cg.add_argument("--source", required=True, help="URL or file of a Lichess .pgn.zst dump, or a plain .pgn file"); cg.add_argument("--parts", type=int, default=700)
+    cg.add_argument("--windows", default="14,43,72,101,130,159,188,217,246,275,304,333,362,391,420,449,478,507,536,565,594,623,652,681")
+    cg.add_argument("--per-band", type=int, default=300, help="games per speed (blitz, rapid) and 200-point band"); cg.add_argument("--min-plies", type=int, default=20); cg.add_argument("--out", required=True); cg.set_defaults(func=cmd_coach_reference_games)
+    cb = sub.add_parser("coach-reference-build", help="reference rates from games analysed with `analyse` (same node budget as the coach): counts of moves, mistakes and blunders by speed, rating band, phase, situation and kind")
+    cb.add_argument("--pgn", required=True, help="the PGN of coach-reference-games"); cb.add_argument("--analysis", required=True, help="the --out folder of `analyse` on that PGN")
+    cb.add_argument("--nodes", type=int, required=True, help="the --nodes `analyse` used (stored: rates from another budget are not comparable)"); cb.add_argument("--multipv", type=int, required=True, help="the --multipv `analyse` used (stored likewise)"); cb.add_argument("--source", default="")
+    cb.add_argument("--out", required=True); cb.set_defaults(func=cmd_coach_reference_build)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)

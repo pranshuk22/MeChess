@@ -21,6 +21,7 @@ from . import endgames as EG
 from . import exercises as X
 from . import openings as OP
 from . import profile as PR
+from . import reference as REF
 from . import session as S
 from . import steering as ST
 
@@ -38,6 +39,7 @@ class EngineBackend:
             raise RuntimeError("Stockfish not found: install it or pass --engine")
         self.engine = UciEngine([path], options={"Threads": 1, "Hash": 64}).start()
         self._search = AR.engine_search(self.engine, nodes=nodes, multipv=multipv)
+        self.nodes, self.multipv = nodes, multipv
         self._lock = threading.Lock()
 
     def search(self, board):
@@ -49,7 +51,7 @@ class EngineBackend:
 
 
 class CoachApp:
-    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None, explorer=None, tablebase=None):
+    def __init__(self, search, max_sessions=20, opponent_seed=0, drills=None, data_dir=None, explorer=None, tablebase=None, reference=None, nodes=None, multipv=None):
         self.search = search
         self.explorer = explorer                                       # path of the opening explorer database, or a callable rating -> replies(fen) (tests)
         self.openings = {}
@@ -58,6 +60,8 @@ class CoachApp:
         self.steered = {}
         self.data_dir = Path(data_dir) if data_dir else None          # reviewed games are kept here (one small JSON each) for the weakness profile
         self.drills = drills if drills is not None else D.DrillStore()          # in memory unless a path is given
+        self.reference = reference                                     # reference rates of players by rating (`reference.load()`), or None
+        self.nodes, self.multipv = nodes, multipv                      # the settings of this analysis, to tell whether the reference is comparable
         self.sessions = {}
         self.max_sessions = max_sessions
         self.seed = opponent_seed
@@ -203,18 +207,34 @@ class CoachApp:
         d = self.data_dir / "games"
         d.mkdir(parents=True, exist_ok=True)
         key = AR.game_key(game)                                             # the same game reviewed twice is stored once
-        (d / f"{key}.json").write_text(json.dumps({"color": color, "moves": analysis["moves"]}), encoding="utf-8")
+        h = game.headers
+        rec = {"color": color, "moves": analysis["moves"], "speed": REF.speed_of(h)}
+        try:
+            rec["rating"] = int(h["WhiteElo" if color == "white" else "BlackElo"])
+        except (KeyError, ValueError):
+            pass                                                            # a game without ratings is kept, only the comparison with other players skips it
+        (d / f"{key}.json").write_text(json.dumps(rec), encoding="utf-8")
 
     def profile(self):
-        """The weakness profile over all stored games, with plain sentences."""
-        rows, games = [], 0
+        """The weakness profile over all stored games, with plain sentences, and the comparison with players of the same rating when a reference exists."""
+        rows, games, rated = [], 0, {}
         for path in sorted((self.data_dir / "games").glob("*.json")) if self.data_dir and (self.data_dir / "games").exists() else []:
             rec = json.loads(path.read_text(encoding="utf-8"))
-            rows += PR.player_rows({"moves": rec["moves"]}, rec["color"])
+            mine = PR.player_rows({"moves": rec["moves"]}, rec["color"])
+            rows += mine
             games += 1
+            if rec.get("rating") and rec.get("speed"):
+                rated.setdefault(rec["speed"], []).append((rec["rating"], mine))
         prof = PR.profile(rows)
         prof["games"] = games
         prof["sentences"] = PR.sentences(prof)
+        if self.reference and rated:
+            speed = max(rated, key=lambda k: len(rated[k]))                 # the speed played most: ratings of different speeds are not the same scale
+            ratings = sorted(r for r, _ in rated[speed])
+            cmp = REF.compare([r for _, mine in rated[speed] for r in mine], ratings[len(ratings) // 2], speed, self.reference, nodes=self.nodes, multipv=self.multipv)
+            if cmp:
+                prof["reference"] = cmp
+                prof["sentences"] += REF.sentences(cmp)
         return prof
 
     def steer_suggest(self):

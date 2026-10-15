@@ -23,8 +23,8 @@ def help_text(cmd, cache={}):
     return cache[cmd]
 
 
-def test_there_are_fourteen_notebooks_numbered_in_order():
-    assert [n.name.split("_")[0] for n in NOTEBOOKS] == [str(i) for i in range(1, 15)]
+def test_there_are_fifteen_notebooks_numbered_in_order():
+    assert [n.name.split("_")[0] for n in NOTEBOOKS] == [str(i) for i in range(1, 16)]
 
 
 @pytest.mark.parametrize("nb", NOTEBOOKS, ids=lambda p: p.name)

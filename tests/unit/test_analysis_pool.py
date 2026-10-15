@@ -31,7 +31,7 @@ def install(monkeypatch, engines):
     """Make _start hand out the given fake engines in turn; the search just answers with a flat position."""
     started = []
 
-    def fake_start(engine, nodes, openings_dir):
+    def fake_start(engine, nodes, openings_dir, multipv=2):
         eng = engines[len(started)]
         started.append(eng)
 
@@ -45,14 +45,15 @@ def install(monkeypatch, engines):
             if not eng.proc.alive:
                 raise RuntimeError("engine is not running")
             return [L()]
-        return {"engine": eng, "search": search, "book": None, "nodes": nodes}
+        eng.multipv = multipv
+        return {"engine": eng, "search": search, "book": None, "nodes": nodes, "multipv": multipv}
     monkeypatch.setattr(P, "_start", fake_start)
     P._STATE.clear()
     return started
 
 
-def task(tmp_path, name):
-    return (name, PGN, str(tmp_path / f"{name}.json"), "stockfish", 1000, None, "A")
+def task(tmp_path, name, *multipv):
+    return (name, PGN, str(tmp_path / f"{name}.json"), "stockfish", 1000, None, "A", *multipv)
 
 
 def test_a_dead_engine_costs_one_game_not_the_rest_of_the_worker(tmp_path, monkeypatch):
@@ -73,4 +74,13 @@ def test_an_engine_that_died_between_games_is_replaced_before_use(tmp_path, monk
     assert P.analyse_task(task(tmp_path, "a"))[2] is None
     engines[0].proc.alive = False
     assert P.analyse_task(task(tmp_path, "b"))[2] is None and len(started) == 2
+    P.close()
+
+
+def test_another_number_of_lines_starts_a_new_engine_and_two_is_the_default(tmp_path, monkeypatch):
+    engines = [FakeEngine(), FakeEngine(), FakeEngine()]
+    started = install(monkeypatch, engines)
+    assert P.analyse_task(task(tmp_path, "a"))[2] is None and started[0].multipv == 2          # a seven-field task: two lines, as before
+    assert P.analyse_task(task(tmp_path, "b", 2))[2] is None and len(started) == 1             # the same setting: the engine is kept
+    assert P.analyse_task(task(tmp_path, "c", 5))[2] is None and len(started) == 2 and started[1].multipv == 5
     P.close()
