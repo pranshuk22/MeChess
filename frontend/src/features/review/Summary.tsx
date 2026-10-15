@@ -1,11 +1,11 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { ClassIcon } from "@/components/ClassIcon";
 import { CLASS_LABEL, CLASS_ORDER, type GameRecord } from "@/lib/types";
 
 const PHASES = [["opening", "Opening"], ["middlegame", "Middlegame"], ["endgame", "Endgame"]] as const;
 
 /** The game at a glance: accuracy of both players, how many moves of every kind each played, and accuracy by phase. */
-export function Summary({ game }: { game: GameRecord }) {
+export const Summary = memo(function Summary({ game }: { game: GameRecord }) {
   const { counts, phase } = useMemo(() => {
     const counts = CLASS_ORDER.map((cls) => ({ cls, white: 0, black: 0 }));
     const acc: Record<string, { white: number[]; black: number[] }> = {};
@@ -61,7 +61,7 @@ export function Summary({ game }: { game: GameRecord }) {
       )}
     </div>
   );
-}
+});
 
 function Bar({ value }: { value: number | null }) {
   return (

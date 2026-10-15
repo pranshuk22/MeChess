@@ -112,3 +112,36 @@ class AnalyseRequest(BaseModel):
     ids: list[str] | None = Field(None, description="games to analyse; none: every game that has no analysis yet")
     limit: int | None = Field(None, ge=1, description="with no ids: at most this many, newest first")
     nodes: int | None = Field(None, ge=1_000, le=50_000_000)
+
+
+class Results(BaseModel):
+    win: int
+    draw: int
+    loss: int
+
+
+class AccuracyStats(BaseModel):
+    recent: float | None
+    previous: float | None
+    series: list[float]
+
+
+class MistakeStats(BaseModel):
+    recent: float | None
+    previous: float | None
+
+
+class OpeningStat(BaseModel):
+    name: str
+    colour: str
+    games: int
+    score: float = Field(description="points per game from the player's side, 0 to 1")
+
+
+class Stats(BaseModel):
+    games: int
+    analysed: int
+    results: Results
+    accuracy: AccuracyStats
+    mistakesPerGame: MistakeStats
+    openings: list[OpeningStat]

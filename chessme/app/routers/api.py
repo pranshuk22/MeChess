@@ -10,8 +10,9 @@ from sqlalchemy.orm import Session
 
 from .. import analysis_job, importers, legacy, workspace
 from ..models import Game, Setting
-from ..schemas import Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
+from ..schemas import Stats, Accounts, AnalyseRequest, GameDetail, GamePage, ImportPgn, ImportUser, JobOut, Settings, SettingsPatch, Workspace
 from ..services import games as G
+from ..services import stats as ST
 
 router = APIRouter(prefix="/api")
 
@@ -50,6 +51,11 @@ def delete_game(game_id: str, s: Session = Depends(db)):
         raise HTTPException(404, "no such game")
     s.delete(g)
     s.commit()
+
+
+@router.get("/stats", response_model=Stats)
+def get_stats(s: Session = Depends(db)):
+    return ST.compute(s)
 
 
 # ---- workspace ------------------------------------------------------------------------------------------------------------------------------------

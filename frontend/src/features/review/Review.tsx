@@ -1,6 +1,6 @@
 import * as Tabs from "@radix-ui/react-tabs";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, FlipVertical2, Lightbulb, RotateCcw, Target } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useGame } from "@/api/games";
 import type { Arrow } from "@/board/Arrows";
@@ -36,6 +36,7 @@ function ReviewGame({ game }: { game: GameRecord }) {
   const [showBest, setShowBest] = useState(true);
   const [retryOn, setRetryOn] = useState(false);
   const fens = useMemo(() => fensFromUci(game.moves.map((m) => m.uci)), [game]);
+  const checks = useMemo(() => fens.map(checkSquare), [fens]);                      // once per game, not on every render
   const n = game.moves.length;
   const fen = fens[ply];
   const last = ply > 0 ? game.moves[ply - 1] : null;
@@ -74,7 +75,8 @@ function ReviewGame({ game }: { game: GameRecord }) {
   const white = { name: game.white, elo: game.whiteElo, acc: game.accuracy.white }, black = { name: game.black, elo: game.blackElo, acc: game.accuracy.black };
   const top = flipped ? white : black, bottom = flipped ? black : white;
   const you = userIsWhite ? white : black;
-  const goto = (p: number) => { setRetryOn(false); setPly(p); };
+  const goto = useCallback((p: number) => { setRetryOn(false); setPly(p); }, []);
+  const dPly = useDeferredValue(ply);                                                  // the side panels follow one beat later: the board moves first
   const boardFen = retry ? retry.fen : fen;
   const badge = !retry && last && !NO_BADGE.includes(last.cls) ? { sq: last.uci.slice(2, 4), cls: last.cls } : null;
 
@@ -85,7 +87,7 @@ function ReviewGame({ game }: { game: GameRecord }) {
         <div className="my-2 flex gap-2.5">
           <EvalBar cp={retry ? 0 : cp} orientation={orientation} />
           <div className="min-w-0 flex-1">
-            <Board fen={boardFen} orientation={orientation} lastMove={retry ? retry.lastMove : lastMove} checkSquare={checkSquare(boardFen)} arrows={retry ? retry.arrows : arrows}
+            <Board fen={boardFen} orientation={orientation} lastMove={retry ? retry.lastMove : lastMove} checkSquare={retry ? checkSquare(boardFen) : checks[ply]} arrows={retry ? retry.arrows : arrows}
               marks={retry?.marks} legal={retry?.legal} movable={retry ? (userIsWhite ? "w" : "b") : null} badge={badge} onMove={retry?.onMove} />
           </div>
         </div>
@@ -104,46 +106,58 @@ function ReviewGame({ game }: { game: GameRecord }) {
         </div>
       </section>
 
-      <aside className="flex min-h-0 flex-col gap-4">
-        <Panel className="p-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-[15px] font-semibold">{game.title ?? `${game.white} – ${game.black}`}</div>
-              <div className="truncate text-[12.5px] text-muted">{game.opening || "Opening unknown"} · {game.speed} · {game.year}</div>
-            </div>
-            <div className="text-right"><div className="tnum text-[22px] font-semibold leading-none">{you.acc.toFixed(0)}<span className="text-[13px] text-muted">%</span></div><div className="text-[11px] text-muted">your accuracy</div></div>
-          </div>
-          <div className="mt-3"><EvalGraph moves={game.moves} ply={ply} onSelect={goto} userIsWhite={userIsWhite} /></div>
-          <Button variant="primary" className="mt-3 w-full" disabled={mistakes.length === 0 || retryOn} onClick={() => setRetryOn(true)}><RotateCcw size={15} /> Retry your mistakes{mistakes.length ? ` (${mistakes.length})` : ""}</Button>
-        </Panel>
-
-        <Panel className="flex min-h-[220px] flex-1 flex-col overflow-hidden">
-          <Tabs.Root defaultValue="summary" className="flex min-h-0 flex-1 flex-col">
-            <Tabs.List className="flex gap-1 border-b border-border px-2 pt-2" aria-label="Review sections">
-              {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"]].map(([v, l]) => (
-                <Tabs.Trigger key={v} value={v} className="rounded-t-md px-3 py-2 text-[13px] font-medium text-muted data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
-              ))}
-            </Tabs.List>
-            <Tabs.Content value="summary" className={TAB_BODY}><Summary game={game} /></Tabs.Content>
-            <Tabs.Content value="moves" className={TAB_BODY + " p-2"}><MoveList moves={game.moves} ply={ply} onSelect={goto} /></Tabs.Content>
-            <Tabs.Content value="moments" className={TAB_BODY + " p-2"}>
-              {mistakes.length === 0 ? <p className="p-3 text-muted">No mistakes of yours in this game.</p> : mistakes.map(({ m, i }) => (
-                <button key={i} onClick={() => goto(i)} className="flex w-full items-center justify-between rounded px-3 py-2 text-left hover:bg-surface-2 cursor-pointer">
-                  <span className="flex items-center gap-2"><ClassIcon cls={m.cls} size={16} /><span className="tnum text-faint">{Math.floor(i / 2) + 1}.</span> <b>{m.san}</b></span>
-                  <span className="tnum text-[12.5px] text-muted">−{(m.loss * 100).toFixed(0)}% win chance</span>
-                </button>
-              ))}
-            </Tabs.Content>
-          </Tabs.Root>
-        </Panel>
-
-        <Panel className="min-h-[128px] p-4 text-[13.5px]">
-          {retry ? retry.panel : <MoveExplanation fen={ply > 0 ? fens[ply - 1] : fen} move={last} cp={cp} next={next ? uciToSan(fen, next.best) : null} />}
-        </Panel>
-      </aside>
+      <Sidebar game={game} ply={dPly} fens={fens} you={you} userIsWhite={userIsWhite} mistakes={mistakes} retryOn={retryOn} onRetry={() => setRetryOn(true)} goto={goto} retryPanel={retry ? retry.panel : null} />
     </div>
   );
 }
+
+type SideProps = { game: GameRecord; ply: number; fens: string[]; you: { acc: number }; userIsWhite: boolean; mistakes: { m: GameRecord["moves"][number]; i: number }[]; retryOn: boolean; onRetry: () => void; goto: (p: number) => void; retryPanel: React.ReactNode };
+
+const Sidebar = memo(function Sidebar({ game, ply, fens, you, userIsWhite, mistakes, retryOn, onRetry, goto, retryPanel }: SideProps) {
+  const fen = fens[ply];
+  const last = ply > 0 ? game.moves[ply - 1] : null;
+  const next = game.moves[ply];
+  const cp = ply === 0 ? 20 : game.moves[ply - 1].cp;
+  return (
+    <aside className="flex min-h-0 flex-col gap-4">
+      <Panel className="p-4">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-[15px] font-semibold">{game.title ?? `${game.white} – ${game.black}`}</div>
+            <div className="truncate text-[12.5px] text-muted">{game.opening || "Opening unknown"} · {game.speed} · {game.year}</div>
+          </div>
+          <div className="text-right"><div className="tnum text-[22px] font-semibold leading-none">{you.acc.toFixed(0)}<span className="text-[13px] text-muted">%</span></div><div className="text-[11px] text-muted">your accuracy</div></div>
+        </div>
+        <div className="mt-3"><EvalGraph moves={game.moves} ply={ply} onSelect={goto} userIsWhite={userIsWhite} /></div>
+        <Button variant="primary" className="mt-3 w-full" disabled={mistakes.length === 0 || retryOn} onClick={onRetry}><RotateCcw size={15} /> Retry your mistakes{mistakes.length ? ` (${mistakes.length})` : ""}</Button>
+      </Panel>
+
+      <Panel className="flex min-h-[220px] flex-1 flex-col overflow-hidden">
+        <Tabs.Root defaultValue="summary" className="flex min-h-0 flex-1 flex-col">
+          <Tabs.List className="flex gap-1 border-b border-border px-2 pt-2" aria-label="Review sections">
+            {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"]].map(([v, l]) => (
+              <Tabs.Trigger key={v} value={v} className="rounded-t-md px-3 py-2 text-[13px] font-medium text-muted data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
+            ))}
+          </Tabs.List>
+          <Tabs.Content value="summary" className={TAB_BODY}><Summary game={game} /></Tabs.Content>
+          <Tabs.Content value="moves" className={TAB_BODY + " p-2"}><MoveList moves={game.moves} ply={ply} onSelect={goto} /></Tabs.Content>
+          <Tabs.Content value="moments" className={TAB_BODY + " p-2"}>
+            {mistakes.length === 0 ? <p className="p-3 text-muted">No mistakes of yours in this game.</p> : mistakes.map(({ m, i }) => (
+              <button key={i} onClick={() => goto(i)} className="flex w-full items-center justify-between rounded px-3 py-2 text-left hover:bg-surface-2 cursor-pointer">
+                <span className="flex items-center gap-2"><ClassIcon cls={m.cls} size={16} /><span className="tnum text-faint">{Math.floor(i / 2) + 1}.</span> <b>{m.san}</b></span>
+                <span className="tnum text-[12.5px] text-muted">−{(m.loss * 100).toFixed(0)}% win chance</span>
+              </button>
+            ))}
+          </Tabs.Content>
+        </Tabs.Root>
+      </Panel>
+
+      <Panel className="min-h-[128px] p-4 text-[13.5px]">
+        {retryPanel ?? <MoveExplanation fen={ply > 0 ? fens[ply - 1] : fen} move={last} cp={cp} next={next ? uciToSan(fen, next.best) : null} />}
+      </Panel>
+    </aside>
+  );
+});
 
 function PlayerStrip({ name, elo, acc }: { name: string; elo: number | null; acc: number }) {
   return (

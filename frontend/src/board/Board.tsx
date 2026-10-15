@@ -173,19 +173,7 @@ export const Board = memo(function Board(props: BoardProps) {
         {dests.map((sq) => <div key={"d" + sq} className={"sq " + (bySquare.has(sq) ? "ring" : "dot")} style={pos(sq)} />)}
         {drag && hover && dests.includes(hover) && <div className="sq hover" style={pos(hover)} />}
       </div>
-      {showCoords && (
-        <div className="layer" aria-hidden>
-          {Array.from({ length: 8 }, (_, i) => {
-            const rank = viewToSq(0, i, orientation)[1], file = viewToSq(i, 7, orientation)[0];
-            return (
-              <span key={i}>
-                <span className={"coord " + (i % 2 === 0 ? "on-light" : "on-dark")} style={{ left: 4, top: `calc(${i * 12.5}% + 3px)` }}>{rank}</span>
-                <span className={"coord " + ((i + 7) % 2 === 0 ? "on-light" : "on-dark")} style={{ right: `calc(${(7 - i) * 12.5}% + 4px)`, bottom: 3 }}>{file}</span>
-              </span>
-            );
-          })}
-        </div>
-      )}
+      {showCoords && <Coords orientation={orientation} />}
       <div className="layer">
         {pieces.map((p) => {
           const [c, r] = view(p.sq);
@@ -197,6 +185,23 @@ export const Board = memo(function Board(props: BoardProps) {
       {badge && badgePos && <div className="badge-pos" style={{ position: "absolute", zIndex: 6, transform: "translate(-100%, 0)", pointerEvents: "none", ...badgePos }}><ClassIcon cls={badge.cls} size={24} style={{ boxShadow: "0 0 0 1.5px rgba(255,255,255,.95)" }} /></div>}
       {drag && <div ref={dragEl} className="piece drag" style={{ backgroundImage: `url("${pieceSet.url(drag)}")` }} />}
       {promo && <PromotionPicker colour={turn} sq={promo.to} orientation={orientation} pieceSet={pieceSet} onPick={(role) => { const m = promo; setPromo(null); onMove?.(m.from, m.to, role); }} />}
+    </div>
+  );
+});
+
+/** the rank and file labels: drawn once per orientation, not on every move */
+const Coords = memo(function Coords({ orientation }: { orientation: Orientation }) {
+  return (
+    <div className="layer" aria-hidden>
+      {Array.from({ length: 8 }, (_, i) => {
+        const rank = viewToSq(0, i, orientation)[1], file = viewToSq(i, 7, orientation)[0];
+        return (
+          <span key={i}>
+            <span className={"coord " + (i % 2 === 0 ? "on-light" : "on-dark")} style={{ left: 4, top: `calc(${i * 12.5}% + 3px)` }}>{rank}</span>
+            <span className={"coord " + ((i + 7) % 2 === 0 ? "on-light" : "on-dark")} style={{ right: `calc(${(7 - i) * 12.5}% + 4px)`, bottom: 3 }}>{file}</span>
+          </span>
+        );
+      })}
     </div>
   );
 });

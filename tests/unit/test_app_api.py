@@ -215,3 +215,26 @@ def test_the_openapi_schema_describes_the_contract(client):
     spec = client.get("/api/openapi.json").json()
     assert {"/api/games", "/api/games/{game_id}", "/api/workspace", "/api/jobs", "/api/settings", "/api/events"} <= set(spec["paths"])
     assert {"GameSummary", "GameDetail", "Workspace", "JobOut", "Settings"} <= set(spec["components"]["schemas"])
+
+
+def test_stats_summarise_the_players_own_games(client):
+    s = client.app.state.sessions()
+    for i, (res, colour, opening) in enumerate([("1-0", "white", "Italian Game: Giuoco Piano"), ("0-1", "white", "Italian Game"), ("1/2-1/2", "black", "Sicilian Defense"), ("0-1", "black", "Sicilian Defense: Najdorf")]):
+        G.store(s, id=f"s:{i}", source="test", headers={"White": "a", "Black": "b", "Result": res, "Date": f"2026.0{i + 1}.01", "Opening": opening}, user_colour=colour, analysis={"moves": game_moves()}, nodes=1, multipv=1)
+    G.store(s, id="s:x", source="test", headers={"White": "a", "Black": "b", "Result": "1-0"}, user_colour=None, uci_moves=["e2e4"])
+    s.commit()
+    s.close()
+    st = client.get("/api/stats").json()
+    assert st["games"] == 5 and st["analysed"] == 4 and st["results"] == {"win": 2, "draw": 1, "loss": 1}
+    assert st["accuracy"]["recent"] == 90.0 and st["accuracy"]["previous"] is None and len(st["accuracy"]["series"]) == 4
+    assert st["mistakesPerGame"]["recent"] == 0.5                                                      # one mistake by white in two games with white... black has none
+    assert {o["name"]: o["games"] for o in st["openings"]} == {"Italian Game": 2, "Sicilian Defense": 2}
+    assert [o for o in st["openings"] if o["name"] == "Italian Game"][0]["score"] == 0.5
+
+
+def test_the_generated_typescript_types_are_up_to_date():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools"))
+    import gen_ts_types
+    assert (Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "schema.ts").read_text() == gen_ts_types.build(), "run: PYTHONPATH=. python tools/gen_ts_types.py frontend/src/api/schema.ts"

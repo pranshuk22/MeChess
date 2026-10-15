@@ -99,7 +99,7 @@ main { scrollbar-gutter: stable; }                                      /* the p
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
 
 /* ---- board: colours come from the chosen board theme (inline variables on .board) ---------------------------------------------------------------------- */
-.board { position: relative; width: 100%; aspect-ratio: 1; user-select: none; touch-action: none; border-radius: 6px; overflow: hidden; cursor: default; contain: layout paint;
+.board { position: relative; width: 100%; aspect-ratio: 1; user-select: none; touch-action: none; border-radius: 4px; cursor: default; contain: layout; isolation: isolate;
   --sq-light: #dbe6ee; --sq-dark: #8aa3b8;
   background-color: var(--sq-light);
   background-image: conic-gradient(var(--sq-dark) 25%, transparent 0 50%, var(--sq-dark) 0 75%, transparent 0);
@@ -128,7 +128,7 @@ main { scrollbar-gutter: stable; }                                      /* the p
 
 /* evaluation bar: a dark track and a white fill, outlined so it reads on any page colour */
 .evalbar { position: relative; width: 18px; border-radius: 5px; overflow: hidden; background: #2b3139; box-shadow: 0 0 0 1px var(--border-strong); }
-.evalbar > div { position: absolute; left: 0; right: 0; bottom: 0; background: #ffffff; transition: height 220ms ease; }
+.evalbar > div { position: absolute; left: 0; right: 0; top: 0; bottom: 0; background: #ffffff; transition: transform 220ms ease; will-change: transform; }
 .evalbar::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(128, 128, 128, 0.7); }
 :root { --arrow-best: var(--q-best); --arrow-played: var(--q-mistake); --arrow-user: #2f86b8; }
 .coord.on-light { color: color-mix(in srgb, var(--sq-dark) 78%, #000); }

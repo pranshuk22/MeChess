@@ -1,11 +1,11 @@
 import clsx from "clsx";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { ClassIcon } from "@/components/ClassIcon";
 import type { AnalysedMove, MoveClass } from "@/lib/types";
 
 const QUIET: MoveClass[] = ["book", "good", "excellent"];            // not flagged in the list: only the moves worth a look carry an icon
 
-export function MoveList({ moves, ply, onSelect }: { moves: AnalysedMove[]; ply: number; onSelect: (ply: number) => void }) {
+export const MoveList = memo(function MoveList({ moves, ply, onSelect }: { moves: AnalysedMove[]; ply: number; onSelect: (ply: number) => void }) {
   const cur = useRef<HTMLButtonElement>(null);
   useEffect(() => { cur.current?.scrollIntoView({ block: "nearest" }); }, [ply]);
   const rows = Math.ceil(moves.length / 2);
@@ -32,4 +32,4 @@ export function MoveList({ moves, ply, onSelect }: { moves: AnalysedMove[]; ply:
       ))}
     </div>
   );
-}
+});

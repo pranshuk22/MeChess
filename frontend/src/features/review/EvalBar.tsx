@@ -7,7 +7,7 @@ export function EvalBar({ cp, orientation }: { cp: number; orientation: "white" 
   return (
     <div className="flex w-[18px] flex-col items-center gap-1.5 self-stretch">
       <div className="evalbar w-full flex-1" role="img" aria-label={`Evaluation ${formatEval(cp)}`}>
-        <div style={{ height: `${white}%`, ...(flipped ? { top: 0, bottom: "auto" } : {}) }} />
+        <div style={{ transform: `scaleY(${white / 100})`, transformOrigin: flipped ? "top" : "bottom", ...(flipped ? { top: 0, bottom: "auto" } : {}) }} />
       </div>
       <span className="tnum -mx-2 text-[11px] font-semibold text-text">{formatEval(cp)}</span>
     </div>
