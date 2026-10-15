@@ -792,6 +792,23 @@ def cmd_coach(args):
         backend.close()
 
 
+def cmd_app(args):
+    """Start the MeChess web app on this computer: the API, the built frontend and the player's SQLite database."""
+    import threading
+    import webbrowser
+
+    import uvicorn
+
+    from .app.config import AppConfig
+    from .app.main import create_app, static_dir
+    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port)
+    if static_dir() is None:
+        print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
+    if not args.no_browser:
+        threading.Timer(1.2, lambda: webbrowser.open(f"http://127.0.0.1:{args.port}")).start()
+    uvicorn.run(create_app(cfg, extra_hosts=["localhost:5173"], extra_origins=["http://localhost:5173"] if args.dev else ()), host="127.0.0.1", port=args.port, log_level="warning")
+
+
 def cmd_coach_reference_games(args):
     """Pick the reference games: a quota per speed and rating band."""
     from .coach import reference as CR
@@ -2904,6 +2921,10 @@ def main():
     cb.add_argument("--pgn", required=True, help="the PGN of coach-reference-games"); cb.add_argument("--analysis", required=True, help="the --out folder of `analyse` on that PGN")
     cb.add_argument("--nodes", type=int, required=True, help="the --nodes `analyse` used (stored: rates from another budget are not comparable)"); cb.add_argument("--multipv", type=int, required=True, help="the --multipv `analyse` used (stored likewise)"); cb.add_argument("--source", default="")
     cb.add_argument("--out", required=True); cb.set_defaults(func=cmd_coach_reference_build)
+    ap_ = sub.add_parser("app", help="start the MeChess web app: your games, review, coach and play in the browser (local only; needs the built frontend in frontend/dist)")
+    ap_.add_argument("--data-dir", default="~/.mechess", help="where the app keeps its database (one SQLite file) and your files"); ap_.add_argument("--research-dir", default=str(config.ROOT / "data"), help="where the command-line tools keep explorer, tablebases, models and older analyses (found automatically)")
+    ap_.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); ap_.add_argument("--port", type=int, default=8765); ap_.add_argument("--no-browser", action="store_true")
+    ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)"); ap_.set_defaults(func=cmd_app)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
