@@ -15,7 +15,7 @@ export interface GuidedView { fen: string; color: "white" | "black"; over: boole
 export function GuidedBoard({ view, busy, onMove }: { view: GuidedView; busy: boolean; onMove: (from: string, to: string, promo?: string) => void }) {
   const legal = useMemo(() => (view.over || busy ? undefined : legalFromUci(view.legal)), [view.over, busy, view.legal]);
   return (
-    <div className="mx-auto w-full overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]" style={{ maxWidth: "min(100%, calc(100dvh - var(--topbar) - 200px))" }}>
+    <div className="mx-auto w-full overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]" style={{ maxWidth: "min(100%, calc((100dvh - var(--topbar) - 200px) * var(--board-scale, 1)))" }}>
       <Board fen={view.fen} orientation={view.color} legal={legal} movable={view.color === "white" ? "w" : "b"} checkSquare={checkSquare(view.fen)} onMove={onMove} />
     </div>
   );

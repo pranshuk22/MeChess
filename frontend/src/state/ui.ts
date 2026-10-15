@@ -9,6 +9,11 @@ const write = (k: string, v: string) => { try { localStorage.setItem(k, v); } ca
 const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
 export const resolveMode = (m: Mode): "light" | "dark" => (m === "system" ? (systemDark() ? "dark" : "light") : m);
 
+export const BOARD_SIZE = { min: 60, max: 130, step: 5, def: 100 };
+const clampSize = (n: number) => Math.min(BOARD_SIZE.max, Math.max(BOARD_SIZE.min, Math.round(n / BOARD_SIZE.step) * BOARD_SIZE.step));
+const storedSize = () => { const n = Number(read("mechess.boardsize")); return Number.isFinite(n) && n > 0 ? clampSize(n) : BOARD_SIZE.def; };
+const applySize = (n: number) => { document.documentElement.style.setProperty("--board-scale", String(n / 100)); };       // every board is sized from this: 100 = the largest that fits the window
+
 function applyDocument(mode: Mode, palette: string) {
   document.documentElement.dataset.theme = resolveMode(mode);
   document.documentElement.dataset.palette = palette;
@@ -22,6 +27,7 @@ interface UiState {
   mode: Mode;
   palette: string;
   boardId: string;
+  boardSize: number;
   custom: { light: string; dark: string } | null;
   grain: boolean;
   pieceSetId: string;
@@ -30,6 +36,7 @@ interface UiState {
   toggleMode: () => void;
   setPalette: (id: string) => void;
   setBoard: (id: string) => void;
+  setBoardSize: (n: number) => void;
   setCustom: (c: { light: string; dark: string } | null) => void;
   setGrain: (v: boolean) => void;
   setPieceSet: (id: string) => void;
@@ -40,6 +47,7 @@ export const useUi = create<UiState>((set, get) => ({
   mode: storedMode(),
   palette: storedPalette(),
   boardId: read("mechess.board") ?? DEFAULT_BOARD.id,
+  boardSize: storedSize(),
   custom: storedCustom(),
   grain: read("mechess.grain") !== "0",
   pieceSetId: read("mechess.pieces") ?? DEFAULT_PIECE_SET.id,
@@ -48,6 +56,7 @@ export const useUi = create<UiState>((set, get) => ({
   toggleMode: () => get().setMode(resolveMode(get().mode) === "dark" ? "light" : "dark"),
   setPalette: (id) => { write("mechess.palette", id); applyDocument(get().mode, id); set({ palette: id }); },
   setBoard: (id) => { write("mechess.board", id); set({ boardId: id }); },
+  setBoardSize: (n) => { const v = clampSize(n); write("mechess.boardsize", String(v)); applySize(v); set({ boardSize: v }); },
   setCustom: (c) => { write("mechess.board.custom", JSON.stringify(c)); set({ custom: c, ...(c ? { boardId: "custom" } : {}) }); if (c) write("mechess.board", "custom"); },
   setGrain: (v) => { write("mechess.grain", v ? "1" : "0"); set({ grain: v }); },
   setPieceSet: (id) => { write("mechess.pieces", id); set({ pieceSetId: id }); },
@@ -77,3 +86,5 @@ export function usePieceSet(): PieceSet {
 
 // follow the system while the mode is "system"
 if (typeof matchMedia === "function") matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { const { mode, palette } = useUi.getState(); if (mode === "system") applyDocument(mode, palette); });
+
+if (typeof document !== "undefined") applySize(storedSize());

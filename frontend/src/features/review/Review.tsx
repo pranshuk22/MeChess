@@ -118,7 +118,7 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
 
   return (
     <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_388px] gap-6 p-6 lg:h-[calc(100dvh-var(--topbar))] max-lg:grid-cols-1 max-md:p-3">
-      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - var(--topbar) - 140px))" }}>
+      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc((100dvh - var(--topbar) - 140px) * var(--board-scale, 1)))" }}>
         <PlayerStrip {...top} />
         {inVariation && (
           <div className="mt-2 flex items-center justify-between gap-3 rounded-[6px] bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent" role="status">

@@ -85,3 +85,19 @@ test("moves get a class badge on the board and the summary counts them", async (
   for (let k = 0; k <= i; k++) await page.keyboard.press("ArrowRight");
   await expect(page.locator(".board .badge-pos")).toBeVisible();
 });
+
+test("the board size can be changed, is remembered and 100 % is the largest board that fits", async ({ page }) => {
+  await page.goto("/review/s03");
+  const width = async () => (await page.locator(".board").boundingBox())!.width;
+  const full = await width();
+  await page.getByRole("button", { name: "Board and pieces" }).click();
+  const slider = page.getByRole("slider", { name: "Board size" });
+  await slider.fill("70");
+  await expect.poll(width).toBeLessThan(full * 0.75);
+  expect(await width()).toBeGreaterThan(full * 0.65);
+  await page.reload();
+  await expect.poll(width).toBeLessThan(full * 0.75);                                              // remembered
+  await page.getByRole("button", { name: "Board and pieces" }).click();
+  await page.getByRole("button", { name: "Fit" }).click();
+  await expect.poll(width).toBeGreaterThan(full * 0.97);
+});

@@ -31,7 +31,7 @@ export function ExplorerPage() {
         actions={<div className="w-40"><Select value={rating} onChange={(e) => setPicked(Number(e.target.value))} aria-label="Rating">{[1000, 1200, 1400, 1500, 1600, 1800, 2000, 2200, 2400].map((r) => <option key={r} value={r}>around {r}{r === me?.band ? " (you)" : ""}</option>)}</Select></div>} />
       {q.data === null ? <Panel><EmptyState icon={BookOpen} title="The opening explorer is not built yet" text="It needs the explorer database built from the Lichess games (see docs/opening-explorer.md); the workspace checklist on the home page shows its state." /></Panel> : (
         <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6 max-lg:grid-cols-1">
-          <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(100dvh - var(--topbar) - 240px))" }}>
+          <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc((100dvh - var(--topbar) - 240px) * var(--board-scale, 1)))" }}>
             <div className="overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">
               <Board fen={fen} orientation={flipped ? "black" : "white"} legal={legal} movable="both" lastMove={last ? [last.slice(0, 2), last.slice(2, 4)] : null} checkSquare={checkSquare(fen)} onMove={(f, t, p) => play(f + t + (p ?? ""))} />
             </div>

@@ -2,7 +2,7 @@ import * as Popover from "@radix-ui/react-popover";
 import clsx from "clsx";
 import { Check, Palette } from "lucide-react";
 import { PALETTES, type BoardTheme, type Mode } from "@/board/themes";
-import { useBoardThemes, usePieceSets, useUi } from "@/state/ui";
+import { BOARD_SIZE, useBoardThemes, usePieceSets, useUi } from "@/state/ui";
 import { IconButton } from "./ui/IconButton";
 
 const swatchBg = (t: Pick<BoardTheme, "light" | "dark"> & { image?: string }) => t.image ? `url("${t.image}") center / cover` : `conic-gradient(${t.dark} 25%, ${t.light} 0 50%, ${t.dark} 0 75%, ${t.light} 0) 0 0 / 24px 24px`;
@@ -25,6 +25,13 @@ export function BoardAndPieces() {
   const sets = usePieceSets(), boards = useBoardThemes();
   return (
     <div>
+      <Heading>Board size</Heading>
+      <div className="flex items-center gap-3 text-[12.5px]">
+        <input type="range" min={BOARD_SIZE.min} max={BOARD_SIZE.max} step={BOARD_SIZE.step} value={ui.boardSize} onChange={(e) => ui.setBoardSize(Number(e.target.value))} aria-label="Board size" className="w-full accent-[var(--accent)]" />
+        <span className="tnum w-11 text-right text-muted">{ui.boardSize}%</span>
+        <button onClick={() => ui.setBoardSize(BOARD_SIZE.def)} disabled={ui.boardSize === BOARD_SIZE.def} className="cursor-pointer text-accent hover:underline disabled:cursor-default disabled:text-faint disabled:no-underline">Fit</button>
+      </div>
+      <p className="mt-1 text-[11.5px] text-muted">100% is the largest board that fits the window. Larger scrolls the page.</p>
       <Heading>Board</Heading>
       <div className="grid grid-cols-4 gap-1.5">
         {boards.map((t) => (

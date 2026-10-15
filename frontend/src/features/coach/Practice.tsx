@@ -70,7 +70,7 @@ export function Practice({ items, onFinish }: { items: Drill[]; onFinish: (found
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6 max-lg:grid-cols-1">
-      <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(100dvh - var(--topbar) - 180px))" }}>
+      <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc((100dvh - var(--topbar) - 180px) * var(--board-scale, 1)))" }}>
         <div className="mb-2 flex items-center justify-between text-[13px] text-muted"><span className="tnum">Position {i + 1} of {items.length}</span><span>{d.colour === "white" ? "White" : "Black"} to move</span></div>
         <Progress value={(i + (phase.kind === "done" ? 1 : 0)) / items.length} className="mb-3" />
         <div className="overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">

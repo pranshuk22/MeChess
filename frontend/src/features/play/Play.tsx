@@ -113,7 +113,7 @@ function GameView({ game, setGame, onNew }: { game: PlayState; setGame: (s: Play
 
   return (
     <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)_340px] gap-6 p-6 lg:h-[calc(100dvh-var(--topbar))] max-lg:grid-cols-1 max-md:p-3">
-      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - var(--topbar) - 130px))" }}>
+      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc((100dvh - var(--topbar) - 130px) * var(--board-scale, 1)))" }}>
         <div className="flex h-6 items-center justify-between text-[13.5px]"><span className="font-medium">{flipped === (game.colour === "white") ? opp : "You"}</span>{!over && game.turn !== game.colour && <span className="flex items-center gap-1.5 text-[12px] text-muted"><Loader2 size={13} className="animate-spin" /> thinking</span>}</div>
         <div className="my-2.5 overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">
           <Board fen={fen} orientation={flipped ? "black" : "white"} legal={legal} movable={mine ? (game.colour === "white" ? "w" : "b") : null} lastMove={lastMove} checkSquare={checkSquare(fen)} onMove={play} />
