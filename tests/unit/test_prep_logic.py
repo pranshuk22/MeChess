@@ -99,8 +99,9 @@ def test_a_trap_is_a_position_where_their_usual_move_gives_away_a_lot_and_the_wa
     ev = PL.Evaluator(search)
     traps = PL.find_traps(graph, ev, "black")
     t = traps[0]
-    assert t["move"] == "Nf6" and t["best"] and t["games"] == 4 and t["visits"] == 5 and t["loss"] > 0.3 and t["path"] == "1.e4 e5 2.Qh5 Nc6 3.Bc4"
+    assert t["move"] == "Nf6" and t["better"] and t["games"] == 4 and t["visits"] == 5 and t["loss"] > 0.3 and t["path"] == "1.e4 e5 2.Qh5 Nc6 3.Bc4"
     assert t["youStand"] > 0.9                                                              # after the blunder you are winning
+    assert t["punish"] == "Qxf7#" and t["punishUci"] == "h5f7" and t["better"] != t["move"] and t["fenAfter"].split()[1] == "w"     # what you play after it, and what they should have played
     assert t["sound"] is True and t["fen"].split()[1] == "b"
     assert ev.searches > 0 and PL.find_traps(GR.build(trap_games(2)), PL.Evaluator(search), "black") == []         # two games are too few visits
 
@@ -211,3 +212,22 @@ def test_the_whole_report_has_every_part_and_says_when_data_is_thin():
     assert any("Only 10 games" in n for n in out["notes"]) and any("analysed in full" in n for n in out["notes"])
     thin = RP.build([mk("e4 e5", 1.0, colour="white")], {}, [], {}, search, handles=[], budget=50)
     assert thin["plan"]["black"]["tree"] is None and "not enough" in thin["plan"]["black"]["reason"]
+
+
+def test_a_slightly_inferior_move_is_chosen_only_when_the_opponent_has_often_fallen_for_it():
+    """The engine puts 2.Qh5 about 6 points under 2.Nf3, over the normal tolerance: it is a candidate only where the opponent was seen at least four times after it."""
+    from chessme.analysis.runner import SimpleLine
+    start = chess.Board()
+    for m in ("e2e4", "e7e5"):
+        start.push_uci(m)
+    after_qh5 = start.copy()
+    after_qh5.push_uci("d1h5")
+    after_nf3 = start.copy()
+    after_nf3.push_uci("g1f3")
+    table = {GR.key_of(start): [SimpleLine("g1f3", 30, ["g1f3"]), SimpleLine("d1h5", -40, ["d1h5"])], GR.key_of(after_qh5): [SimpleLine("b8c6", 40, ["b8c6"])], GR.key_of(after_nf3): [SimpleLine("b8c6", -30, ["b8c6"])]}
+    search_ = lambda b: table.get(GR.key_of(b), [])
+
+    def planner(n):
+        games = [mk("e4 e5 Qh5 Nc6", 0.0, gid=f"q{i}") for i in range(n)]
+        return PL.Planner(PL.Evaluator(search_), GR.build(games), GR.Graph(), "white", depth=1)
+    assert ("d1h5") in [u for u, _ in planner(5).candidates(start)] and "d1h5" not in [u for u, _ in planner(3).candidates(start)]

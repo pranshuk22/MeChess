@@ -12,7 +12,9 @@ import chess.pgn
 from ..analysis import classify as C
 from .graph import Graph, key_of
 
-TOLERANCE = 0.05                # you never give up more than this to the engine's best move
+TOLERANCE = 0.05                # you never give up more than this to the engine's best move ...
+GAMBLE = 0.12                   # ... unless the opponent has been seen at least `GAMBLE_VISITS` times in the position it leads to: then up to this much, for the expected gain
+GAMBLE_VISITS = 4
 MISTAKE = 0.10
 PRIOR = 2                       # pseudo-games for "the engine's best reply": a reply seen once does not mean the opponent always plays it
 
@@ -114,9 +116,11 @@ def find_traps(graph: Graph, ev: Evaluator, opp_colour: str, *, min_visits=3, mi
                 child = board.copy()
                 child.push(mv)
                 after = ev.wp_for(child, not opp)
+                reply = ev.lines(child)                                                # what you play after it: the punishment
                 your_losses = _your_losses(path, ev, opp)
-                found.append({"path": _path_text([t[2] for t in path]), "pathMoves": [t[1] for t in path], "fen": board.fen(), "move": board.san(mv), "uci": uci, "games": e[0], "visits": node["n"], "share": share,
-                              "loss": loss, "best": board.san(chess.Move.from_uci(lines[0].move)) if lines else None, "bestLine": _san_line(board, lines[0].pv) if lines else [],
+                found.append({"path": _path_text([t[2] for t in path]), "pathMoves": [t[1] for t in path], "fen": board.fen(), "fenAfter": child.fen(), "move": board.san(mv), "uci": uci, "games": e[0], "visits": node["n"], "share": share,
+                              "loss": loss, "better": board.san(chess.Move.from_uci(lines[0].move)) if lines else None, "betterUci": lines[0].move if lines else None,
+                              "punish": child.san(chess.Move.from_uci(reply[0].move)) if reply else None, "punishUci": reply[0].move if reply else None, "punishLine": _san_line(child, reply[0].pv) if reply else [],
                               "youStand": after, "score": e[1] / e[2] if e[2] else None, "yourWorstLoss": max(your_losses) if your_losses else 0.0,
                               "sound": all(l <= TOLERANCE for l in your_losses), "ply": len(path)})
         for uci in node["moves"]:
@@ -165,7 +169,7 @@ class Planner:
                 child = board.copy()
                 child.push(chess.Move.from_uci(uci))
                 static = self.ev.wp_for(child, self.you)
-                if best - static <= TOLERANCE:
+                if best - static <= TOLERANCE or (best - static <= GAMBLE and self.opp.visits(child) >= GAMBLE_VISITS):
                     cands[uci] = static
         return [(u, v) for u, v in sorted(cands.items(), key=lambda kv: -kv[1])]
 
@@ -249,7 +253,7 @@ class Planner:
             child.push(mv)
             usual = self.you_graph.moves(board)
             alts = [{"san": board.san(chess.Move.from_uci(u)), "value": val, "engine": st, "games": f} for u, val, st, f in ranked[1:4]]
-            node = {"san": san, "uci": uci, "by": "you", "value": v, "engine": static, "reach": reach, "yourGames": familiar,
+            node = {"san": san, "uci": uci, "by": "you", "value": v, "engine": static, "reach": reach, "yourGames": familiar, "cost": max(0.0, self.ev.wp_for(board, self.you) - static),
                     "yourScore": next((s for u, n, s in usual if u == uci), None), "alts": alts, "fen": child.fen(),
                     "usual": {"san": board.san(chess.Move.from_uci(usual[0][0])), "games": usual[0][1], "score": usual[0][2]} if usual else None}
             node["children"] = self._children(child, d, reach, min_p)

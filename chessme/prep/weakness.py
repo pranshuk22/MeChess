@@ -30,6 +30,13 @@ def low_clock_limit(base):
     return min(LOW_CLOCK, 0.1 * base) if base else LOW_CLOCK
 
 
+def _san(board, uci):
+    try:
+        return board.san(chess.Move.from_uci(uci)) if uci else None
+    except ValueError:
+        return None
+
+
 def rows(game, analysis_moves):
     """One row per move of the opponent: the profile fields (phase, situation, loss, kind) plus ply, the clock they had left, whether that was low, and the kind of
     endgame for moves played in the endgame."""
@@ -46,7 +53,7 @@ def rows(game, analysis_moves):
             clock = game.clocks[ply - 1] if ply - 1 < len(game.clocks) else None
             out.append({"phase": m["phase"], "situation": situation, "loss": m["loss"], "kind": kind, "ply": ply, "clock": clock,
                         "low_clock": clock is not None and clock < limit, "endgame": endgame_type(board) if m["phase"] == "endgame" else None,
-                        "game": game.id, "fen": board.fen(), "played": m["move"], "best": m.get("best_move"), "uci": m["uci"]})
+                        "game": game.id, "fen": board.fen(), "played": m["move"], "best": _san(board, m.get("best_move")), "uci": m["uci"]})
         board.push(mv)
     return out
 

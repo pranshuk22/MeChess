@@ -68,7 +68,7 @@ def test_a_game_as_white_plays_the_engine_reply_to_every_move_and_rejects_bad_mo
 
 def test_as_black_the_engine_opens(client):
     script(client, "d2d4")
-    s = client.post("/api/play/start", json={"colour": "black", "opponent": "stockfish", "level": 1}).json()
+    s = client.post("/api/play/start", json={"colour": "black", "opponent": "stockfish", "level": 4}).json()                                                                   # (level 4 never plays a random move: the opening is the scripted one every time)
     assert [m["san"] for m in s["moves"]] == ["d4"] and s["turn"] == "black"
     r = client.post(f"/api/play/{s['id']}/move", json={"uci": "d7d5"}).json()
     assert [m["san"] for m in r["moves"]][:2] == ["d4", "d5"]

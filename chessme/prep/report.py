@@ -32,7 +32,7 @@ def headline(plan, opp_sets, weak_families, traps, wk):
         if colour == "white" and top:
             first = top[0]
             out.append(f"As White start with {first['san']}: against what this opponent plays, the plan expects {round(100 * p['tree']['value'])}% "
-                       f"({round(100 * p['tree']['gain']):+d} points over best play).")
+                       f"({100 * p['tree']['gain']:+.1f} points compared with best play).")
         elif colour == "black" and top:
             parts = [f"against {k['san']} ({round(100 * k['p'])}% of their games) play {k['children'][0]['san']}" for k in top[:3] if k.get("children")]
             if parts:
@@ -41,7 +41,7 @@ def headline(plan, opp_sets, weak_families, traps, wk):
         out.append(f"Their weak opening as {colour}: {fam['name']} ({fam['games']} games, they score {round(100 * fam['score'])}%" + (f", {round(100 * fam['earlyMistakes'])}% of those games had an early mistake" if fam.get("earlyMistakes") else "") + ").")
     if traps:
         t = traps[0]
-        out.append(f"Best trap: after {t['path'] or 'the start'} they play {t['move']} in {t['games']} of {t['visits']} games, which gives away {round(100 * t['loss'])}% (better: {t['best']}).")
+        out.append(f"Best trap: after {t['path'] or 'the start'} they play {t['move']} in {t['games']} of {t['visits']} games, which gives away {round(100 * t['loss'])}% (they should play {t['better']}; you answer {t['punish']}).")
     out.extend(wk["sentences"][:3])
     return out
 
@@ -86,7 +86,8 @@ def build(opp_games, analyses, user_games, user_analyses, search, *, handles, yo
     weak = [(c, f) for c in ("white", "black") for f in opp_fam[c]["families"] if f["weak"]][:4]
     out["headline"] = headline(plan, opp_fam, weak, sorted(traps["white"] + traps["black"], key=lambda t: -(t["games"] * t["loss"])), wk)
     if wk["games"] < 10:
-        out["notes"].append(f"Only {wk['games']} of their games were analysed in full: middlegame and endgame findings are tentative. Use a deeper preparation for more.")
+        out["notes"].append("None of their games were analysed in full (a quick preparation looks at openings only): there is nothing on their middlegames and endgames. Use Standard or Deep for that." if wk["games"] == 0
+                            else f"Only {wk['games']} of their games were analysed in full: middlegame and endgame findings are tentative. Use a deeper preparation for more.")
     if opp_games and len(opp_games) < 30:
         out["notes"].append(f"Only {len(opp_games)} games of this opponent were found: the picture is rough.")
     out["searches"] = ev.searches

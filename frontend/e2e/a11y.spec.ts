@@ -1,7 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
-const PAGES = ["/", "/library", "/review/s03", "/coach", "/play", "/insights", "/activity", "/settings", "/explorer", "/books", "/bot"];
+const PAGES = ["/", "/library", "/review/s03", "/coach", "/play", "/insights", "/activity", "/settings", "/explorer", "/books", "/bot", "/prepare"];
 
 for (const [palette, mode] of [["catppuccin", "light"], ["catppuccin", "dark"], ["macchiato", "dark"], ["glacier", "light"], ["paper", "light"], ["paper", "dark"], ["forest", "dark"], ["graphite", "dark"]]) {
   test(`no serious accessibility problems in ${palette} ${mode}`, async ({ page }) => {

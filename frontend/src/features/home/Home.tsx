@@ -46,6 +46,7 @@ export function HomePage() {
             <Workspace ws={ws.data} loading={ws.isLoading} />
             {stats.data && Object.keys(stats.data.classCounts).length > 0 && <Panel><PanelTitle sub="Your last 100 analysed games">Move quality</PanelTitle><div className="px-5 pb-5"><QualityBar counts={stats.data.classCounts} /></div></Panel>}
             <PracticeCard />
+            <PrepareCard />
           </div>
         </div>
       </>)}
@@ -163,6 +164,18 @@ function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
           </li>
         ))}
       </ul>
+    </Panel>
+  );
+}
+
+function PrepareCard() {
+  return (
+    <Panel>
+      <PanelTitle sub="Playing someone you know?">Prepare against an opponent</PanelTitle>
+      <div className="px-5 pb-5">
+        <p className="text-[13.5px] text-muted">Give their user name. You get their weak openings, the traps in their games and a plan of what to play against them.</p>
+        <Link to="/prepare"><Button className="mt-3 w-full">Prepare</Button></Link>
+      </div>
     </Panel>
   );
 }

@@ -3,7 +3,7 @@ import type { LucideIcon } from "lucide-react";
 import type { HTMLAttributes, ReactNode } from "react";
 
 export function Badge({ tone = "neutral", className, ...p }: HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "accent" | "good" | "warn" | "bad" }) {
-  const tones = { neutral: "bg-sunken text-muted", accent: "bg-accent-soft text-accent", good: "bg-[color-mix(in_srgb,var(--q-best)_14%,transparent)] text-[var(--q-best)]", warn: "bg-[color-mix(in_srgb,var(--q-inaccuracy)_16%,transparent)] text-[var(--q-inaccuracy)]", bad: "bg-[color-mix(in_srgb,var(--q-blunder)_14%,transparent)] text-[var(--q-blunder)]" };
+  const tones = { neutral: "bg-sunken text-muted", accent: "bg-accent-soft text-accent", good: "bg-[color-mix(in_srgb,var(--q-best)_14%,transparent)] text-[var(--q-best)]", warn: "bg-[color-mix(in_srgb,var(--q-inaccuracy)_16%,transparent)] text-[color-mix(in_srgb,var(--q-inaccuracy)_25%,var(--text))]", bad: "bg-[color-mix(in_srgb,var(--q-blunder)_14%,transparent)] text-[var(--q-blunder)]" };
   return <span {...p} className={clsx("inline-flex h-5 items-center rounded-full px-2 text-[11.5px] font-medium", tones[tone], className)} />;
 }
 
