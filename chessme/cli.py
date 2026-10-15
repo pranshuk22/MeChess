@@ -2954,7 +2954,6 @@ def main():
     ap_.add_argument("--data-dir", default="~/.mechess", help="where the app keeps its database (one SQLite file) and your files"); ap_.add_argument("--research-dir", default=str(config.ROOT / "data"), help="where the command-line tools keep explorer, tablebases, models and older analyses (found automatically)")
     ap_.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); ap_.add_argument("--port", type=int, default=8765); ap_.add_argument("--no-browser", action="store_true")
     ap_.add_argument("--host", default="127.0.0.1", help="address to listen on; leave it, except inside a container whose port is published to 127.0.0.1 only (docs/app.md)")
-    ap_.add_argument("--host", default="127.0.0.1", help="address to listen on; leave it, except inside a container whose port is published to 127.0.0.1 only (docs/app.md)")
     ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)")
     ap_.add_argument("--seed-samples", help="load the sample games of this JSON file (end-to-end tests and demos)"); ap_.add_argument("--seed-stress", type=int, default=0, help="add this many plain games (end-to-end test of a long library)")
     ap_.add_argument("--legacy-coach-dir", default="~/.mechess-coach", help="where the old command-line coach kept reviewed games (offered for import)")
