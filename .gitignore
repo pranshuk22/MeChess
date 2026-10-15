@@ -23,6 +23,9 @@ configs/profiles/*
 plan.md
 plan*.md
 
+# private research notes (architecture research programme): local only
+/architecture-research/
+
 # large or licensed artefacts
 *.pt
 *.npz
