@@ -2,6 +2,9 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+import chess
+
+from ...coach import feedback as FB
 from ...coach import reference as REF
 from ..models import Drill, Setting
 from ..services import coach as CO
@@ -13,6 +16,12 @@ class Attempt(BaseModel):
     uci: str
     tries: int = Field(0, ge=0, description="wrong tries before this one")
     hints: int = Field(0, ge=0, le=3, description="hints used")
+
+
+class FeedbackBody(BaseModel):
+    fen: str = Field(max_length=100)
+    uci: str = Field(max_length=5)
+    hide_best: bool = Field(True, description="leave out the engine's best move and alternatives (for a try that is not solved)")
 
 
 def _settings(request: Request) -> dict:
@@ -102,3 +111,21 @@ def profile(request: Request):
     ref = getattr(request.app.state, "reference", None)
     with request.app.state.sessions() as s:
         return CO.profile(s, ref=ref, nodes=settings.get("nodes", 100_000), multipv=settings.get("multipv", 5))
+
+
+@router.post("/feedback")
+def feedback(body: FeedbackBody, request: Request):
+    """How good a move is in a position and why (graded: best, great, good, inaccuracy, mistake, blunder); used by every practice that lets the player try moves."""
+    try:
+        chess.Board(body.fen)
+    except ValueError:
+        raise HTTPException(422, "that is not a position")
+    try:
+        fb = FB.feedback(body.fen, body.uci, _search(request))
+    except RuntimeError as e:
+        raise HTTPException(409, str(e))
+    if fb["grade"] == "illegal":
+        raise HTTPException(422, "that is not a legal move here")
+    if body.hide_best and not fb["solved"]:
+        fb = {k: v for k, v in fb.items() if k not in CO.SPOILERS}
+    return fb

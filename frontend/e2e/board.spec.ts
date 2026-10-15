@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { click, drag, firstMistake, sample } from "./helpers";
 
+const SOLVED = '[data-grade="best"], [data-grade="great"], [data-grade="good"]';
+const NOT_SOLVED = '[data-grade="inaccuracy"], [data-grade="mistake"], [data-grade="blunder"]';
 const GAME = "s03";                                   // a sample game in which the user is white and makes mistakes
 
 test("the review board shows the position and steps with the keyboard", async ({ page }) => {
@@ -27,7 +29,7 @@ test.describe("retry your mistakes", () => {
 
   test("dragging the engine's move is accepted", async ({ page }) => {
     await drag(page, page.locator(".board"), from, to, blackToMove);
-    await expect(page.getByText(/^Yes, /)).toBeVisible();
+    await expect(page.locator(SOLVED)).toBeVisible();
   });
 
   test("click, then click works too", async ({ page }) => {
@@ -36,7 +38,7 @@ test.describe("retry your mistakes", () => {
     await expect(board.locator(".sq.select")).toHaveCount(1);
     await expect(board.locator(".sq.dot, .sq.ring").first()).toBeVisible();
     await click(page, board, to, blackToMove);
-    await expect(page.getByText(/^Yes, /)).toBeVisible();
+    await expect(page.locator(SOLVED)).toBeVisible();
   });
 
   test("another move is not accepted, and try again puts the position back", async ({ page }) => {
@@ -44,7 +46,7 @@ test.describe("retry your mistakes", () => {
     const before = await board.locator(".piece").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.sq).sort().join());
     // the move the user actually played is a legal move that is not the engine's choice
     await drag(page, board, sample(GAME).moves[i].uci.slice(0, 2), sample(GAME).moves[i].uci.slice(2, 4), blackToMove);
-    await expect(page.getByText(/Not the engine's choice/)).toBeVisible();
+    await expect(page.locator(NOT_SOLVED)).toBeVisible();      // the engine grades it and says why
     await page.getByRole("button", { name: "Try again" }).click();
     await expect(page.getByText(/Find a better move/)).toBeVisible();
     const after = await board.locator(".piece").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.sq).sort().join());

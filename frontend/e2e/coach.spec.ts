@@ -65,3 +65,19 @@ test("a steered game: choose a focus, play, finish, see the report, review the s
   await expect(page).toHaveURL(/\/review\/steer%3A/);
   await expect(page.getByRole("tab", { name: "Summary" })).toBeVisible();
 });
+
+test("a move tried in practice is graded and explained, whatever it is", async ({ page, request }) => {
+  await request.post("/api/coach/drills/refresh");
+  const first = (await (await request.get("/api/coach/drills/next?limit=1")).json()).items[0];
+  const { Chess } = await import("chess.js");
+  const chess = new Chess(first.fen);
+  const move = chess.moves({ verbose: true })[0];                                                 // any legal move: the engine says how good it is
+  const fb = await (await request.post("/api/coach/feedback", { data: { fen: first.fen, uci: move.from + move.to + (move.promotion ?? "") } })).json();
+  expect(["best", "great", "good", "inaccuracy", "mistake", "blunder"]).toContain(fb.grade);
+  expect(fb.title.length).toBeGreaterThan(3);
+  expect(fb.reasons.length).toBeGreaterThan(0);
+  if (!fb.solved) expect(fb.bestSan).toBeUndefined();                                             // a try that is not good does not give the answer away
+  await page.goto("/coach");
+  await page.getByRole("button", { name: "Start practice" }).click();
+  await expect(page.getByRole("heading", { name: "Find a better move" })).toBeVisible();
+});

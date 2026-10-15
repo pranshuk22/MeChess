@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { firstMistake } from "./helpers";
 
+const SOLVED = '[data-grade="best"], [data-grade="great"], [data-grade="good"]';
+const NOT_SOLVED = '[data-grade="inaccuracy"], [data-grade="mistake"], [data-grade="blunder"]';
 const GAME = "s03";
 
 async function kbGo(page: import("@playwright/test").Page, board: import("@playwright/test").Locator, target: string, black = false) {
@@ -29,7 +31,7 @@ test("a mistake can be retried with the keyboard alone", async ({ page }) => {
   await expect(board.locator(".sq.select")).toHaveCount(1);
   await kbGo(page, board, m.best.slice(2, 4), black);
   await page.keyboard.press("Enter");
-  await expect(page.getByText(/^Yes, /)).toBeVisible();
+  await expect(page.locator(SOLVED)).toBeVisible();
 });
 
 test("the browser's own shortcuts are not taken by the review page", async ({ page }) => {

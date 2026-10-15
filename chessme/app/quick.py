@@ -11,7 +11,7 @@ from .services import cache as CA
 from .workspace import find_engine
 
 NODES = 20_000
-MULTIPV = 2
+MULTIPV = 3
 
 
 class QuickEngine:

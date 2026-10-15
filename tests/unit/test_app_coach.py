@@ -147,3 +147,33 @@ def test_the_weakness_profile_is_built_from_analysed_games_and_compared_with_pla
     prof = client.get("/api/coach/profile").json()
     assert prof["reference"]["band"] == 1400 and prof["reference"]["speed"] == "blitz" and prof["reference"]["overall"]["you"] == pytest.approx(0.5)
     assert client.get("/api/stats").status_code == 200
+
+
+def test_a_try_gets_graded_feedback_with_reasons_and_the_answer_is_kept_back_until_it_is_found(client):
+    seed(client)
+    client.post("/api/coach/drills/refresh")
+    ok_fen, bad_fen, mid_fen = after(AFTER_E4_E5, "d2d3"), after(AFTER_E4_E5, "a2a3"), after(AFTER_E4_E5, "b1c3")
+    key = " ".join(AFTER_E4_E5.split()[:4])
+    fake_search(client, {key: ("g1f3", 30), ok_fen: ("e7e6", -25), bad_fen: ("e7e6", 400), mid_fen: ("e7e6", 20)})            # after Nc3 black is at +20: a sound move, about 4 points under the best
+    did = client.get("/api/coach/drills/next").json()["items"][0]["id"]
+    wrong = client.post(f"/api/coach/drills/{did}/attempt", json={"uci": "a2a3"}).json()
+    assert wrong["verdict"] == "wrong" and wrong["grade"] in ("mistake", "blunder") and wrong["title"] and any("fall from" in r for r in wrong["reasons"])
+    assert not {"bestSan", "bestUci", "bestWhy", "alternatives"} & set(wrong)                                                   # what it allows is explained, the answer is not given away
+    good = client.post(f"/api/coach/drills/{did}/attempt", json={"uci": "b1c3", "tries": 1}).json()
+    assert good["verdict"] == "ok" and good["grade"] in ("great", "good") and good["bestSan"] == "Nf3" and good["reasons"]
+    if good["grade"] == "good":
+        assert "try again for the best" in " ".join(good["reasons"])
+    best = client.post(f"/api/coach/drills/{did}/attempt", json={"uci": "g1f3"}).json()
+    assert best["verdict"] == "found" and best["grade"] == "best" and best["title"] == "Best move" and best["bestWhy"] and best["reasons"]
+
+
+def test_the_feedback_endpoint_works_for_any_position_and_hides_the_best_move_of_a_bad_try(client):
+    fake_search(client, {" ".join(chess.STARTING_FEN.split()[:4]): ("e2e4", 40), after(chess.STARTING_FEN, "f2f3"): ("e7e5", 600)})
+    fb = client.post("/api/coach/feedback", json={"fen": chess.STARTING_FEN, "uci": "f2f3"}).json()
+    assert fb["grade"] in ("mistake", "blunder") and "bestSan" not in fb and fb["reasons"]
+    shown = client.post("/api/coach/feedback", json={"fen": chess.STARTING_FEN, "uci": "f2f3", "hide_best": False}).json()
+    assert shown["bestSan"] == "e4"
+    assert client.post("/api/coach/feedback", json={"fen": chess.STARTING_FEN, "uci": "e2e5"}).status_code == 422
+    assert client.post("/api/coach/feedback", json={"fen": "not a fen", "uci": "e2e4"}).status_code == 422
+    best = client.post("/api/coach/feedback", json={"fen": chess.STARTING_FEN, "uci": "e2e4"}).json()
+    assert best["grade"] == "best" and best["bestSan"] == "e4"

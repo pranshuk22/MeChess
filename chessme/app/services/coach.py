@@ -6,13 +6,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...coach import exercises as X
+from ...coach import feedback as FB
 from ...coach import profile as PR
 from ...coach import reference as REF
 from ...coach.drills import INTERVALS, MAX_BOX
-from ...coach.session import Judge
 from ..models import Analysis, Drill, Game
 
-OK_LOSS = 0.03                                                                 # a different move that costs this little is accepted as good as the engine's
 
 
 def analysis_moves(game: Game, a: Analysis) -> list[dict]:
@@ -88,19 +87,28 @@ def record(session: Session, d: Drill, success: bool, now=None):
     d.history = (list(d.history or []) + [[now, bool(success)]])[-20:]
 
 
+SPOILERS = ("bestSan", "bestUci", "bestWhy", "alternatives")
+
+
 def judge(search, d: Drill, uci: str) -> dict:
-    """The verdict on a try: 'found' (the engine's move), 'ok' (a different move that costs almost nothing) or 'wrong'."""
-    board = chess.Board(d.fen)
+    """The verdict on a try, with the reasons (`coach.feedback`): 'found' (the engine's move), 'ok' (a different move that is as good, or good but not the best: it counts, and
+    the player may try again for the best) or 'wrong' (a move that gives something away: what it allows is explained, the answer is not given away)."""
     try:
         mv = chess.Move.from_uci(uci)
     except ValueError:
         return {"verdict": "illegal", "loss": None}
-    if mv not in board.legal_moves:
+    if mv not in chess.Board(d.fen).legal_moves:
         return {"verdict": "illegal", "loss": None}
-    if uci == d.best_uci:
-        return {"verdict": "found", "loss": 0.0}
-    loss = Judge(search).loss(d.fen, uci)
-    return {"verdict": "ok" if loss <= OK_LOSS else "wrong", "loss": round(loss, 4)}
+    try:
+        fb = FB.feedback(d.fen, uci, search)
+    except RuntimeError:
+        if uci == d.best_uci:                                                  # the engine's own move needs no engine to be recognised
+            return {"verdict": "found", "loss": 0.0, "grade": "best", "title": "Best move", "reasons": [d.exercise["explanation"]]}
+        raise
+    verdict = "found" if fb["grade"] == "best" else "ok" if fb["solved"] else "wrong"
+    if verdict == "wrong":
+        fb = {k: v for k, v in fb.items() if k not in SPOILERS}
+    return {"verdict": verdict, **fb}
 
 
 def reference_comparison(rows, games_meta, ref, nodes=None, multipv=None):

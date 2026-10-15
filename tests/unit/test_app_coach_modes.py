@@ -49,6 +49,7 @@ def test_repertoires_are_saved_listed_practised_covered_and_deleted(client, monk
     assert s["moves"] == 5 and s["view"]["color"] == "white" and "e2e4" in s["view"]["legal"]
     bad = client.post(f"/api/coach/openings/{s['session']}/move", json={"uci": "d2d4"}).json()
     assert bad["verdict"] == "not in your repertoire" and bad["expected"] == ["e4"]
+    assert bad["feedback"]["grade"] in ("best", "great", "good", "inaccuracy", "mistake", "blunder") and bad["feedback"]["reasons"] and "bestSan" not in bad["feedback"]           # the engine says how sound a move outside the repertoire is
     ok = client.post(f"/api/coach/openings/{s['session']}/move", json={"uci": "e2e4"}).json()
     assert ok["verdict"] == "ok" and len(ok["view"]["line"]) == 2
     assert client.post("/api/coach/openings/nope/move", json={"uci": "e2e4"}).status_code == 404

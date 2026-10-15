@@ -7,6 +7,7 @@ import { Input, Label, Select } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/Misc";
 import { Panel, PanelTitle } from "@/components/ui/Panel";
 import { Segmented } from "@/components/ui/Segmented";
+import { FeedbackCard, type Feedback } from "./Feedback";
 import { GuidedBoard, Note, type GuidedView } from "./guided";
 
 interface Rep { id: string; name: string; colour: string; moves: number }
@@ -23,7 +24,7 @@ export function Openings() {
   const [form, setForm] = useState({ name: "", colour: "white", pgn: "" });
   const [rating, setRating] = useState("1500");
   const [session, setSession] = useState<Session | null>(null);
-  const [message, setMessage] = useState<{ tone: "info" | "bad" | "good"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: "info" | "bad" | "good"; text: string; fb?: Feedback } | null>(null);
   const [cov, setCov] = useState<{ id: string; c: Coverage } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -34,9 +35,9 @@ export function Openings() {
   const coverage = (id: string) => guard(async () => setCov({ id, c: await api<Coverage>(`/api/coach/repertoires/${id}/coverage?rating=${rating}`) }));
   const remove = (id: string) => guard(async () => { await api(`/api/coach/repertoires/${id}`, { method: "DELETE" }); qc.invalidateQueries({ queryKey: ["repertoires"] }); });
   const onMove = (from: string, to: string, promo?: string) => guard(async () => {
-    const r = await api<{ verdict?: string; message?: string; view: View }>(`/api/coach/openings/${session!.session}/move`, { method: "POST", json: { uci: from + to + (promo ?? "") } });
+    const r = await api<{ verdict?: string; message?: string; feedback?: Feedback; view: View }>(`/api/coach/openings/${session!.session}/move`, { method: "POST", json: { uci: from + to + (promo ?? "") } });
     setSession({ ...session!, view: r.view });
-    setMessage(r.verdict === "ok" ? null : { tone: "bad", text: r.message ?? "Not in your repertoire." });
+    setMessage(r.verdict === "ok" ? null : { tone: r.feedback?.solved ? "info" : "bad", text: r.message ?? "Not in your repertoire.", fb: r.feedback });
   });
 
   if (status && !status.explorer) return <Panel><EmptyState icon={BookOpen} title="The opening explorer is not built yet" text="Opening practice plays your repertoire against the replies players of your rating really make, which comes from the explorer database (docs/opening-explorer.md)." /></Panel>;
@@ -51,7 +52,7 @@ export function Openings() {
             <h2 className="text-[17px] font-semibold">{v.over ? "Line finished" : "Play your repertoire"}</h2>
             <p className="mt-1 text-[13px] text-muted">Mistakes so far: <b className="text-text">{v.mistakes}</b></p>
             <ol className="mt-3 flex flex-wrap gap-x-2 gap-y-1 text-[13.5px]" aria-label="Line">{v.line.map((m, i) => <li key={i} className={i % 2 === (v.color === "white" ? 0 : 1) ? "font-semibold" : "text-muted"}>{m}</li>)}</ol>
-            {message && <div className="mt-3"><Note tone={message.tone}>{message.text}</Note></div>}
+            {message && <div className="mt-3 space-y-2"><Note tone={message.tone}>{message.text}</Note>{message.fb && <FeedbackCard fb={message.fb} compact />}</div>}
             {v.report && <div className="mt-3"><Note tone={v.report.reason === "unanswered" ? "bad" : "good"}>{v.report.message}</Note></div>}
             <div className="mt-4 flex gap-2"><Button onClick={() => start(reps.find((r) => r.colour === v.color)?.id ?? reps[0].id)}>Again</Button><Button variant="ghost" onClick={() => setSession(null)}>Back</Button></div>
           </Panel>

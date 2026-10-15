@@ -3,11 +3,18 @@ import hashlib
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from ...coach import feedback as FB
 from ..coach_modes import ModeError
 from ..models import Repertoire, Setting
 from ..services import coach as CO
 
 router = APIRouter(prefix="/api/coach")
+
+
+def _engine_path(request: Request):
+    with request.app.state.sessions() as s:
+        row = s.get(Setting, "app")
+        return (row.value or {}).get("engine_path") if row else None
 
 
 class PlayedMove(BaseModel):
@@ -111,7 +118,14 @@ def opening_coverage(body: OpeningStart, request: Request):
 
 @router.post("/openings/{sid}/move")
 def opening_move(sid: str, body: PlayedMove, request: Request):
-    return run(request, "opening_move", sid, body.uci)
+    out = run(request, "opening_move", sid, body.uci)
+    if isinstance(out, dict) and out.get("verdict") == "not in your repertoire":
+        try:                                                                       # the engine says whether the move is sound and why (the repertoire's move is already named)
+            fb = FB.feedback(out["view"]["fen"], body.uci, request.app.state.quick.searcher(_engine_path(request)))
+            out["feedback"] = {k: v for k, v in fb.items() if k not in ("bestSan", "bestUci", "bestWhy", "alternatives")}
+        except (RuntimeError, ValueError):
+            pass                                                                   # no engine: the repertoire message alone
+    return out
 
 
 @router.post("/repertoires/{rid}/start")

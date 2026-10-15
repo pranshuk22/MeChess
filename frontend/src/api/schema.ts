@@ -74,6 +74,12 @@ export interface EngineLine {
   pv: string[];
 }
 
+export interface FeedbackBody {
+  fen: string;
+  uci: string;
+  hide_best: boolean;
+}
+
 export interface GameDetail {
   id: string;
   source: string;
