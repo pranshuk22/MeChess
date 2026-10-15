@@ -73,7 +73,7 @@ function PrepHome() {
             <div className="grid grid-cols-3 gap-3 max-md:grid-cols-1" role="radiogroup" aria-label="How thorough">
               {DEPTHS.map((d) => (
                 <button key={d.id} type="button" role="radio" aria-checked={depth === d.id} onClick={() => setDepth(d.id)}
-                  className={"cursor-pointer rounded-[10px] border p-3.5 text-left transition-colors " + (depth === d.id ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-[var(--border-strong)]")}>
+                  className={"cursor-pointer rounded-[8px] border p-3.5 text-left transition-colors " + (depth === d.id ? "border-accent bg-accent-soft" : "border-border bg-surface hover:border-[var(--border-strong)]")}>
                   <div className="text-[14px] font-semibold">{d.title}</div>
                   <div className="mt-1 text-[12.5px] text-muted">{d.text}</div>
                 </button>
@@ -86,7 +86,7 @@ function PrepHome() {
               <Label>Speeds to look at</Label>
               <div className="flex flex-wrap gap-2">
                 {SPEEDS.map((s) => (
-                  <label key={s} className={"inline-flex cursor-pointer items-center gap-2 rounded-[9px] border px-3 py-1.5 text-[13px] capitalize " + (speeds.includes(s) ? "border-accent bg-accent-soft" : "border-border")}>
+                  <label key={s} className={"inline-flex cursor-pointer items-center gap-2 rounded-[6px] border px-3 py-1.5 text-[13px] capitalize " + (speeds.includes(s) ? "border-accent bg-accent-soft" : "border-border")}>
                     <input type="checkbox" className="accent-[var(--accent)]" checked={speeds.includes(s)} onChange={(e) => setSpeeds(e.target.checked ? [...speeds, s] : speeds.filter((x) => x !== s))} />{s}
                   </label>
                 ))}
@@ -101,7 +101,7 @@ function PrepHome() {
 
           <div>
             <button type="button" className="cursor-pointer text-[13px] font-medium text-accent hover:underline" onClick={() => setUsePgn(!usePgn)}>{usePgn ? "Read their games from the sites instead" : "Or paste a PGN of their games"}</button>
-            {usePgn && <div className="mt-2"><textarea aria-label="PGN of the opponent's games" value={pgn} onChange={(e) => setPgn(e.target.value)} rows={5} placeholder="Paste games here; the user name above says which player is the opponent." className="w-full rounded-[9px] border border-border bg-surface p-3 font-mono text-[12.5px] outline-none focus:border-accent" /></div>}
+            {usePgn && <div className="mt-2"><textarea aria-label="PGN of the opponent's games" value={pgn} onChange={(e) => setPgn(e.target.value)} rows={5} placeholder="Paste games here; the user name above says which player is the opponent." className="w-full rounded-[6px] border border-border bg-surface p-3 font-mono text-[12.5px] outline-none focus:border-accent" /></div>}
           </div>
 
           {error && <p role="alert" className="text-[13px] text-[var(--q-blunder)]">{error}</p>}

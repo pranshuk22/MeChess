@@ -12,7 +12,7 @@ const pct = (x: number) => `${Math.round(100 * x)}%`;
 /** Where you give away points: against your own rate elsewhere, and against players of your rating when a reference exists. */
 export function Weaknesses() {
   const { data: p, isLoading } = useProfile();
-  if (isLoading || !p) return <Skeleton className="h-64 rounded-[12px]" />;
+  if (isLoading || !p) return <Skeleton className="h-64 rounded-[8px]" />;
   if (!p.moves) return <Panel><EmptyState icon={Target} title="Nothing to analyse yet" text="Analyse some of your games. The profile needs a few hundred of your moves to say anything fair." action={<Link to="/library"><Button variant="primary">Go to the library</Button></Link>} /></Panel>;
   const phases = Object.entries(p.by_phase ?? {}), situations = Object.entries(p.by_situation ?? {});
   const ref = p.reference;
@@ -21,7 +21,7 @@ export function Weaknesses() {
       <Panel className="col-span-2 max-lg:col-span-1">
         <PanelTitle sub={`From ${p.games} games and ${p.moves.toLocaleString()} of your moves. A mistake gives away at least 10% of the win chance.`}>What stands out</PanelTitle>
         <ul className="space-y-2 px-5 pb-5">
-          {p.sentences.map((s, i) => <li key={i} className="rounded-[9px] bg-sunken px-4 py-2.5 text-[13.5px]">{s}</li>)}
+          {p.sentences.map((s, i) => <li key={i} className="rounded-[6px] bg-sunken px-4 py-2.5 text-[13.5px]">{s}</li>)}
         </ul>
       </Panel>
       <Panel>

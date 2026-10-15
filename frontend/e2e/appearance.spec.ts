@@ -6,15 +6,15 @@ test("the website is light by default, even when the system prefers dark", async
   const page = await ctx.newPage();
   await page.goto("/");
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
-  expect(await page.evaluate(() => document.documentElement.dataset.palette)).toBe("catppuccin");
+  expect(await page.evaluate(() => document.documentElement.dataset.palette)).toBe("slate");
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).toBe("rgb(239, 241, 245)");                                            // Catppuccin Latte base
+  expect(bg).toBe("rgb(246, 247, 249)");                                            // the Slate page background
   await ctx.close();
 });
 
 test("every palette has a light and a dark mode, and the choice is remembered", async ({ page }) => {
   await page.goto("/settings");
-  const names = ["Catppuccin", "Macchiato", "Glacier", "Paper", "Forest", "Graphite"];
+  const names = ["Studio", "Catppuccin", "Macchiato", "Glacier", "Paper", "Forest", "Graphite"];
   const accents = new Set<string>();
   for (const palette of names) {
     await page.getByRole("button", { name: palette, exact: true }).click();
@@ -30,7 +30,7 @@ test("every palette has a light and a dark mode, and the choice is remembered", 
     }
     expect(bgs[0]).not.toBe(bgs[1]);                                                  // light and dark really differ
   }
-  expect(accents.size).toBe(12);
+  expect(accents.size).toBe(14);
   await page.getByRole("button", { name: "Paper", exact: true }).click();
   await page.getByRole("button", { name: "dark", exact: true }).click();
   await page.reload();

@@ -1,4 +1,4 @@
-import * as Tabs from "@radix-ui/react-tabs";
+import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, FlipVertical2, GitBranch, RotateCcw, Sparkles, Target, Undo2 } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -32,7 +32,7 @@ export function ReviewPage() {
   const nav = useNavigate();
   const { data: game, isLoading, isError } = useGame(id);
   if (!id) return <div className="p-10"><Panel><EmptyState icon={Target} title="Pick a game to review" text="Open a game from your library." action={<Button variant="primary" onClick={() => nav("/library")}>Go to the library</Button>} /></Panel></div>;
-  if (isLoading) return <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_380px] gap-5 p-6"><Skeleton className="aspect-square w-full rounded-[12px]" /><Skeleton className="h-[480px] rounded-[12px]" /></div>;
+  if (isLoading) return <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_380px] gap-5 p-6"><Skeleton className="aspect-square w-full rounded-[8px]" /><Skeleton className="h-[480px] rounded-[8px]" /></div>;
   if (isError || !game) return <div className="p-10"><Panel><EmptyState icon={Target} title="That game is not in your library" action={<Button onClick={() => nav("/library")}>Back to the library</Button>} /></Panel></div>;
   return <ReviewGame key={game.id} game={game} />;
 }
@@ -117,11 +117,11 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
   const liveTop = engineOn && !retry && live.lines[0] ? scoreToCp(live.lines[0].kind, live.lines[0].score) : null;
 
   return (
-    <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_388px] gap-6 p-6 lg:h-[100dvh] max-lg:grid-cols-1 max-md:p-3">
-      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - 140px))" }}>
+    <div className="mx-auto grid max-w-[1240px] grid-cols-[minmax(0,1fr)_388px] gap-6 p-6 lg:h-[calc(100dvh-var(--topbar))] max-lg:grid-cols-1 max-md:p-3">
+      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - var(--topbar) - 140px))" }}>
         <PlayerStrip {...top} />
         {inVariation && (
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-[9px] bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent" role="status">
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-[6px] bg-accent-soft px-3 py-1.5 text-[12.5px] text-accent" role="status">
             <span className="flex items-center gap-2 font-medium"><GitBranch size={14} /> Trying a side line: {variation.length} move{variation.length === 1 ? "" : "s"}</span>
             <button onClick={() => setVariation([])} className="inline-flex items-center gap-1 font-semibold hover:underline cursor-pointer"><Undo2 size={13} /> Back to the game (Esc)</button>
           </div>
@@ -178,7 +178,7 @@ const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, 
           <div className="mt-4"><EvalGraph moves={moves} ply={ply} onSelect={goto} userIsWhite={userIsWhite} /></div>
           <Button variant="primary" className="mt-4 w-full" disabled={mistakes.length === 0 || retryOn} onClick={onRetry}><RotateCcw size={15} /> Retry your mistakes{mistakes.length ? ` (${mistakes.length})` : ""}</Button>
         </> : (
-          <div className="mt-4 rounded-[10px] bg-sunken p-4">
+          <div className="mt-4 rounded-[8px] bg-sunken p-4">
             <p className="text-[13.5px] text-muted">This game has not been analysed yet. You can step through the moves now; analysis adds move classes, accuracy and the best moves.</p>
             <Button variant="primary" className="mt-3" disabled={analyse.isPending || analyse.isSuccess} onClick={() => analyse.mutate({ ids: [game.id] })}><Sparkles size={15} /> {analyse.isSuccess ? "Analysing…" : "Analyse this game"}</Button>
             {analyse.isError && <p role="alert" className="mt-2 text-[12.5px] text-[var(--q-blunder)]">{(analyse.error as Error).message}</p>}
@@ -188,11 +188,11 @@ const Sidebar = memo(function Sidebar({ game, analysed, ply, fens, userIsWhite, 
 
       <Panel className="flex min-h-[220px] flex-1 flex-col overflow-hidden">
         <Tabs.Root defaultValue={analysed ? "summary" : "moves"} className="flex min-h-0 flex-1 flex-col">
-          <Tabs.List className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-2 [scrollbar-width:none]" aria-label="Review sections">
+          <TabList className="px-2" aria-label="Review sections">
             {[["summary", "Summary"], ["moves", "Moves"], ["moments", "Key moments"], ["engine", "Engine"], ["explorer", "Explorer"]].filter(([v]) => analysed || ["moves", "engine", "explorer"].includes(v)).map(([v, l]) => (
-              <Tabs.Trigger key={v} value={v} className="shrink-0 whitespace-nowrap rounded-t-md px-2.5 py-2.5 text-[13px] font-medium text-muted transition-colors hover:text-text data-[state=active]:text-text data-[state=active]:shadow-[inset_0_-2px_0_var(--accent)] cursor-pointer">{l}</Tabs.Trigger>
+              <TabTrigger key={v} value={v} className="!px-2 !text-[12.5px]">{l}</TabTrigger>
             ))}
-          </Tabs.List>
+          </TabList>
           {analysed && <Tabs.Content value="summary" className={TAB_BODY}><Summary game={game} /></Tabs.Content>}
           <Tabs.Content value="moves" className={TAB_BODY + " p-2"}>
             {analysed && <label className="mb-1 flex cursor-pointer items-center justify-end gap-2 px-2 text-[12px] text-muted"><input type="checkbox" checked={showEvals} onChange={(e) => setShowEvals(e.target.checked)} className="accent-[var(--accent)]" /> Show evaluations</label>}

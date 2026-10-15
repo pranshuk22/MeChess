@@ -70,7 +70,7 @@ export function Practice({ items, onFinish }: { items: Drill[]; onFinish: (found
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6 max-lg:grid-cols-1">
-      <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(100dvh - 180px))" }}>
+      <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc(100dvh - var(--topbar) - 180px))" }}>
         <div className="mb-2 flex items-center justify-between text-[13px] text-muted"><span className="tnum">Position {i + 1} of {items.length}</span><span>{d.colour === "white" ? "White" : "Black"} to move</span></div>
         <Progress value={(i + (phase.kind === "done" ? 1 : 0)) / items.length} className="mb-3" />
         <div className="overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">
@@ -85,7 +85,7 @@ export function Practice({ items, onFinish }: { items: Drill[]; onFinish: (found
             <h2 className="mt-1 text-[18px] font-semibold leading-6">Find a better move</h2>
             <p className="mt-2 text-[13.5px] text-muted">You played <b className="text-text">{d.playedSan}</b> here{d.loss ? ` and gave away about ${Math.round(d.loss * 100)}% of the win chance` : ""}.</p>
             {lastFb && <div className="mt-3"><FeedbackCard fb={lastFb} compact /><p className="mt-2 text-[12.5px] text-muted">Try another move.</p></div>}
-            {hintText.map((h, k) => <p key={k} className="mt-3 flex gap-2 rounded-[9px] bg-sunken px-3 py-2 text-[13px]"><Lightbulb size={15} className="mt-0.5 shrink-0 text-[var(--q-inaccuracy)]" />{h}</p>)}
+            {hintText.map((h, k) => <p key={k} className="mt-3 flex gap-2 rounded-[6px] bg-sunken px-3 py-2 text-[13px]"><Lightbulb size={15} className="mt-0.5 shrink-0 text-[var(--q-inaccuracy)]" />{h}</p>)}
             <div className="mt-4 flex flex-wrap gap-2">
               <Button size="sm" onClick={hint} disabled={hints >= 3}><Lightbulb size={14} /> {hints === 0 ? "Hint" : hints < 3 ? "Another hint" : "No more hints"}</Button>
               <Button size="sm" variant="ghost" onClick={reveal}><Eye size={14} /> Show me</Button>

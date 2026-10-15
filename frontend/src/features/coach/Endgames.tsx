@@ -41,7 +41,7 @@ export function Endgames() {
             <p className="mt-1 text-[13.5px] text-muted">{v.tip}</p>
             <p className="mt-2 text-[12.5px] text-muted">Moves that gave the position away: <b className="text-text">{v.errors}</b></p>
             {note && <div className="mt-3"><Note tone={note.tone}>{note.text}</Note></div>}
-            {hints.map((h, i) => <p key={i} className="mt-3 flex gap-2 rounded-[9px] bg-sunken px-3 py-2 text-[13px]"><Lightbulb size={15} className="mt-0.5 shrink-0 text-[var(--q-inaccuracy)]" />{h}</p>)}
+            {hints.map((h, i) => <p key={i} className="mt-3 flex gap-2 rounded-[6px] bg-sunken px-3 py-2 text-[13px]"><Lightbulb size={15} className="mt-0.5 shrink-0 text-[var(--q-inaccuracy)]" />{h}</p>)}
             {v.report && <div className="mt-3"><Note tone={v.report.success ? "good" : "bad"}>{v.report.message}</Note></div>}
             <div className="mt-4 flex flex-wrap gap-2">{!v.over && <Button size="sm" onClick={hint} disabled={hints.length >= 3 || busy}><Lightbulb size={14} /> Hint</Button>}<Button size="sm" onClick={() => start(theme)}>New position</Button><Button size="sm" variant="ghost" onClick={() => setS(null)}>Back</Button></div>
           </Panel>
@@ -55,7 +55,7 @@ export function Endgames() {
       <PanelTitle sub="Pick a theme: you get a random position and the tablebase tells you whether each move keeps the result.">Endgame practice</PanelTitle>
       <div className="grid grid-cols-3 gap-3 px-5 pb-5 max-md:grid-cols-1">
         {themes?.map((t) => (
-          <button key={t.id} disabled={!t.available || busy} onClick={() => start(t.id)} className="rounded-[10px] border border-border p-4 text-left transition-colors hover:bg-surface-2 disabled:opacity-50 cursor-pointer">
+          <button key={t.id} disabled={!t.available || busy} onClick={() => start(t.id)} className="rounded-[8px] border border-border p-4 text-left transition-colors hover:bg-surface-2 disabled:opacity-50 cursor-pointer">
             <div className="font-medium">{t.title}</div><div className="mt-1 text-[12.5px] text-muted">{t.available ? "Start" : "Tablebase files for this theme are missing"}</div>
           </button>
         ))}

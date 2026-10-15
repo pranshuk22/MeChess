@@ -18,7 +18,7 @@ export function ActivityPage() {
   return (
     <div className="mx-auto max-w-[860px] px-8 py-8 max-md:px-4">
       <PageHeader title="Activity" sub="Imports, analyses and other work running in the background." />
-      {isLoading && <Skeleton className="h-24 rounded-[12px]" />}
+      {isLoading && <Skeleton className="h-24 rounded-[8px]" />}
       {jobs && jobs.length === 0 && <Panel><EmptyState icon={ActivityIcon} title="Nothing has run yet" text="When you import or analyse games, their progress shows here." /></Panel>}
       {active.length > 0 && <Section title="Running">{active.map((j) => <Row key={j.id} job={j} onCancel={() => cancel.mutate(j.id)} />)}</Section>}
       {past.length > 0 && <Section title="Finished">{past.map((j) => <Row key={j.id} job={j} />)}</Section>}

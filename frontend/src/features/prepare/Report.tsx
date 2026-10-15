@@ -1,4 +1,3 @@
-import * as Tabs from "@radix-ui/react-tabs";
 import clsx from "clsx";
 import { AlertTriangle, BookMarked, ChevronDown, ChevronRight, ExternalLink, Info, Swords, Target } from "lucide-react";
 import { useState } from "react";
@@ -9,6 +8,7 @@ import type { Arrow } from "@/board/Arrows";
 import { Board } from "@/board/Board";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
+import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
 import { Badge, EmptyState } from "@/components/ui/Misc";
 import { Panel, PanelTitle } from "@/components/ui/Panel";
 import { formatDate } from "@/lib/format";
@@ -68,11 +68,11 @@ export function ReportView({ prepId, report }: { prepId: string; report: Report 
       </div>
 
       <Tabs.Root defaultValue="plan">
-        <Tabs.List className="mb-4 flex max-w-full gap-1 overflow-x-auto rounded-[9px] bg-sunken p-0.5 [scrollbar-width:none] md:inline-flex" aria-label="Report sections">
+        <TabList className="mb-5" aria-label="Report sections">
           {[["plan", "Your plan"], ["openings", "Their openings"], ["traps", "Traps"], ["later", "Middlegame and endgame"], ["games", "Their games"]].map(([v, l]) => (
-            <Tabs.Trigger key={v} value={v} className="h-8 shrink-0 whitespace-nowrap rounded-[7px] px-4 text-[13px] font-medium text-muted data-[state=active]:bg-surface data-[state=active]:text-text data-[state=active]:shadow-[var(--shadow-sm)] cursor-pointer">{l}</Tabs.Trigger>
+            <TabTrigger key={v} value={v}>{l}</TabTrigger>
           ))}
-        </Tabs.List>
+        </TabList>
         <Tabs.Content value="plan" className="outline-none"><PlanTab prepId={prepId} report={report} /></Tabs.Content>
         <Tabs.Content value="openings" className="outline-none"><OpeningsTab report={report} /></Tabs.Content>
         <Tabs.Content value="traps" className="outline-none"><TrapsTab report={report} /></Tabs.Content>
@@ -97,7 +97,7 @@ function OutlineRow({ node: n, depth, selected, onSelect }: { node: PlanNode; de
   const you = n.by === "you", bad = !you && (n.loss ?? 0) >= 0.08;
   return (
     <li role="treeitem" aria-expanded={n.children.length ? open : undefined} aria-selected={selected === n.fen}>
-      <div className={clsx("flex items-center gap-1.5 rounded-[7px] px-1.5 py-1 text-[13.5px]", selected === n.fen && "bg-accent-soft")}>
+      <div className={clsx("flex items-center gap-1.5 rounded-[5px] px-1.5 py-1 text-[13.5px]", selected === n.fen && "bg-accent-soft")}>
         {n.children.length ? <button aria-label={open ? "Collapse" : "Expand"} onClick={() => setOpen(!open)} className="cursor-pointer text-muted">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button> : <span className="w-[14px]" />}
         <button className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-left" onClick={() => onSelect(n)}>
           {you ? <Badge tone="accent">You</Badge> : <Badge>They</Badge>}

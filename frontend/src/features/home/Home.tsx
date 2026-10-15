@@ -56,7 +56,7 @@ export function HomePage() {
 }
 
 function StatRow({ stats, loading }: { stats?: S.Stats; loading: boolean }) {
-  if (loading || !stats) return <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[108px] rounded-[12px]" />)}</div>;
+  if (loading || !stats) return <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[108px] rounded-[8px]" />)}</div>;
   const r = stats.results, played = r.win + r.draw + r.loss;
   return (
     <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">

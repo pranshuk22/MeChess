@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 
 const PAGES = ["/", "/library", "/review/s03", "/coach", "/play", "/insights", "/activity", "/settings", "/explorer", "/books", "/bot", "/prepare"];
 
-for (const [palette, mode] of [["catppuccin", "light"], ["catppuccin", "dark"], ["macchiato", "dark"], ["glacier", "light"], ["paper", "light"], ["paper", "dark"], ["forest", "dark"], ["graphite", "dark"]]) {
+for (const [palette, mode] of [["slate", "light"], ["slate", "dark"], ["catppuccin", "light"], ["catppuccin", "dark"], ["macchiato", "dark"], ["glacier", "light"], ["paper", "light"], ["paper", "dark"], ["forest", "dark"], ["graphite", "dark"]]) {
   test(`no serious accessibility problems in ${palette} ${mode}`, async ({ page }) => {
     await page.addInitScript(([p, m]) => { localStorage.setItem("mechess.palette", p); localStorage.setItem("mechess.mode", m); }, [palette, mode]);
     const found: string[] = [];

@@ -11,7 +11,7 @@ const PHASES: [string, string][] = [["opening", "Opening"], ["middlegame", "Midd
 export function InsightsPage() {
   const { data: st, isLoading } = useStats();
   const setImportOpen = useDialogs((s) => s.setImportOpen);
-  if (isLoading || !st) return <div className="mx-auto max-w-[1180px] px-8 py-8"><Skeleton className="h-[420px] rounded-[12px]" /></div>;
+  if (isLoading || !st) return <div className="mx-auto max-w-[1180px] px-8 py-8"><Skeleton className="h-[420px] rounded-[8px]" /></div>;
   if (!st.games) return <div className="mx-auto max-w-[760px] px-8 py-12"><Panel><EmptyState icon={BarChart3} title="No games to learn from yet" text="Import your games and analyse them: this page shows how you play, by phase, by move kind, over time." action={<Button variant="primary" onClick={() => setImportOpen(true)}><Download size={15} /> Import games</Button>} /></Panel></div>;
   const ratings = st.ratingSeries;
   return (

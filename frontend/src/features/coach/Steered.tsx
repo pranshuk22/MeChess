@@ -59,7 +59,7 @@ export function Steered() {
       <div className="space-y-4 px-5 pb-5">
         <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1" role="group" aria-label="Focus">
           {foci.map((f) => (
-            <label key={f.id} className={`cursor-pointer rounded-[10px] border p-3.5 transition-colors ${chosen[f.id] ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}>
+            <label key={f.id} className={`cursor-pointer rounded-[8px] border p-3.5 transition-colors ${chosen[f.id] ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}>
               <span className="flex items-center gap-2"><input type="checkbox" checked={!!chosen[f.id]} onChange={(e) => setChosen({ ...chosen, [f.id]: e.target.checked })} className="accent-[var(--accent)]" /><b className="font-medium">{f.title}</b>{f.suggested && <Badge tone="accent">suggested for you</Badge>}</span>
               <span className="mt-1 block pl-6 text-[12.5px] text-muted">{f.tip}</span>
               {f.suggested && <span className="mt-1 block pl-6 text-[12px] text-faint">{f.suggested}</span>}

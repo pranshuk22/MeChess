@@ -150,7 +150,7 @@ function CustomThemes() {
           </div>
           <p className="mt-1.5 text-[12px] text-muted">SVG or PNG files named wK, wQ, wR, wB, wN, wP and bK, bQ, bR, bB, bN, bP. SVG files with scripts or links are refused.</p>
           {themes.data?.pieces.map((p) => (
-            <div key={p.id} className="mt-2 flex items-center justify-between rounded-[9px] bg-sunken px-3 py-2 text-[13px]"><span className="flex items-center gap-2"><img alt="" width={24} height={24} src={p.files.wN} />{p.name}</span><button onClick={() => remove(`/api/themes/pieces/${encodeURIComponent(p.id)}`)} aria-label={`Delete ${p.name}`} className="rounded p-1 text-muted hover:text-[var(--q-blunder)] cursor-pointer"><Trash2 size={15} /></button></div>
+            <div key={p.id} className="mt-2 flex items-center justify-between rounded-[6px] bg-sunken px-3 py-2 text-[13px]"><span className="flex items-center gap-2"><img alt="" width={24} height={24} src={p.files.wN} />{p.name}</span><button onClick={() => remove(`/api/themes/pieces/${encodeURIComponent(p.id)}`)} aria-label={`Delete ${p.name}`} className="rounded p-1 text-muted hover:text-[var(--q-blunder)] cursor-pointer"><Trash2 size={15} /></button></div>
           ))}
         </div>
         <div>
@@ -159,7 +159,7 @@ function CustomThemes() {
           <input ref={boardFile} type="file" accept=".svg,.png,.jpg,.jpeg,.webp" className="hidden" onChange={(e) => { addBoard(e.target.files); e.target.value = ""; }} />
           <p className="mt-1.5 text-[12px] text-muted">A square picture of a whole 8 by 8 board (up to 3 MB). It shows up under Board.</p>
           {themes.data?.boards.map((b) => (
-            <div key={b.id} className="mt-2 flex items-center justify-between rounded-[9px] bg-sunken px-3 py-2 text-[13px]"><span className="flex items-center gap-2"><img alt="" width={24} height={24} className="rounded" src={b.url} />{b.name}</span><button onClick={() => remove(b.url)} aria-label={`Delete ${b.name}`} className="rounded p-1 text-muted hover:text-[var(--q-blunder)] cursor-pointer"><Trash2 size={15} /></button></div>
+            <div key={b.id} className="mt-2 flex items-center justify-between rounded-[6px] bg-sunken px-3 py-2 text-[13px]"><span className="flex items-center gap-2"><img alt="" width={24} height={24} className="rounded" src={b.url} />{b.name}</span><button onClick={() => remove(b.url)} aria-label={`Delete ${b.name}`} className="rounded p-1 text-muted hover:text-[var(--q-blunder)] cursor-pointer"><Trash2 size={15} /></button></div>
           ))}
         </div>
         {msg && <p role="status" className="text-[13px]" style={{ color: msg.ok ? "var(--q-best)" : "var(--q-blunder)" }}>{msg.text}</p>}

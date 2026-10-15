@@ -4,13 +4,26 @@
 
 /* ---- tokens: palettes x modes. One neutral scale per palette, one accent; a dark navigation rail in every palette. Move-quality colours are semantic and shared ------------ */
 :root {
-  --radius: 12px; --radius-md: 9px; --radius-sm: 7px;
+  --topbar: 48px; --radius: 8px; --radius-md: 6px; --radius-sm: 5px;
   --font-sans: "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
   --hl-move: rgba(255, 214, 79, 0.42); --hl-select: rgba(255, 214, 79, 0.6); --hl-check: rgba(214, 64, 52, 0.75);
 }
-/* Catppuccin (default): Latte in light mode, Mocha in dark mode; a green accent. Palette values are Catppuccin's own; the accent is a touch deeper in light mode for contrast. */
-:root, :root[data-palette="catppuccin"][data-theme="light"] {
+/* Slate (default): a neutral cool grey scale with strong text contrast and one restrained green accent; a light navigation rail in light mode */
+:root, :root[data-palette="slate"][data-theme="light"] {
+  --bg: #f6f7f9; --surface: #ffffff; --surface-2: #f2f4f7; --sunken: #eceff3; --border: #e4e7ec; --border-strong: #cfd5dd;
+  --text: #101828; --muted: #475467; --faint: #5d6879;
+  --accent: #1b7a4b; --accent-text: #ffffff; --accent-soft: #e7f4ed; --focus: #1b7a4b;
+  --rail-bg: #ffffff; --rail-text: #475467; --rail-strong: #101828; --rail-hover: rgba(16,24,40,.05); --rail-active: #eef1f5; --rail-line: #e4e7ec;
+}
+:root[data-palette="slate"][data-theme="dark"] {
+  --bg: #0c0e12; --surface: #12151b; --surface-2: #181c23; --sunken: #0f1217; --border: #232933; --border-strong: #323a46;
+  --text: #e8ecf2; --muted: #a0aab8; --faint: #8993a3;
+  --accent: #52c28a; --accent-text: #05140c; --accent-soft: #15291f; --focus: #52c28a;
+  --rail-bg: #0f1217; --rail-text: #a0aab8; --rail-strong: #e8ecf2; --rail-hover: rgba(255,255,255,.05); --rail-active: #1b2028; --rail-line: #1d232c;
+}
+/* Catppuccin: Latte in light mode, Mocha in dark mode; a green accent. Palette values are Catppuccin's own; the accent is a touch deeper in light mode for contrast. */
+:root[data-palette="catppuccin"][data-theme="light"] {
   --bg: #eff1f5; --surface: #f8f9fb; --surface-2: #e9ecf1; --sunken: #e6e9ef; --border: #ccd0da; --border-strong: #acb0be;
   --text: #4c4f69; --muted: #595c73; --faint: #60647b;
   --accent: #2e741f; --accent-text: #ffffff; --accent-soft: #dcebd6; --focus: #2e741f;
@@ -100,7 +113,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-sunken: var(--sunken);
-  --font-display: var(--font-mono);
+  --font-display: var(--font-sans);
   --color-border: var(--border);
   --color-text: var(--text);
   --color-muted: var(--muted);
@@ -124,10 +137,11 @@ body {
   font-feature-settings: "cv11", "ss01", "cv05";
 }
 main { scrollbar-gutter: stable; }
-h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.03em; }
+h1, h2, h3 { font-family: var(--font-sans); letter-spacing: -0.018em; font-weight: 600; }
 ::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); }
 * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }                                      /* the page width never changes when a scrollbar appears */
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }                              /* fields draw their own ring (border and glow) */
 .tnum { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0ms !important; animation-duration: 0ms !important; } }
 
@@ -172,3 +186,5 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.03em; }
 
 /* the Catppuccin palettes are flat: hairline borders, no shadows (as on the author's own site) */
 :root:not([data-palette]), :root[data-palette="catppuccin"], :root[data-palette="macchiato"] { --shadow-sm: 0 0 #0000; --shadow: 0 12px 32px -12px rgba(17, 17, 27, 0.25); }   /* "0 0 #0000", not "none": it is used inside longer box-shadow lists, where "none" would drop the whole declaration */
+
+@media (max-width: 767px) { :root { --topbar: 44px; } }

@@ -62,7 +62,7 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
               <div className="grid grid-cols-4 gap-2 max-sm:grid-cols-2" role="group" aria-label="Level">
                 {opts?.stockfish.levels.map((l) => (
                   <button key={l.id} onClick={() => setLevel(l.id)} aria-pressed={level === l.id}
-                    className={`rounded-[10px] border px-3 py-2.5 text-left text-[13px] transition-colors cursor-pointer ${level === l.id ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}>
+                    className={`rounded-[8px] border px-3 py-2.5 text-left text-[13px] transition-colors cursor-pointer ${level === l.id ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}>
                     <span className="tnum font-display block text-[11px] text-muted">LEVEL {l.id}</span><span className="font-medium">{l.label}</span>
                   </button>
                 ))}
@@ -77,8 +77,8 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
           )}
           <div><div className="mb-1.5 text-[12.5px] font-medium">You play</div>
             <Segmented label="Colour" value={colour} onChange={setColour} options={[["white", "White"], ["black", "Black"], ["random", "Random"]]} /></div>
-          {opts && !avail && <p role="alert" className="rounded-[9px] bg-[color-mix(in_srgb,var(--q-inaccuracy)_14%,transparent)] px-3 py-2 text-[13px]">{kind === "stockfish" ? "Stockfish was not found. Install it or set its path in Settings." : "The MeChess engine is not built. Run `make -C engine` in the project folder."}</p>}
-          {error && <p role="alert" className="rounded-[9px] bg-[color-mix(in_srgb,var(--q-blunder)_10%,transparent)] px-3 py-2 text-[13px] text-[var(--q-blunder)]">{error}</p>}
+          {opts && !avail && <p role="alert" className="rounded-[6px] bg-[color-mix(in_srgb,var(--q-inaccuracy)_14%,transparent)] px-3 py-2 text-[13px]">{kind === "stockfish" ? "Stockfish was not found. Install it or set its path in Settings." : "The MeChess engine is not built. Run `make -C engine` in the project folder."}</p>}
+          {error && <p role="alert" className="rounded-[6px] bg-[color-mix(in_srgb,var(--q-blunder)_10%,transparent)] px-3 py-2 text-[13px] text-[var(--q-blunder)]">{error}</p>}
           <Button variant="primary" size="lg" disabled={busy || !avail} onClick={start}><Swords size={16} /> {busy ? "Starting…" : "Start the game"}</Button>
         </div>
       </Panel>
@@ -112,8 +112,8 @@ function GameView({ game, setGame, onNew }: { game: PlayState; setGame: (s: Play
   const opp = game.opponent;
 
   return (
-    <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)_340px] gap-6 p-6 lg:h-[100dvh] max-lg:grid-cols-1 max-md:p-3">
-      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - 130px))" }}>
+    <div className="mx-auto grid max-w-[1180px] grid-cols-[minmax(0,1fr)_340px] gap-6 p-6 lg:h-[calc(100dvh-var(--topbar))] max-lg:grid-cols-1 max-md:p-3">
+      <section aria-label="Board" className="flex min-h-0 min-w-0 flex-col justify-self-center" style={{ width: "min(100%, calc(100dvh - var(--topbar) - 130px))" }}>
         <div className="flex h-6 items-center justify-between text-[13.5px]"><span className="font-medium">{flipped === (game.colour === "white") ? opp : "You"}</span>{!over && game.turn !== game.colour && <span className="flex items-center gap-1.5 text-[12px] text-muted"><Loader2 size={13} className="animate-spin" /> thinking</span>}</div>
         <div className="my-2.5 overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">
           <Board fen={fen} orientation={flipped ? "black" : "white"} legal={legal} movable={mine ? (game.colour === "white" ? "w" : "b") : null} lastMove={lastMove} checkSquare={checkSquare(fen)} onMove={play} />
@@ -151,7 +151,7 @@ function GameView({ game, setGame, onNew }: { game: PlayState; setGame: (s: Play
             <Button className="flex-1" variant="danger" onClick={() => setConfirmResign(true)}><Flag size={15} /> Resign</Button>
           </div>
         )}
-        {error && <p role="alert" className="rounded-[9px] bg-[color-mix(in_srgb,var(--q-blunder)_10%,transparent)] px-3 py-2 text-[13px] text-[var(--q-blunder)]">{error}</p>}
+        {error && <p role="alert" className="rounded-[6px] bg-[color-mix(in_srgb,var(--q-blunder)_10%,transparent)] px-3 py-2 text-[13px] text-[var(--q-blunder)]">{error}</p>}
       </aside>
       <ConfirmDialog open={confirmResign} onOpenChange={setConfirmResign} title="Resign this game?" text="The game is lost and saved to your library." confirm="Resign" onConfirm={() => act("resign")} />
     </div>

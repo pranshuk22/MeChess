@@ -14,7 +14,7 @@ export function ExplorerTab({ fen, active, onPlay }: { fen: string; active: bool
     <div className="p-2">
       <div className="px-2.5 pb-2 text-[12px] text-muted">{total.toLocaleString()} games reached this position</div>
       {moves.slice(0, 12).map((m) => (
-        <button key={m.uci} onClick={() => onPlay(m.uci)} className="grid w-full grid-cols-[54px_1fr_64px] items-center gap-3 rounded-[9px] px-2.5 py-2 text-left transition-colors hover:bg-surface-2 cursor-pointer">
+        <button key={m.uci} onClick={() => onPlay(m.uci)} className="grid w-full grid-cols-[54px_1fr_64px] items-center gap-3 rounded-[6px] px-2.5 py-2 text-left transition-colors hover:bg-surface-2 cursor-pointer">
           <b className="text-[13.5px] font-semibold">{m.san}</b>
           <span className="flex h-4 overflow-hidden rounded-[4px] text-[10px] font-semibold leading-4 text-white" title={`White ${Math.round(m.white * 100)}%  Draw ${Math.round(m.draw * 100)}%  Black ${Math.round(m.black * 100)}%`}>
             <span style={{ width: `${m.white * 100}%`, background: "#d9dde2", color: "#2b3139" }} className="text-center">{m.white > 0.18 ? Math.round(m.white * 100) : ""}</span>

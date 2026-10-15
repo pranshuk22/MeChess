@@ -1,4 +1,4 @@
-import * as Tabs from "@radix-ui/react-tabs";
+import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
 import { GraduationCap, Plus, Play } from "lucide-react";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,11 +18,11 @@ export function CoachPage() {
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
       <PageHeader title="Coach" sub="Practice that comes from your own games." />
       <Tabs.Root defaultValue="practice">
-        <Tabs.List className="mb-5 flex max-w-full overflow-x-auto rounded-[9px] bg-sunken p-0.5 [scrollbar-width:none] md:inline-flex" aria-label="Coach sections">
+        <TabList className="mb-5" aria-label="Coach sections">
           {[["practice", "Practice"], ["openings", "Openings"], ["endgames", "Endgames"], ["steered", "Steered game"], ["weaknesses", "Weaknesses"]].map(([v, l]) => (
-            <Tabs.Trigger key={v} value={v} className="h-8 shrink-0 whitespace-nowrap rounded-[7px] px-4 text-[13px] font-medium text-muted data-[state=active]:bg-surface data-[state=active]:text-text data-[state=active]:shadow-[var(--shadow-sm)] cursor-pointer">{l}</Tabs.Trigger>
+            <TabTrigger key={v} value={v}>{l}</TabTrigger>
           ))}
-        </Tabs.List>
+        </TabList>
         <Tabs.Content value="practice" className="outline-none"><PracticeHome /></Tabs.Content>
         <Tabs.Content value="openings" className="outline-none"><Openings /></Tabs.Content>
         <Tabs.Content value="endgames" className="outline-none"><Endgames /></Tabs.Content>
@@ -51,7 +51,7 @@ function PracticeHome() {
     catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
   if (session) return <Practice items={session} onFinish={(found, total) => { setSession(null); setResult({ found, total }); qc.invalidateQueries({ queryKey: ["drills"] }); }} />;
-  if (!stats) return <Skeleton className="h-48 rounded-[12px]" />;
+  if (!stats) return <Skeleton className="h-48 rounded-[8px]" />;
   const max = Math.max(1, ...stats.boxes);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-5 max-lg:grid-cols-1">
@@ -61,7 +61,7 @@ function PracticeHome() {
             action={<Button variant="primary" onClick={refresh} disabled={busy}><Plus size={15} /> Add from my games</Button>} />
         ) : (
           <div className="p-6">
-            {result && <p className="mb-4 rounded-[9px] bg-accent-soft px-4 py-2.5 text-[13.5px] text-accent">Done: you found {result.found} of {result.total} without a hint on the first try.</p>}
+            {result && <p className="mb-4 rounded-[6px] bg-accent-soft px-4 py-2.5 text-[13.5px] text-accent">Done: you found {result.found} of {result.total} without a hint on the first try.</p>}
             <div className="flex items-end justify-between gap-4">
               <div><div className="tnum font-display text-[40px] font-semibold leading-none tracking-[-0.05em]">{stats.due}</div><div className="mt-1 text-[13.5px] text-muted">{stats.due === 1 ? "position" : "positions"} due of {stats.total}</div></div>
               <Button variant="primary" size="lg" onClick={start} disabled={busy || stats.due === 0}><Play size={16} /> Start practice</Button>

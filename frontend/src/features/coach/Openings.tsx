@@ -71,17 +71,17 @@ export function Openings() {
         <div className="px-5 pb-5">
           {reps.length === 0 && !adding && <EmptyState icon={BookOpen} title="No repertoire yet" text="Paste the lines you play, as a PGN with variations (an opening study from Lichess works well)." action={<Button variant="primary" onClick={() => setAdding(true)}><Plus size={15} /> Add a repertoire</Button>} />}
           {adding && (
-            <div className="mb-4 space-y-3 rounded-[10px] bg-sunken p-4">
+            <div className="mb-4 space-y-3 rounded-[8px] bg-sunken p-4">
               <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1"><Label>Name<Input className="mt-1.5" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ruy Lopez" /></Label>
                 <div><div className="mb-1.5 text-[12.5px] font-medium">You play</div><Segmented label="Colour" value={form.colour} onChange={(c) => setForm({ ...form, colour: c })} options={[["white", "White"], ["black", "Black"]]} /></div></div>
-              <textarea aria-label="Repertoire PGN" value={form.pgn} onChange={(e) => setForm({ ...form, pgn: e.target.value })} rows={5} placeholder="1. e4 e5 2. Nf3 Nc6 3. Bb5 (3. Bc4 Bc5) 3... a6 *" className="w-full resize-none rounded-[9px] border border-border bg-surface p-3 font-mono text-[12px] outline-none focus:border-accent" />
+              <textarea aria-label="Repertoire PGN" value={form.pgn} onChange={(e) => setForm({ ...form, pgn: e.target.value })} rows={5} placeholder="1. e4 e5 2. Nf3 Nc6 3. Bb5 (3. Bc4 Bc5) 3... a6 *" className="w-full resize-none rounded-[6px] border border-border bg-surface p-3 font-mono text-[12px] outline-none focus:border-accent" />
               <div className="flex gap-2"><Button variant="primary" onClick={save} disabled={busy || !form.name.trim() || !form.pgn.trim()}>Save</Button><Button variant="ghost" onClick={() => setAdding(false)}>Cancel</Button></div>
             </div>
           )}
           {error && <p role="alert" className="mb-3 text-[13px] text-[var(--q-blunder)]">{error}</p>}
           <ul className="space-y-2">
             {reps.map((r) => (
-              <li key={r.id} className="rounded-[10px] border border-border px-4 py-3">
+              <li key={r.id} className="rounded-[8px] border border-border px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                   <div><b className="font-medium">{r.name}</b> <span className="text-[12.5px] text-muted capitalize">· {r.colour}</span></div>
                   <div className="flex items-center gap-1.5"><Button size="sm" variant="primary" onClick={() => start(r.id)} disabled={busy}>Practise</Button><Button size="sm" onClick={() => coverage(r.id)} disabled={busy}>Coverage</Button>

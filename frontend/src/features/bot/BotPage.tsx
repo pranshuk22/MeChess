@@ -32,7 +32,7 @@ export function BotPage() {
           </Panel>
           <Panel>
             <PanelTitle sub="The end of the bot's own log">Log</PanelTitle>
-            <pre className="mx-5 mb-5 max-h-[340px] overflow-auto rounded-[9px] bg-sunken p-3 font-mono text-[11.5px] leading-5" aria-label="Bot log">{s?.log.length ? s.log.join("\n") : "Nothing logged yet."}</pre>
+            <pre className="mx-5 mb-5 max-h-[340px] overflow-auto rounded-[6px] bg-sunken p-3 font-mono text-[11.5px] leading-5" aria-label="Bot log">{s?.log.length ? s.log.join("\n") : "Nothing logged yet."}</pre>
           </Panel>
         </div>
       )}

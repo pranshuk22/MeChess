@@ -28,7 +28,7 @@ export function MoveCard({ fenBefore, move, cpBefore, next, onTry }: { fenBefore
             const yours = l.uci === move.uci;
             return (
               <li key={i}>
-                <button onClick={() => onTry(l.pv)} className={`grid w-full grid-cols-[52px_1fr] items-baseline gap-2.5 rounded-[7px] px-1.5 py-1 text-left text-[12.5px] transition-colors hover:bg-surface-2 cursor-pointer ${yours ? "bg-sunken" : ""}`} title="Try this line from the position before the move">
+                <button onClick={() => onTry(l.pv)} className={`grid w-full grid-cols-[52px_1fr] items-baseline gap-2.5 rounded-[5px] px-1.5 py-1 text-left text-[12.5px] transition-colors hover:bg-surface-2 cursor-pointer ${yours ? "bg-sunken" : ""}`} title="Try this line from the position before the move">
                   <span className="tnum font-display rounded-[5px] bg-sunken px-1 py-0.5 text-center text-[11.5px] font-semibold" style={yours ? { background: "var(--surface)" } : undefined}>{formatEval(l.cp)}</span>
                   <span className="min-w-0 truncate"><b className="font-semibold">{san[0]}</b> <span className="text-muted">{san.slice(1).join(" ")}</span>{yours && <span className="ml-1.5 text-[11px] font-medium text-accent">your move</span>}</span>
                 </button>
