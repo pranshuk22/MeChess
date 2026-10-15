@@ -1,0 +1,2 @@
+"Celtic" piece set by Maurizio Monge (https://github.com/maurimo/chess-art), taken from the lichess-org/lila repository (public/piece/celtic).
+Licence: MIT, https://github.com/maurimo/chess-art/blob/main/LICENSE

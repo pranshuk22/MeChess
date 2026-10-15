@@ -11,6 +11,8 @@ class Move(BaseModel):
     winBefore: float
     winAfter: float
     cp: int = Field(description="evaluation after the move, white's point of view, centipawns (capped at 1500)")
+    acc: float | None = Field(default=None, description="the move's accuracy, 0 to 100")
+    phase: str | None = Field(default=None, description="opening, middlegame or endgame")
 
 
 class Accuracy(BaseModel):

@@ -65,6 +65,7 @@ def test_games_list_detail_filters_and_delete(client):
     assert len(client.get("/api/games", params={"limit": 2, "offset": 2}).json()["items"]) == 1
     d = client.get("/api/games/t:0").json()
     assert len(d["moves"]) == 4 and d["moves"][2]["cls"] == "mistake" and d["moves"][2]["best"] == "g1f3" and d["moves"][2]["cp"] == -80 and d["pgn"].count("e4") >= 1
+    assert d["moves"][0]["acc"] == 90.0 and d["moves"][0]["phase"] == "opening"
     assert d["moves"][3]["cp"] == 60                                                                    # black's -60 is +60 for white
     assert client.delete("/api/games/t:0").status_code == 204 and client.get("/api/games/t:0").status_code == 404
     assert client.delete("/api/games/t:0").status_code == 404

@@ -1,0 +1,2 @@
+"Chessnut" piece set by Alexis Luengas (https://github.com/LexLuengas/chessnut-pieces), taken from the lichess-org/lila repository (public/piece/chessnut).
+Licence: Apache License 2.0, https://github.com/LexLuengas/chessnut-pieces/blob/master/LICENSE.txt

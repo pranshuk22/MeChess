@@ -50,7 +50,8 @@ def record(gid, white, black, welo, belo, result, year, speed, moves, search, li
         cp_mover = m["played_cp"]
         cp_white = cp_mover if m["color"] == "white" else -cp_mover
         out.append({"san": m["move"], "uci": m["uci"], "cls": m["class"], "loss": m["loss"], "best": m["best_move"],
-                    "winBefore": m["win_before"], "winAfter": m["win_after"], "cp": int(max(-1500, min(1500, cp_white)))})
+                    "winBefore": m["win_before"], "winAfter": m["win_after"], "cp": int(max(-1500, min(1500, cp_white))),
+                    "acc": m["accuracy"], "phase": m["phase"]})
     if result == "*":                                                 # the game was stopped at the move cap: adjudicate by the last evaluation
         last = out[-1]["cp"] if out else 0
         result = "1-0" if last > 300 else "0-1" if last < -300 else "1/2-1/2"

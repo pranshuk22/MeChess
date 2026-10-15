@@ -1,0 +1,2 @@
+"Papercut" piece set by Nikolay Anzarov (https://nikoichu.itch.io/), taken from the lichess-org/lila repository (public/piece/papercut).
+Licence: Creative Commons Attribution 4.0 (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/ . The files are used unchanged.

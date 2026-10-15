@@ -21,7 +21,8 @@ def moves_from_analysis(analysis_moves):
     for m in analysis_moves:
         cp = m["played_cp"] if m["color"] == "white" else -m["played_cp"]
         out.append({"san": m["move"], "uci": m["uci"], "cls": m["class"], "loss": round(float(m["loss"]), 4), "best": m["best_move"],
-                    "winBefore": round(float(m["win_before"]), 4), "winAfter": round(float(m["win_after"]), 4), "cp": int(max(-CP_CAP, min(CP_CAP, cp)))})
+                    "winBefore": round(float(m["win_before"]), 4), "winAfter": round(float(m["win_after"]), 4), "cp": int(max(-CP_CAP, min(CP_CAP, cp))),
+                    "acc": round(float(m["accuracy"]), 1) if m.get("accuracy") is not None else None, "phase": m.get("phase")})
     return out
 
 

@@ -8,7 +8,6 @@ import { Panel, PanelTitle } from "@/components/ui/Panel";
 import { myAccuracy, opponent, outcome } from "@/lib/format";
 import { fensFromUci } from "@/lib/game";
 import { BAD } from "@/lib/types";
-import { useUi } from "@/state/ui";
 import { useMemo } from "react";
 
 const CHECKS: [string, "ok" | "todo" | "off", string][] = [
@@ -22,7 +21,6 @@ const CHECKS: [string, "ok" | "todo" | "off", string][] = [
 
 export function HomePage() {
   const { data: games = [] } = useGames();
-  const pieceSet = useUi((s) => s.pieceSet)();
   const featured = games[3] ?? games[0];
   const mistakes = featured ? featured.moves.filter((m, i) => (i % 2 === 0) === (featured.user === "white") && BAD.includes(m.cls) && m.loss >= 0.1).length : 0;
   const fen = useMemo(() => (featured ? fensFromUci(featured.moves.slice(0, 22).map((m) => m.uci)).at(-1)! : ""), [featured]);
@@ -31,7 +29,7 @@ export function HomePage() {
       <div className="space-y-5">
         {featured && (
           <Panel className="grid grid-cols-[200px_1fr] gap-5 p-5 max-sm:grid-cols-1">
-            <div className="max-sm:w-48"><Board fen={fen} orientation={featured.user} showCoords={false} pieceSet={pieceSet} /></div>
+            <div className="max-sm:w-48"><Board fen={fen} orientation={featured.user} showCoords={false} /></div>
             <div className="flex flex-col">
               <div className="text-[12px] font-semibold uppercase tracking-wide text-muted">Next step</div>
               <h2 className="mt-1 text-[19px] font-semibold leading-tight">Learn from your last game</h2>

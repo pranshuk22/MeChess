@@ -1,31 +1,68 @@
 import { create } from "zustand";
-import { DEFAULT_PIECE_SET, PIECE_SETS, type PieceSet } from "@/board/pieces";
+import { BOARD_THEMES, DEFAULT_BOARD, PALETTES, type BoardTheme, type Mode } from "@/board/themes";
+import { DEFAULT_PIECE_SET, pieceSets, type PieceSet } from "@/board/pieces";
 
-type Theme = "light" | "dark";
 const read = (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode: the choice just is not remembered */ } };
 
+const systemDark = () => typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches;
+export const resolveMode = (m: Mode): "light" | "dark" => (m === "system" ? (systemDark() ? "dark" : "light") : m);
+
+function applyDocument(mode: Mode, palette: string) {
+  document.documentElement.dataset.theme = resolveMode(mode);
+  document.documentElement.dataset.palette = palette;
+}
+
+const storedMode = (): Mode => { const v = read("mechess.mode") ?? read("mechess.theme"); return v === "dark" || v === "system" ? v : "light"; };   // light unless the player chose otherwise
+const storedPalette = () => { const v = read("mechess.palette"); return PALETTES.some((p) => p.id === v) ? v! : PALETTES[0].id; };
+const storedCustom = (): { light: string; dark: string } | null => { try { const v = JSON.parse(read("mechess.board.custom") ?? "null"); return v && /^#[0-9a-f]{6}$/i.test(v.light) && /^#[0-9a-f]{6}$/i.test(v.dark) ? v : null; } catch { return null; } };
+
 interface UiState {
-  theme: Theme;
+  mode: Mode;
+  palette: string;
+  boardId: string;
+  custom: { light: string; dark: string } | null;
+  grain: boolean;
   pieceSetId: string;
   showCoords: boolean;
-  toggleTheme: () => void;
+  setMode: (m: Mode) => void;
+  toggleMode: () => void;
+  setPalette: (id: string) => void;
+  setBoard: (id: string) => void;
+  setCustom: (c: { light: string; dark: string } | null) => void;
+  setGrain: (v: boolean) => void;
   setPieceSet: (id: string) => void;
   setShowCoords: (v: boolean) => void;
-  pieceSet: () => PieceSet;
 }
 
 export const useUi = create<UiState>((set, get) => ({
-  theme: (document.documentElement.dataset.theme as Theme) ?? "light",
+  mode: storedMode(),
+  palette: storedPalette(),
+  boardId: read("mechess.board") ?? DEFAULT_BOARD.id,
+  custom: storedCustom(),
+  grain: read("mechess.grain") !== "0",
   pieceSetId: read("mechess.pieces") ?? DEFAULT_PIECE_SET.id,
   showCoords: read("mechess.coords") !== "0",
-  toggleTheme: () => {
-    const next: Theme = get().theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    write("mechess.theme", next);
-    set({ theme: next });
-  },
+  setMode: (m) => { write("mechess.mode", m); applyDocument(m, get().palette); set({ mode: m }); },
+  toggleMode: () => get().setMode(resolveMode(get().mode) === "dark" ? "light" : "dark"),
+  setPalette: (id) => { write("mechess.palette", id); applyDocument(get().mode, id); set({ palette: id }); },
+  setBoard: (id) => { write("mechess.board", id); set({ boardId: id }); },
+  setCustom: (c) => { write("mechess.board.custom", JSON.stringify(c)); set({ custom: c, ...(c ? { boardId: "custom" } : {}) }); if (c) write("mechess.board", "custom"); },
+  setGrain: (v) => { write("mechess.grain", v ? "1" : "0"); set({ grain: v }); },
   setPieceSet: (id) => { write("mechess.pieces", id); set({ pieceSetId: id }); },
   setShowCoords: (v) => { write("mechess.coords", v ? "1" : "0"); set({ showCoords: v }); },
-  pieceSet: () => PIECE_SETS.find((p) => p.id === get().pieceSetId) ?? DEFAULT_PIECE_SET,
 }));
+
+/** the board theme in effect (a built-in one, or the player's own pair of colours) */
+export function useBoardTheme(): BoardTheme {
+  const { boardId, custom, grain } = useUi();
+  const base = boardId === "custom" && custom ? { id: "custom", name: "Custom", light: custom.light, dark: custom.dark, grain: false } : BOARD_THEMES.find((t) => t.id === boardId) ?? DEFAULT_BOARD;
+  return { ...base, grain: base.grain && grain };
+}
+export function usePieceSet(): PieceSet {
+  const id = useUi((s) => s.pieceSetId);
+  return pieceSets().find((p) => p.id === id) ?? DEFAULT_PIECE_SET;
+}
+
+// follow the system while the mode is "system"
+if (typeof matchMedia === "function") matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { const { mode, palette } = useUi.getState(); if (mode === "system") applyDocument(mode, palette); });

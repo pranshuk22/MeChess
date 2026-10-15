@@ -1,0 +1,2 @@
+"Kiwen Suwi" piece set by neverRare (https://github.com/neverRare), taken from the lichess-org/lila repository (public/piece/kiwen-suwi).
+Licence: Creative Commons Attribution 4.0 (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/ . The files are used unchanged.

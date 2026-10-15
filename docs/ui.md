@@ -22,7 +22,8 @@ Players who only use the app never need Node: the built files ship inside the Py
 * No ads, popups, telemetry, or requests to other websites: fonts and piece images are bundled and a test fails on any other host.
 * Plain words first, jargon on hover. Keyboard: arrows step through moves, `F` flips, `B` shows the engine's best move.
 * The board is our own component (`src/board`): pieces move with CSS transforms, dragging uses pointer events and touches no React state while the piece moves, legality is checked in the browser, arrows and square marks are drawn with right-click (right-drag for arrows).
-* Boards and pieces are themes. The default board is an original "icy" palette with a light texture; the default pieces are the BSD-licensed *cburnett* set. Commercial sets (for example those of other chess sites) are not bundled; the plan is a local folder of images that you can add yourself.
+* Three independent choices, all remembered: **website** (four palettes, Glacier, Paper, Forest and Graphite, each with a light and a dark mode; light is the default, "system" is an option), **board** (seven original colour themes, an optional light texture, or your own two colours) and **pieces** (six bundled sets with permissive licences, credits in the settings). A quick switcher sits beside the board. Commercial sets of other chess sites are not bundled; the plan is a local folder of images that you can add yourself.
+* Review shows what Chess.com-style reviews show: a class for every move (brilliant, great, best, excellent, good, book, inaccuracy, mistake, miss, blunder) as a round icon on the board, in the move list and in a summary with counts per player, accuracy for both players and accuracy by phase.
 
 ## Sample data
 

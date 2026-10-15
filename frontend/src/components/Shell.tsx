@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Activity, BookOpen, Compass, GraduationCap, Home, Library, Moon, Settings, Sun, Swords, User } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { useUi } from "@/state/ui";
+import { resolveMode, useUi } from "@/state/ui";
 import { IconButton } from "./ui/IconButton";
 import { TipProvider } from "./ui/Tip";
 
@@ -17,7 +17,8 @@ const NAV = [
 const TITLES: Record<string, string> = { "/": "Home", "/library": "Library", "/coach": "Coach", "/play": "Play", "/explorer": "Explorer", "/style": "Profile", "/books": "Books", "/settings": "Settings", "/activity": "Activity" };
 
 export function Shell() {
-  const { theme, toggleTheme } = useUi();
+  const { mode, toggleMode } = useUi();
+  const dark = resolveMode(mode) === "dark";
   const { pathname } = useLocation();
   const title = pathname.startsWith("/review") ? "Review" : TITLES[pathname] ?? "";
   return (
@@ -41,7 +42,7 @@ export function Shell() {
           <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted max-sm:hidden" title="This is a prototype: games and analyses shown are sample data">Prototype · sample data</span>
           <div className="ml-auto flex items-center gap-1">
             <NavLink to="/activity"><IconButton label="Activity" tabIndex={-1}><Activity size={18} strokeWidth={1.8} /></IconButton></NavLink>
-            <IconButton label={theme === "dark" ? "Light theme" : "Dark theme"} onClick={toggleTheme}>{theme === "dark" ? <Sun size={18} strokeWidth={1.8} /> : <Moon size={18} strokeWidth={1.8} />}</IconButton>
+            <IconButton label={dark ? "Light mode" : "Dark mode"} onClick={toggleMode}>{dark ? <Sun size={18} strokeWidth={1.8} /> : <Moon size={18} strokeWidth={1.8} />}</IconButton>
           </div>
         </header>
         <main className="min-h-0 overflow-auto"><Outlet /></main>

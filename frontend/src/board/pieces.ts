@@ -1,24 +1,32 @@
-import bd from "@/assets/pieces/cburnett/bd.svg";
-import bl from "@/assets/pieces/cburnett/bl.svg";
-import kd from "@/assets/pieces/cburnett/kd.svg";
-import kl from "@/assets/pieces/cburnett/kl.svg";
-import nd from "@/assets/pieces/cburnett/nd.svg";
-import nl from "@/assets/pieces/cburnett/nl.svg";
-import pd from "@/assets/pieces/cburnett/pd.svg";
-import pl from "@/assets/pieces/cburnett/pl.svg";
-import qd from "@/assets/pieces/cburnett/qd.svg";
-import ql from "@/assets/pieces/cburnett/ql.svg";
-import rd from "@/assets/pieces/cburnett/rd.svg";
-import rl from "@/assets/pieces/cburnett/rl.svg";
-
 export type Colour = "w" | "b";
 export type Role = "p" | "n" | "b" | "r" | "q" | "k";
 export interface PieceInfo { colour: Colour; role: Role }
 
-/** A piece set is one image per piece. The default is the BSD-licensed cburnett set; custom sets are plain folders served by the backend (later). */
-export interface PieceSet { id: string; name: string; url(p: PieceInfo): string }
+/** A piece set is one image per piece. */
+export interface PieceSet { id: string; name: string; author: string; licence: string; url(p: PieceInfo): string }
 
-const CBURNETT: Record<string, string> = { wb: bl, wk: kl, wn: nl, wp: pl, wq: ql, wr: rl, bb: bd, bk: kd, bn: nd, bp: pd, bq: qd, br: rd };
+// every folder in assets/pieces holds wK.svg ... bP.svg; small files are inlined by the bundler, so a set costs no extra request
+const FILES = import.meta.glob("../assets/pieces/*/*.svg", { eager: true, query: "?url", import: "default" }) as Record<string, string>;
 
-export const PIECE_SETS: PieceSet[] = [{ id: "cburnett", name: "Classic", url: (p) => CBURNETT[p.colour + p.role] }];
-export const DEFAULT_PIECE_SET = PIECE_SETS[0];
+const META: Record<string, { name: string; author: string; licence: string }> = {
+  cburnett: { name: "Classic", author: "Colin M.L. Burnett", licence: "BSD 3-clause" },
+  chessnut: { name: "Chessnut", author: "Alexis Luengas", licence: "Apache 2.0" },
+  rhosgfx: { name: "Rhos", author: "RhosGFX", licence: "CC0" },
+  celtic: { name: "Celtic", author: "Maurizio Monge", licence: "MIT" },
+  "kiwen-suwi": { name: "Kiwen", author: "neverRare", licence: "CC BY 4.0" },
+  papercut: { name: "Papercut", author: "Nikolay Anzarov", licence: "CC BY 4.0" },
+};
+const ORDER = ["cburnett", "chessnut", "rhosgfx", "celtic", "kiwen-suwi", "papercut"];
+
+function build(): PieceSet[] {
+  const sets = new Map<string, Record<string, string>>();
+  for (const [path, url] of Object.entries(FILES)) {
+    const m = path.match(/pieces\/([^/]+)\/([wb][KQRBNP])\.svg$/);
+    if (m) (sets.get(m[1]) ?? sets.set(m[1], {}).get(m[1])!)[m[2]] = url;
+  }
+  return ORDER.filter((id) => sets.has(id)).map((id) => ({ id, ...META[id], url: (p: PieceInfo) => sets.get(id)![p.colour + p.role.toUpperCase()] }));
+}
+const BUILT = build();
+/** all bundled sets (custom sets added by the player come from the backend later) */
+export const pieceSets = (): PieceSet[] => BUILT;
+export const DEFAULT_PIECE_SET = BUILT[0];
