@@ -49,6 +49,7 @@ and [training-resources.md](docs/training-resources.md) for the data.
 | **Game analysis** (`chessme/analysis`) | `chessme analyse`: classes every move in your games (Book, Brilliant, Best, ... Blunder), accuracy by game phase, your worst mistakes. |
 | **Opening explorer** (`chessme/book`) | A Lichess-style "what does everyone play here" lookup, built from a public database, broken down by rating band. |
 | **Chess-book reader** (`chessme/books`) | Reads 100+ public-domain chess books and annotated games, and trains a small language model on how they describe moves. |
+| **Human-likeness suite** (`chessme/humanlike`) | `chessme humanlike-*`: measures how human a move model plays (not just whether it guesses the human's move): blunders by clock, kinds of blunder, calibration, a classifier test, stimuli for a forced-choice study ([docs/humanlike.md](docs/humanlike.md)). |
 | **Coach** (`chessme/coach`) | `chessme coach`: a local web page that replays the biggest mistakes of a game, lets you find better moves with hints, explains why, and lets you play on ([docs/coach.md](docs/coach.md)). |
 | **Lichess bot** | Runs MeChess as an actual bot account on Lichess. |
 
@@ -123,6 +124,8 @@ More detail in [docs/architecture.md](docs/architecture.md).
 - [Game analysis](docs/game-analysis.md): move classes, accuracy, the `analyse` report
 - [Opening explorer](docs/opening-explorer.md): what's collected and how to query it
 - [Books, annotated games, and the language model](docs/language-model.md)
+- [Coach](docs/coach.md): the local training web page: replay, openings, endgames, steered games
+- [Human-likeness suite](docs/humanlike.md): what the `humanlike-*` commands measure and the rules they keep
 - [Running on Kaggle](docs/kaggle.md): the notebooks, quotas, checkpoints
 - [Data sources and privacy](docs/data-sources.md), [training resources](docs/training-resources.md),
   [third-party software](docs/third-party.md), [testing](docs/testing.md), [running long jobs](docs/operations.md)
