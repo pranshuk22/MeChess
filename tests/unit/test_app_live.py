@@ -144,5 +144,6 @@ def test_the_explorer_endpoint_needs_the_database_and_validates_input(tmp_path, 
         assert c.get("/api/explorer", params={"fen": "nonsense"}).status_code == 422
         from chessme.book import explorer as E
         monkeypatch.setattr(E, "query_position", lambda path, fen, rating=None, band=None: {"total": 5, "other": 0, "moves": [{"san": "e4", "uci": "e2e4", "games": 5, "share": 1.0, "white": 0.5, "draw": 0.2, "black": 0.3, "avg_rating": 1500, "eval": 0.2, "eval_n": 3, "top_game": None, "top_url": None, "top_rating": 0}]})
+        monkeypatch.setattr(E, "opening_at", lambda path, fen: ("C20", "King's Pawn Game"))
         r = c.get("/api/explorer", params={"fen": START, "rating": 1600}).json()
-        assert r["total"] == 5 and r["moves"][0]["san"] == "e4"
+        assert r["total"] == 5 and r["moves"][0]["san"] == "e4" and r["opening"] == {"eco": "C20", "name": "King's Pawn Game"}

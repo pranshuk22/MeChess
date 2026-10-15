@@ -16,7 +16,7 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:4173", viewport: { width: 1440, height: 900 },
     storageState: { cookies: [{ name: "mechess_session", value: token, domain: "127.0.0.1", path: "/", expires: -1, httpOnly: true, secure: false, sameSite: "Strict" }], origins: [] } },
   webServer: {
-    command: `npm run build && cd .. && MECHESS_TOKEN=${token} PYTHONPATH=. ${python} -m chessme app --data-dir ${data}/data --research-dir ${data}/research --legacy-coach-dir ${data}/coach --port 4173 --no-browser --seed-samples frontend/src/samples/sample-games.json --seed-stress 10000`,
+    command: `npm run build && cd .. && MECHESS_TOKEN=${token} PYTHONPATH=. ${python} -m chessme app --data-dir ${data}/data --research-dir ${data}/research --legacy-coach-dir ${data}/coach --bot-dir ${data}/bot --port 4173 --no-browser --seed-samples frontend/src/samples/sample-games.json --seed-stress 10000`,
     url: "http://127.0.0.1:4173/api/health", reuseExistingServer: false, timeout: 180_000,
   },
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],

@@ -120,4 +120,9 @@ def explorer(request: Request, fen: str, rating: int = Query(1500, ge=0, le=3500
     except ValueError:
         raise HTTPException(422, "that is not a position")
     from ...book import explorer as E
-    return E.query_position(str(path), fen, rating=rating)
+    out = E.query_position(str(path), fen, rating=rating)
+    try:
+        named = E.opening_at(str(path), fen)
+    except Exception:
+        named = None
+    return {**out, "opening": {"eco": named[0], "name": named[1]} if named else None}

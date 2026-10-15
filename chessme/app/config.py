@@ -10,6 +10,7 @@ class AppConfig:
     data_dir: Path = field(default_factory=lambda: Path("~/.mechess").expanduser())
     research_dir: Path = field(default_factory=lambda: ROOT / "data")          # where the command line tools keep explorer, tablebases, models, old analyses
     legacy_coach_dir: Path = field(default_factory=lambda: Path("~/.mechess-coach").expanduser())
+    bot_dir: Path = field(default_factory=lambda: ROOT / "bot")                  # the local lichess-bot checkout (see docs/lichess-bot.md)
     engine: str | None = None                                                   # path to Stockfish; None: look on the PATH
     port: int = 8765
     token: str | None = None                                                    # the access key of this run (None: no key, for tests); see security.TokenAuth
@@ -19,6 +20,7 @@ class AppConfig:
         self.data_dir = Path(self.data_dir).expanduser()
         self.research_dir = Path(self.research_dir).expanduser()
         self.legacy_coach_dir = Path(self.legacy_coach_dir).expanduser()
+        self.bot_dir = Path(self.bot_dir).expanduser()
 
     @property
     def db_path(self) -> Path:

@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { Activity, BarChart3, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords } from "lucide-react";
+import { Activity, BarChart3, Bot, BookOpen, ChevronsLeft, Compass, GraduationCap, Home, Library, Moon, PanelLeft, Settings, Sun, Swords } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { TipProvider, Tip } from "./ui/Tip";
 const GROUPS = [
   { label: "Overview", items: [{ to: "/", label: "Home", icon: Home, end: true }, { to: "/library", label: "Library", icon: Library }] },
   { label: "Train", items: [{ to: "/coach", label: "Coach", icon: GraduationCap }, { to: "/play", label: "Play", icon: Swords }] },
-  { label: "Explore", items: [{ to: "/explorer", label: "Explorer", icon: Compass }, { to: "/insights", label: "Insights", icon: BarChart3 }, { to: "/books", label: "Books", icon: BookOpen }] },
+  { label: "Explore", items: [{ to: "/explorer", label: "Explorer", icon: Compass }, { to: "/insights", label: "Insights", icon: BarChart3 }, { to: "/books", label: "Books", icon: BookOpen }, { to: "/bot", label: "Bot", icon: Bot }] },
 ];
 
 function Mark({ size = 28 }: { size?: number }) {
@@ -40,7 +40,7 @@ export function Shell() {
   const link = (to: string, label: string, Icon: typeof Home, opts: { end?: boolean; badge?: number } = {}) => (
     <Tip key={to} label={label} side="right">
       <NavLink to={to} end={opts.end} aria-label={label}
-        className={({ isActive }) => clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0",
+        className={({ isActive }) => clsx("group relative flex h-9 items-center gap-3 rounded-[9px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot"].includes(to) && "max-md:hidden",
           isActive ? "bg-[var(--rail-active)] text-[var(--rail-strong)]" : "text-[var(--rail-text)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-strong)]")}>
         {({ isActive }) => (<>
           {isActive && <span className="absolute -left-3 top-2 h-5 w-[3px] rounded-r-full bg-accent max-md:hidden" />}

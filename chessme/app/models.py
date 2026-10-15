@@ -106,3 +106,20 @@ class Repertoire(Base):
     colour: Mapped[str] = mapped_column(String)
     pgn: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class BookNote(Base):
+    """One annotated move from the chess books and annotated games (a position, the move, the comment about it), searchable by text; built from the book reader's output."""
+    __tablename__ = "book_notes"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fen: Mapped[str] = mapped_column(String)
+    san: Mapped[str] = mapped_column(String)
+    uci: Mapped[str] = mapped_column(String)
+    ply: Mapped[int | None] = mapped_column(Integer)
+    colour: Mapped[str | None] = mapped_column(String)
+    glyph: Mapped[str | None] = mapped_column(String)
+    judgement: Mapped[str | None] = mapped_column(String)
+    evaluation: Mapped[str | None] = mapped_column(String)
+    source: Mapped[str | None] = mapped_column(String)
+    comment: Mapped[str] = mapped_column(Text)
+    concepts: Mapped[str] = mapped_column(String, default=",")                 # ",outpost,zugzwang," so that a concept is found with LIKE

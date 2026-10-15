@@ -3,13 +3,15 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { RouteError } from "@/components/RouteError";
 import { Shell } from "@/components/Shell";
-import { Planned } from "@/features/Planned";
 import { HomePage } from "@/features/home/Home";
 
 const LibraryPage = lazy(() => import("@/features/library/Library").then((m) => ({ default: m.LibraryPage })));
 const ReviewPage = lazy(() => import("@/features/review/Review").then((m) => ({ default: m.ReviewPage })));
 const SettingsPage = lazy(() => import("@/features/settings/Settings").then((m) => ({ default: m.SettingsPage })));
 const CoachPage = lazy(() => import("@/features/coach/Coach").then((m) => ({ default: m.CoachPage })));
+const ExplorerPage = lazy(() => import("@/features/explorer/ExplorerPage").then((m) => ({ default: m.ExplorerPage })));
+const BotPage = lazy(() => import("@/features/bot/BotPage").then((m) => ({ default: m.BotPage })));
+const BooksPage = lazy(() => import("@/features/books/BooksPage").then((m) => ({ default: m.BooksPage })));
 const PlayPage = lazy(() => import("@/features/play/Play").then((m) => ({ default: m.PlayPage })));
 const InsightsPage = lazy(() => import("@/features/insights/Insights").then((m) => ({ default: m.InsightsPage })));
 const ActivityPage = lazy(() => import("@/features/Activity").then((m) => ({ default: m.ActivityPage })));
@@ -27,9 +29,10 @@ const router = createBrowserRouter([{
     { path: "/settings", element: wait(<SettingsPage />) },
     { path: "/coach", element: wait(<CoachPage />) },
     { path: "/play", element: wait(<PlayPage />) },
-    { path: "/explorer", element: <Planned title="Opening explorer" text="What people of your rating play in any position." items={["By rating band and speed", "Frequency and score of every move"]} milestone="milestone 6" /> },
+    { path: "/explorer", element: wait(<ExplorerPage />) },
     { path: "/insights", element: wait(<InsightsPage />) },
-    { path: "/books", element: <Planned title="Books" text="Search the public-domain chess books by idea." items={["Concept search", "Passages with the position they describe"]} milestone="milestone 6" /> },
+    { path: "/books", element: wait(<BooksPage />) },
+    { path: "/bot", element: wait(<BotPage />) },
     { path: "/activity", element: wait(<ActivityPage />) },
   ],
 }]);

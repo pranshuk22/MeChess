@@ -15,9 +15,10 @@ from .jobs import JobManager
 from . import importers
 from .live import LiveManager
 from .play import PlayService
+from .bot_service import BotService
 from .coach_modes import CoachModes
 from .quick import QuickEngine
-from .routers import api, coach, coach_modes, live, play, themes
+from .routers import api, books, bot, coach, coach_modes, live, play, themes
 from .security import COOKIE, LocalOnly, SecurityHeaders, TokenAuth, allowed, key_ok
 
 HERE = Path(__file__).parent
@@ -62,8 +63,10 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
         app.state.play = PlayService(config)
         app.state.quick = QuickEngine(config, app.state.sessions)
         app.state.modes = CoachModes(config, app.state.sessions, app.state.quick)
+        app.state.bot = BotService(config.bot_dir)
         app.state.reference = REF.load()
         yield
+        app.state.bot.close()
         app.state.modes.close()
         app.state.quick.close()
         app.state.play.close()
@@ -98,6 +101,8 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     app.include_router(live.router)
     app.include_router(coach.router)
     app.include_router(coach_modes.router)
+    app.include_router(bot.router)
+    app.include_router(books.router)
     app.include_router(play.router)
     app.include_router(themes.router)
 

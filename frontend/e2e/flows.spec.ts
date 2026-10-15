@@ -17,16 +17,17 @@ test("home shows the numbers and the workspace checklist from the backend", asyn
   await page.keyboard.press("Escape");
 });
 
-test("the library searches and filters on the server", async ({ page }) => {
+test("the library searches and filters on the server", async ({ page, request }) => {
+  const total = async (query: string) => (await (await request.get(`/api/games?limit=1&${query}`)).json()).total as number;
   await page.goto("/library");
   await page.getByLabel("Search games").fill("Anderssen");
   await expect(page.getByText("2 games match")).toBeVisible();
   await expect(page.locator("a[role=row]")).toHaveCount(2);
   await page.getByLabel("Search games").fill("");
   await page.getByRole("button", { name: "Not analysed" }).click();
-  await expect(page.getByText(/10,000 games match/)).toBeVisible();
+  await expect(page.getByText(`${(await total("analysed=false")).toLocaleString()} games match`)).toBeVisible();
   await page.getByRole("button", { name: "Analysed", exact: true }).click();
-  await expect(page.getByText("12 games match")).toBeVisible();
+  await expect(page.getByText(`${(await total("analysed=true")).toLocaleString()} games match`)).toBeVisible();
 });
 
 test("importing a PGN runs as a job, shows in Activity and lands in the library, and analysing it adds the review", async ({ page, request }) => {
@@ -129,4 +130,13 @@ test("the opening cache can be built from your games, used, and deleted", async 
   await page.getByRole("button", { name: "Delete all" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
   await expect.poll(async () => (await (await request.get("/api/cache")).json()).positions).toBe(0);
+});
+
+test("the explorer page, the books page and the bot page say what is missing instead of failing", async ({ page }) => {
+  await page.goto("/explorer");
+  await expect(page.getByText("The opening explorer is not built yet")).toBeVisible();
+  await page.goto("/books");
+  await expect(page.getByText("No book comments found")).toBeVisible();
+  await page.goto("/bot");
+  await expect(page.getByText("The bot program is not installed")).toBeVisible();
 });

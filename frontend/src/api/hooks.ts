@@ -91,7 +91,7 @@ export interface Themes { pieces: { id: string; name: string; files: Record<stri
 export const useThemes = () => useQuery({ queryKey: ["themes"], queryFn: () => api<Themes>("/api/themes"), staleTime: 60_000 });
 
 export interface ExplorerMove { san: string; uci: string; games: number; share: number; white: number; draw: number; black: number; avg_rating: number; eval: number | null }
-export interface ExplorerResult { total: number; other: number; moves: ExplorerMove[] }
+export interface ExplorerResult { total: number; other: number; moves: ExplorerMove[]; opening?: { eco: string; name: string } | null }
 /** what players play in a position; `unavailable` when the explorer database has not been built */
 export function useExplorer(fen: string, enabled: boolean, rating = 1500) {
   return useQuery({

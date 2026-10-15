@@ -809,7 +809,7 @@ def cmd_app(args):
     import os
     import secrets
     token = os.environ.get("MECHESS_TOKEN") or secrets.token_urlsafe(24)                    # the access key of this run (see docs/app.md)
-    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir, token=token)
+    cfg = AppConfig(data_dir=args.data_dir, research_dir=args.research_dir, engine=args.engine, port=args.port, legacy_coach_dir=args.legacy_coach_dir, token=token, bot_dir=args.bot_dir)
     url = f"http://127.0.0.1:{args.port}/?t={token}"
     if static_dir() is None:
         print("(the built frontend is not there: run `npm install && npm run build` in frontend/, or use `npm run dev` for development; the API still works)")
@@ -2955,7 +2955,8 @@ def main():
     ap_.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); ap_.add_argument("--port", type=int, default=8765); ap_.add_argument("--no-browser", action="store_true")
     ap_.add_argument("--dev", action="store_true", help="also accept requests from the Vite dev server (localhost:5173)")
     ap_.add_argument("--seed-samples", help="load the sample games of this JSON file (end-to-end tests and demos)"); ap_.add_argument("--seed-stress", type=int, default=0, help="add this many plain games (end-to-end test of a long library)")
-    ap_.add_argument("--legacy-coach-dir", default="~/.mechess-coach", help="where the old command-line coach kept reviewed games (offered for import)"); ap_.set_defaults(func=cmd_app)
+    ap_.add_argument("--legacy-coach-dir", default="~/.mechess-coach", help="where the old command-line coach kept reviewed games (offered for import)")
+    ap_.add_argument("--bot-dir", default=str(config.ROOT / "bot"), help="the lichess-bot checkout the bot page starts and stops (docs/lichess-bot.md)"); ap_.set_defaults(func=cmd_app)
     hq = sub.add_parser("humanlike-quality", help="Stockfish judges every move of the first N half-moves of each game (evaluation lost, error, blunder, engine's first choice) for the classifier test")
     hq.add_argument("--games", required=True, help="games of humanlike-humangames or humanlike-selfplay"); hq.add_argument("--out", required=True)
     hq.add_argument("--engine", help="path to Stockfish (default: stockfish on the PATH)"); hq.add_argument("--workers", type=int, default=1)
