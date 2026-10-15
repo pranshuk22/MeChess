@@ -8,6 +8,7 @@ import chess.pgn
 from sqlalchemy.orm import Session
 
 from ..analysis import runner as AR
+from ..coach import library as L
 from ..coach import server as CS
 from ..coach import steering as ST
 from .models import Analysis, Game
@@ -54,6 +55,22 @@ class CoachModes:
     def call(self, method: str, *args, **kw):
         with self._lock:
             return self._check(getattr(self._coach(), method)(*args, **kw))
+
+    # ---- the opening library and the repertoire you already play ----------------------------------------------------------------------------
+    def library_pgn(self, family: str, colour: str, rating: int):
+        """A repertoire PGN for `family` from the opening database (the explorer decides which of your moves are kept, when it is there)."""
+        with self._lock:
+            replies = self._coach()._replies(int(rating))
+        return L.library_pgn(family, colour, replies)
+
+    def mine(self, colour: str):
+        """(pgn, stats) of the repertoire your own games show for `colour`."""
+        from . import prep_job
+        from ..prep import graph as GR
+        with self.sessions() as s:
+            games, _ = prep_job.user_games(s, limit=3000)
+        graph = GR.build([g for g in games if g.colour == colour], max_ply=16)
+        return L.repertoire_from_graph(graph, colour)
 
     def finish_steered(self, sid: str, colour_hint=None) -> dict:
         """End a steered game: analyse it, report on the situations the opponent steered toward, save game and analysis, add the mistakes as practice positions."""
