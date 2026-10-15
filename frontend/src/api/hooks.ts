@@ -50,7 +50,7 @@ export function useJobEvents() {
       const job = JSON.parse((e as MessageEvent).data) as Job;
       qc.setQueryData<Job[]>(["jobs"], (old = []) => [job, ...old.filter((j) => j.id !== job.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       if (job.status === "done" || job.status === "failed" || job.status === "cancelled") {
-        for (const k of ["games", "game", "stats", "workspace", "cache"]) qc.invalidateQueries({ queryKey: [k] });
+        for (const k of ["games", "game", "stats", "workspace", "cache", "drills", "profile"]) qc.invalidateQueries({ queryKey: [k] });
       }
     });
     return () => es.close();
@@ -112,3 +112,16 @@ export function useClearCache() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (source?: string) => api<{ deleted: number }>(`/api/cache${source ? `?source=${source}` : ""}`, { method: "DELETE" }), onSuccess: () => qc.invalidateQueries({ queryKey: ["cache"] }) });
 }
+
+export interface DrillStats { total: number; due: number; boxes: number[] }
+export interface Drill { id: string; fen: string; colour: "white" | "black"; ply: number | null; move: number | null; phase: string | null; class: string | null; loss: number | null; playedSan: string; gameId: string | null; box: number }
+export const useDrillStats = () => useQuery({ queryKey: ["drills"], queryFn: () => api<DrillStats>("/api/coach/drills") });
+export interface Profile {
+  games: number; moves: number; mistake_rate?: number; blunder_rate?: number;
+  by_phase?: Record<string, { moves: number; mistake_rate: number; mean_loss: number; z: number }>;
+  by_situation?: Record<string, { moves: number; mistake_rate: number; mean_loss: number; z: number }>;
+  kinds?: Record<string, { count: number; share: number }>;
+  sentences: string[]; foci: { id: string; reason: string }[];
+  reference?: { band: number; speed: string; ref_moves: number; comparable: boolean; overall: { moves: number; you: number; ref: number; z: number }; areas: Record<string, { moves: number; you: number; ref: number | null; z: number }> };
+}
+export const useProfile = () => useQuery({ queryKey: ["profile"], queryFn: () => api<Profile>("/api/coach/profile") });

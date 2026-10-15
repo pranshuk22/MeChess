@@ -9,6 +9,7 @@ import { HomePage } from "@/features/home/Home";
 const LibraryPage = lazy(() => import("@/features/library/Library").then((m) => ({ default: m.LibraryPage })));
 const ReviewPage = lazy(() => import("@/features/review/Review").then((m) => ({ default: m.ReviewPage })));
 const SettingsPage = lazy(() => import("@/features/settings/Settings").then((m) => ({ default: m.SettingsPage })));
+const CoachPage = lazy(() => import("@/features/coach/Coach").then((m) => ({ default: m.CoachPage })));
 const PlayPage = lazy(() => import("@/features/play/Play").then((m) => ({ default: m.PlayPage })));
 const InsightsPage = lazy(() => import("@/features/insights/Insights").then((m) => ({ default: m.InsightsPage })));
 const ActivityPage = lazy(() => import("@/features/Activity").then((m) => ({ default: m.ActivityPage })));
@@ -24,7 +25,7 @@ const router = createBrowserRouter([{
     { path: "/library", element: wait(<LibraryPage />) },
     { path: "/review/:id?", element: wait(<ReviewPage />) },
     { path: "/settings", element: wait(<SettingsPage />) },
-    { path: "/coach", element: <Planned title="Coach" text="Practice that comes from your own games." items={["Positions from your mistakes, repeated at growing intervals", "Opening practice from your repertoire", "Endgames checked against tablebases", "Steered games that train a chosen weakness", "Where you give away points compared with players of your rating"]} milestone="milestone 4" /> },
+    { path: "/coach", element: wait(<CoachPage />) },
     { path: "/play", element: wait(<PlayPage />) },
     { path: "/explorer", element: <Planned title="Opening explorer" text="What people of your rating play in any position." items={["By rating band and speed", "Frequency and score of every move"]} milestone="milestone 6" /> },
     { path: "/insights", element: wait(<InsightsPage />) },

@@ -1,6 +1,6 @@
 import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CircleAlert, Download, Minus, Sparkles, Swords } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAnalyse, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
+import { useAnalyse, useDrillStats, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
 import { Board } from "@/board/Board";
 import { MiniEval } from "@/components/MiniEval";
 import { Calendar, QualityBar } from "@/components/charts";
@@ -45,10 +45,7 @@ export function HomePage() {
           <div className="space-y-5">
             <Workspace ws={ws.data} loading={ws.isLoading} />
             {stats.data && Object.keys(stats.data.classCounts).length > 0 && <Panel><PanelTitle sub="Your last 100 analysed games">Move quality</PanelTitle><div className="px-5 pb-5"><QualityBar counts={stats.data.classCounts} /></div></Panel>}
-            <Panel>
-              <PanelTitle sub="Positions from your own mistakes">Practice</PanelTitle>
-              <div className="px-5 pb-5"><p className="text-[13.5px] text-muted">They come back after a day, then after longer gaps once you get them right.</p><Link to="/coach"><Button className="mt-3 w-full">Open the coach</Button></Link></div>
-            </Panel>
+            <PracticeCard />
           </div>
         </div>
       </>)}
@@ -166,6 +163,20 @@ function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
           </li>
         ))}
       </ul>
+    </Panel>
+  );
+}
+
+function PracticeCard() {
+  const d = useDrillStats().data;
+  return (
+    <Panel>
+      <PanelTitle sub="Positions from your own mistakes">Practice</PanelTitle>
+      <div className="px-5 pb-5">
+        {d && d.total > 0 ? <p className="text-[13.5px] text-muted"><b className="tnum font-display text-[22px] text-text">{d.due}</b> {d.due === 1 ? "position is" : "positions are"} due, of {d.total}.</p>
+          : <p className="text-[13.5px] text-muted">They come from your analysed games and return after a day, then after longer gaps once you get them right.</p>}
+        <Link to="/coach"><Button className="mt-3 w-full" variant={d?.due ? "primary" : "secondary"}>{d?.due ? "Practise now" : "Open the coach"}</Button></Link>
+      </div>
     </Panel>
   );
 }
