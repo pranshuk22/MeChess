@@ -46,6 +46,7 @@
     <div class="card" id="steercard">
       <b>Play a game I steer</b> <span class="muted">a normal game; the opponent plays sound moves but leans toward the situations you want to practise, then we review it</span>
       <div id="focilist" style="margin:8px 0"></div>
+      <button id="suggest" class="secondary">Suggest from my weaknesses</button> <span class="muted" id="suggestinfo"></span>
       <div class="row"><div><label class="muted">I play</label><select id="steercolor"><option value="white">White</option><option value="black">Black</option></select></div>
         <div><button id="steerstart">Start the game</button></div></div>
       <p id="steerinfo" class="muted"></p>
@@ -215,6 +216,13 @@ async function loadFoci() {
     l.appendChild(c); l.appendChild(document.createTextNode(` ${f.title}: ${f.tip}`)); box.appendChild(l); });
 }
 $("steerstart").onclick = startSteer;
+$("suggest").onclick = async () => {
+  const o = await api("/api/steer/suggest", {});
+  document.querySelectorAll("input.focus").forEach(c => c.checked = false);
+  if (!o.foci.length) { $("suggestinfo").textContent = o.games ? "Nothing stands out in your reviewed games yet." : "Review a game first, then I can suggest what to practise."; return; }
+  o.foci.forEach(f => { const c = document.querySelector(`input.focus[value=${f.id}]`); if (c) c.checked = true; });
+  $("suggestinfo").textContent = o.foci.map(f => `${f.title} — ${f.reason}`).join("; ");
+};
 let endTheme = null, endLevel = 0;
 function endgameRefresh() {
   selected = null; setButtons(); endLevel = view.over ? 0 : endLevel;

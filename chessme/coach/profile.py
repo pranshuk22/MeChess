@@ -87,3 +87,20 @@ def sentences(prof):
             area = f["area"].split(": ")[1]
             out.append(f"In the {area} situations ({f['moves']} moves) you give away points on {100 * f['rate']:.0f}% of your moves, against {100 * f['elsewhere']:.0f}% elsewhere. Try: {f['practice']}.")
     return out or ["Nothing stands out yet (or there are not enough moves): review a few more games."]
+
+
+FOCUS_FOR = {"phase: endgame": "trades", "situation: ahead": "convert", "situation: behind": "defend", "phase: middlegame": "sharp",
+             "kind: mate in 1": "threats", "kind: ignores a threat": "threats", "kind: walks into a capture": "threats", "kind: deeper": "sharp"}
+
+
+def suggest_foci(prof, limit=3):
+    """[(focus id, reason)] for a steered game, from the profile's findings, strongest first (at most `limit`, each focus once)."""
+    out, seen = [], set()
+    for f in prof.get("findings", []):
+        focus = FOCUS_FOR.get(f["area"])
+        if focus and focus not in seen:
+            seen.add(focus)
+            out.append((focus, f"{f['area']} ({100 * f['rate']:.0f}% of the moves give away points)"))
+        if len(out) == limit:
+            break
+    return out

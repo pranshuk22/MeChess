@@ -41,3 +41,21 @@ def test_a_dominant_kind_of_mistake_is_reported_with_its_practice():
     prof = P.profile(rows)
     assert any(f["area"] == "kind: walks into a capture" for f in prof["findings"])
     assert "put a piece where it can be captured" in " ".join(P.sentences(prof))
+
+
+def test_foci_are_suggested_from_the_findings_once_each_strongest_first():
+    prof = {"findings": [{"area": "situation: ahead", "rate": 0.3}, {"area": "kind: ignores a threat", "rate": 0.5}, {"area": "kind: walks into a capture", "rate": 0.45},
+                         {"area": "phase: endgame", "rate": 0.2}, {"area": "phase: opening", "rate": 0.2}]}
+    out = P.suggest_foci(prof)
+    assert [f for f, _ in out] == ["convert", "threats", "trades"] and "30%" in out[0][1]            # threats once; opening has no focus; limited to three
+    assert P.suggest_foci({"findings": []}) == []
+
+
+def test_the_app_suggests_foci_for_the_stored_games(tmp_path):
+    from chessme.coach import server as CS
+    from tests.unit.test_coach_server import PGN, fake_search
+    app = CS.CoachApp(fake_search, data_dir=tmp_path)
+    assert app.steer_suggest() == {"foci": [], "games": 0}
+    app.start(PGN, 0, "white")
+    out = app.steer_suggest()
+    assert out["games"] == 1 and isinstance(out["foci"], list)

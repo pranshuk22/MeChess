@@ -217,6 +217,11 @@ class CoachApp:
         prof["sentences"] = PR.sentences(prof)
         return prof
 
+    def steer_suggest(self):
+        """The foci that fit the player's weaknesses, with the reason for each."""
+        prof = self.profile()
+        return {"foci": [{"id": f, "title": ST.FOCI[f]["title"], "reason": r} for f, r in PR.suggest_foci(prof)], "games": prof["games"]}
+
     def start_drills(self, limit=10):
         """A replay of the mistake positions that are due."""
         ex = self.drills.due(limit=limit)
@@ -333,6 +338,8 @@ def make_handler(app, fetch=fetch_games):
                 if path == "/api/games":
                     text = body.get("pgn") or fetch(body.get("platform", "lichess"), body.get("user", ""), body.get("max", 10))
                     return self._send(200, {"games": app.games_in(text), "pgn": text})
+                if path == "/api/steer/suggest":
+                    return self._send(200, app.steer_suggest())
                 if path == "/api/steer/foci":
                     return self._send(200, {"foci": [{"id": k, "title": v["title"], "tip": v["tip"]} for k, v in ST.FOCI.items()]})
                 if path == "/api/steer/start":
