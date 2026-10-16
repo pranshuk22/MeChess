@@ -1,5 +1,15 @@
 # The coach
 
+The coach is part of the app ([app.md](app.md), the **Coach** page and the review's **Retry your mistakes**) and also exists as the older stand-alone page described below (`chessme coach`). In the app:
+
+* **Graded feedback.** Every move you try is judged by the engine and graded: *best* (the engine's first choice), *great* (as good, within 3 points of win chance), *good* (sound, not the best, up to 6 points: it counts and you may try for the best), *inaccuracy*, *mistake* and *blunder*. Each grade comes with reasons built from the board and the engine only: what the move does, what it allows (a checkmate, a lost piece, the engine's line), what was better, and for the best move why it is better than the alternatives. A move that is not good does not give the answer away. (`chessme/coach/feedback.py`; used by drills, the review retry and opening practice.)
+* **Practice** from your own mistakes on a spaced schedule (boxes of 1 day to 5 weeks).
+* **Openings.** An *opening library* (about 150 named openings from the opening database, as repertoires pruned by what players of your rating really play), *your own repertoire from your games* (the moves you played in at least two games with their results; practise it and find its gaps), saved repertoires and your own PGN. All are practised against the replies players of a rating you choose (needs the explorer database).
+* **Endgames** against the Syzygy tablebases, **steered games**, and **Weaknesses** (where you give away points, compared with yourself and, with the reference counts shipped in `chessme/coach/reference_rates.json`, with players of your rating).
+* **Prepare against an opponent** is in [app.md](app.md#prepare-against-an-opponent).
+
+The stand-alone page:
+
 A local web page that takes you back over the game you just played, finds the moments where you gave away the most, asks you to find a better move, tells you in plain
 sentences what went wrong and why the better move is better, and lets you play on from the corrected position against the engine. Everything runs on your computer.
 
@@ -34,5 +44,4 @@ Play a game I steer: choose what to practise (notice threats, play the endgame, 
 Privacy: the server listens on 127.0.0.1 only; your games and attempts stay in memory on this machine; the only network use is the optional Lichess fetch. The page loads no outside
 scripts, fonts or images.
 
-Planned (see the research notes): a weakness profile, opening and variation practice, a steered game that trains chosen weaknesses, endgame practice checked with tablebases, drills
-from your own mistakes with spaced repetition, and an optional language-model chat whose claims are checked against the engine.
+Built since: the weakness profile, opening practice, steered games, endgame practice with tablebases and drills with spaced repetition are all in the app. Still planned: endgame practice without the tablebase download, theme tags on drills, and an optional language-model chat whose claims are checked against the engine.

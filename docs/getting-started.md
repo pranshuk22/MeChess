@@ -13,6 +13,10 @@
 
 Python packages are pinned in `requirements.txt` (runtime) and `requirements-dev.txt` (tests).
 
+## The app only
+
+If you just want the browser app (import games, review, practise, play, prepare against an opponent): `pip install -r requirements.txt`, then `make app` (needs Node for the one-time build of the pages; Stockfish is recommended). Details: [app.md](app.md). The engine build below is for the research and engine side.
+
 ## Install and build
 
 ```bash
@@ -73,6 +77,7 @@ never committed. The example file explains every setting:
 | `CHESSME_PROFILE` | default profile name for commands with `--profile` (default `example`) |
 | `LICHESS_TOKEN` | optional Lichess API token (higher rate limits). **Read only from the environment**, never from files |
 | `CHESSME_MAIA3_REPO`, `CHESSME_MAIA3_CKPT`, `CHESSME_MAIA2_REPO`, `CHESSME_MAIA2_CKPT`, `CHESSME_EXTRA_PATH` | enable the optional integration test that checks our Maia scoring against their reference code (see [testing](testing.md)) |
+| `MECHESS_TOKEN` | the app's access key (default: a random one per run); set it to keep the same address between runs |
 | `OMP_NUM_THREADS` | limits CPU threads for PyTorch when training on a shared machine |
 
 ## Playing against it

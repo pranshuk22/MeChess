@@ -3,6 +3,8 @@
 A bot account lets other players (and other bots) play MeChess, and gives the calibrated dial a real Lichess rating to be compared with.
 It uses [lichess-bot](https://github.com/lichess-bot-devs/lichess-bot) (AGPL-3.0), which is installed **next to** this repository, never copied into it.
 
+In the app, the **Bot** page starts and stops the bot and shows its log; the token is never typed into the app (it is read from the environment or the Keychain by the launcher).
+
 ## 1. The account and the token
 
 1. Create a **new** Lichess account for the bot. **It must not have played any game**, and upgrading is **irreversible**: the account can only play as a

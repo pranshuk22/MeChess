@@ -122,7 +122,7 @@ See [style-analysis.md](style-analysis.md) for the method. Commands:
 | `style-games-fetch` | Refetch each cohort player's games with clocks and openings and compute the game-level features (resumable; `chessme control pause fetch2`) |
 | `style-games-report` | Reliability of the game-level features, the pre-fixed keep rule, identification of players (with the time-control-only baseline) and held-out factors |
 | `style-embed-train` | Train the contrastive player embedding on the game-level features (resumable, pausable); reports held-out identification, also among rating-matched players, and how much of the embedding is rating |
-| `app` | The MeChess web app (API, database, background jobs, the built frontend) on 127.0.0.1, opened with a one-run access key: `--data-dir`, `--engine`, `--port`, `--no-browser`, `--dev` ([details](app.md)) |
+| `app` | The MeChess web app (API, database, background jobs, the built frontend) on 127.0.0.1, opened with a one-run access key: `--data-dir`, `--research-dir`, `--legacy-coach-dir`, `--bot-dir`, `--engine`, `--port`, `--host`, `--no-browser`, `--dev`, `--seed-samples` ([details](app.md)); `tools/build_opening_names.py` repacks the opening names the app bundles |
 | `report-select` | Personal report step 1: choose the newest usable games of your profile and write them as a PGN with your side |
 | `report-leaks` | Personal report step 2: rank where expected points are lost (opening, phase) and test the ranking's split-half stability |
 | `coach` | Start the local coach (web page on 127.0.0.1): fetch or paste a game, go through its biggest mistakes, find better moves with hints, read why, play on; `--engine`, `--nodes`, `--port`, `--no-browser`, `--reference` ([details](coach.md)) |

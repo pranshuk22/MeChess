@@ -22,8 +22,9 @@ make test
    minutes) also runs the verified perft suite and the Python integration tests against the real
    engine binary. CI runs `make test test-verify` plus the full Python suite on every push and
    pull request.
-3. **Keep commits small** and focused on one change.
-4. **No personal data.** Never commit account names, tokens, or anything under `data/` or
+3. **The app has two halves.** Backend changes that touch the database need an Alembic migration (`chessme/app/migrations/versions`); a changed API needs `python tools/gen_ts_types.py frontend/src/api/schema.ts` (a test fails when the generated types are stale); frontend changes need `cd frontend && npx tsc --noEmit && npm test && npx playwright test` (see [docs/ui.md](docs/ui.md)). New pages must pass the accessibility scan, which is part of the browser tests.
+4. **Keep commits small** and focused on one change.
+5. **No personal data.** Never commit account names, tokens, or anything under `data/` or
    `configs/profiles/` other than `example.yaml`; these are git-ignored on purpose. See
    [docs/data-sources.md](docs/data-sources.md) for the privacy rules the code follows.
 

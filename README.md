@@ -9,7 +9,7 @@ moves *a specific person* tends to play from their own game history, and uses a 
 underneath to keep that playable. Point it at your Lichess or chess.com account and it studies
 your openings, your habits, and your move preferences, imperfections included.
 
-[Quick start](#quick-start) · [How it's built](docs/architecture.md) · [Run it as a Lichess bot](docs/lichess-bot.md) · [Analyse your own games](docs/game-analysis.md)
+[Quick start](#quick-start) · [The app](docs/app.md) · [How it's built](docs/architecture.md) · [Run it as a Lichess bot](docs/lichess-bot.md) · [Analyse your own games](docs/game-analysis.md)
 
 ## What makes it different
 
@@ -20,6 +20,11 @@ your openings, your habits, and your move preferences, imperfections included.
   trained model picks among them.
 - **Built-in game analysis**: classifies every move (Best, Good, Mistake, Blunder, ...) like a
   post-game review, judged by Stockfish.
+- **A study app in your browser, entirely local**: import your games, review them with a coach card that
+  says in plain words why a move was good or bad, practise your mistakes and your openings (from a built-in
+  opening library or the repertoire your own games show), see your profile (performance rating, openings,
+  habits, tactics you miss), play against the computer with clocks, **prepare against a named opponent**, and
+  analyse any position. No ads, no limits, nothing leaves your computer ([docs/app.md](docs/app.md)).
 - **Config-driven, not personal**: no account is hard-coded anywhere; point it at your own games
   and it's your engine, not ours.
 
@@ -50,13 +55,24 @@ and [training-resources.md](docs/training-resources.md) for the data.
 | **Opening explorer** (`chessme/book`) | A Lichess-style "what does everyone play here" lookup, built from a public database, broken down by rating band. |
 | **Chess-book reader** (`chessme/books`) | Reads 100+ public-domain chess books and annotated games, and trains a small language model on how they describe moves. |
 | **Human-likeness suite** (`chessme/humanlike`) | `chessme humanlike-*`: measures how human a move model plays (not just whether it guesses the human's move): blunders by clock, kinds of blunder, calibration, a classifier test, stimuli for a forced-choice study ([docs/humanlike.md](docs/humanlike.md)). |
-| **The app** (`chessme/app`, `frontend/`) | `chessme app`: everything in one place in your browser: import games, review them with the engine, practise your mistakes, play, insights ([docs/app.md](docs/app.md)). |
-| **Coach** (`chessme/coach`) | `chessme coach`: a local web page that replays the biggest mistakes of a game, lets you find better moves with hints, explains why, and lets you play on ([docs/coach.md](docs/coach.md)). |
+| **The app** (`chessme/app`, `frontend/`) | `chessme app`: everything in one place in your browser: import games (Lichess, Chess.com, PGN), review them with the engine and a coach card, retry your mistakes, practise openings and endgames, play with clocks, prepare against an opponent, analyse any position, and a profile of how you play ([docs/app.md](docs/app.md), [docs/ui.md](docs/ui.md)). |
+| **Preparation** (`chessme/prep`) | `Prepare against an opponent` in the app: reads an opponent's public games, finds their weak openings, traps and middlegame / endgame / clock weaknesses, and plans your moves against what they really play ([docs/app.md](docs/app.md#prepare-against-an-opponent)). |
+| **Coach** (`chessme/coach`) | graded feedback on every move you try (best, great, good, inaccuracy, mistake, blunder, with reasons), practice positions on a spaced schedule, opening practice from a library or your own games, endgames, steered games; also the older stand-alone page `chessme coach` ([docs/coach.md](docs/coach.md)). |
 | **Lichess bot** | Runs MeChess as an actual bot account on Lichess. |
 
 ## Quick start
 
-You need Python 3.10+ and a C++17 compiler (`clang++` or `g++`). Stockfish is optional but
+**Just want the app?** (no engine build needed; [Stockfish](docs/stockfish.md) is recommended for analysis)
+
+```bash
+git clone https://github.com/<you>/MeChess.git && cd MeChess
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+make app        # builds the pages once (needs Node), then opens http://127.0.0.1:8765 with a one-run access key
+```
+
+Everything the app does is described in [docs/app.md](docs/app.md). The rest of this page is the research and engine side.
+
+**The engine and the research tools.** You need Python 3.10+ and a C++17 compiler (`clang++` or `g++`). Stockfish is optional but
 recommended: it's what judges "good moves" for analysis and style measurement.
 
 ```bash
@@ -125,8 +141,9 @@ More detail in [docs/architecture.md](docs/architecture.md).
 - [Game analysis](docs/game-analysis.md): move classes, accuracy, the `analyse` report
 - [Opening explorer](docs/opening-explorer.md): what's collected and how to query it
 - [Books, annotated games, and the language model](docs/language-model.md)
-- [The app](docs/app.md): the browser app, its data, security and tests
-- [Coach](docs/coach.md): the local training web page: replay, openings, endgames, steered games
+- [The app](docs/app.md): the browser app, its data, security and tests; [the frontend](docs/ui.md): design, shortcuts, how to develop it
+- [Coach](docs/coach.md): graded feedback, practice, opening library, endgames, steered games, and the stand-alone page
+- [Product critique](docs/critique-2026-10-16.md): the app compared with Lichess and Chess.com, and what was done about it; [code audit](AUDIT-2026-10-15.md)
 - [Human-likeness suite](docs/humanlike.md): what the `humanlike-*` commands measure and the rules they keep
 - [Running on Kaggle](docs/kaggle.md): the notebooks, quotas, checkpoints
 - [Data sources and privacy](docs/data-sources.md), [training resources](docs/training-resources.md),

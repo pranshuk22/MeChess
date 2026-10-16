@@ -12,6 +12,16 @@ regression test.** Tests describe the behaviour they protect and avoid vacuous a
 | `make test-deep` | the deep perft suite (about 600 million nodes) | minutes |
 | `.venv/bin/python -m pytest tests/unit/test_style_features.py -q` | a single file | |
 
+## The app's tests
+
+| Where | What | Time |
+|---|---|---|
+| `tests/unit/test_app_*.py`, `test_prep_*.py`, `test_profile.py`, `test_coach_*.py`, `test_pacing.py`, `test_human_style.py`, `test_explain.py`, `test_motifs.py`, `test_performance.py`, `test_accuracy.py`, `test_openings_db.py` | the server through its API with a temporary data folder and scripted engines (about 1,450 Python tests in all) | `python -m pytest tests/unit` about 7 minutes |
+| `frontend`: `npm test` | unit tests (Vitest) | seconds |
+| `frontend`: `npx playwright test` | 71 browser tests against the real server and a real Stockfish when installed (they skip otherwise): flows, the board, layout (the board never changes size; no sideways scroll at 390 px), the size budget, appearance, **an accessibility scan (axe) of every page in several palettes and modes**, and the preparation, play, coach and analysis flows | about 5 minutes |
+
+Regression tests that came from real bugs include: the two models called `Move` that gave invalid TypeScript names, a test that leaked a patch of Alembic into other tests, a play test that depended on a random blunder, and the accuracy migration. `tests/unit/prep_helpers.py` is a tiny deterministic engine (negamax over material) for the preparation tests.
+
 ## Layout
 
 - `engine/tests/`: C++ unit tests with a small in-repo framework (`test_framework.h`), one file per module;
@@ -35,7 +45,7 @@ CHESSME_MAIA2_REPO=/path/to/maia2 CHESSME_MAIA2_CKPT=/path/to/blitz_model.pt \
 CHESSME_EXTRA_PATH=/path/to/extra/site-packages  pytest tests/integration/test_compare_external.py
 ```
 
-No test needs network access, your games or any personal data; a fresh clone passes `make test`. The few tests that drive Stockfish (`analyse`,
+No test needs network access (the browser tests use a temporary data folder and sample games, and fake game sites), your games or any personal data; a fresh clone passes `make test`. The few tests that drive Stockfish (`analyse`,
 the move-quality features) are skipped when it is not installed.
 
 ## Keeping the suite light and honest

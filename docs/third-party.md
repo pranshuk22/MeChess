@@ -13,12 +13,15 @@ MeChess uses the following. **None of it is bundled, copied or redistributed by 
 | [Kaggle CLI](https://github.com/Kaggle/kaggle-cli) | Apache-2.0 | optional: downloading a notebook's output |
 | ChessGPT data (`Waterhorse/chess_data`), `Icannos/chess_studies` | annotated PGNs: each source's terms; `chess_studies`: CC0; Stack Exchange and Wikipedia parts: CC BY-SA | annotated games and prose for the language model; downloaded at run time, not bundled |
 | Public-domain chess books (Project Gutenberg, Internet Archive) | public domain (per country) | game lines and concept counts; downloaded at run time |
-| Lichess chess-openings | CC0 | opening names |
+| Lichess chess-openings | CC0 | opening names; **bundled** in packed form (`chessme/opening_names.tsv.gz`, built by `tools/build_opening_names.py`) so a game without an opening name gets one from its moves, and for the coach's opening library |
 | Lichess and chess.com APIs | their terms and rate limits | your games and the cohort |
 | PGN Mentor player archives | copyright notice, no licence text | local analysis of anchor players' games; archives are deleted after sampling; never redistribute |
 | Chess piece images "cburnett" by Colin M.L. Burnett (Wikimedia Commons) | BSD 3-clause (the author offers GFDL, CC BY-SA, BSD and GPL "of your choice"); notice in `frontend/src/assets/pieces/cburnett/LICENSE.txt` | **bundled**: the default piece set of the web app |
 | Piece sets "Chessnut" (Alexis Luengas, Apache-2.0), "Rhos" (RhosGFX, CC0), "Celtic" (Maurizio Monge, MIT), "Kiwen Suwi" (neverRare, CC BY 4.0), "Papercut" (Nikolay Anzarov, CC BY 4.0), taken unchanged from the Lichess repository | as stated; notices beside the files in `frontend/src/assets/pieces/*/LICENSE.txt`; credits are also shown in the app settings | **bundled**: selectable piece sets of the web app |
 | Frontend libraries (React, Vite, Tailwind CSS, Radix UI, TanStack, chess.js, zustand, lucide-react, Inter and JetBrains Mono fonts) | MIT / BSD / OFL | **bundled** in the built web app through npm; versions pinned in `frontend/package-lock.json` |
+| Reference counts `chessme/coach/reference_rates.json` | derived from CC0 Lichess games; counts of moves and mistakes only, no games, no names | **bundled**: how often players of each rating band give away points (coach comparisons, performance rating) |
+| Web Audio sounds | generated in the browser | no sound files are used |
+| Playwright, `@axe-core/playwright`, Vitest (development only) | Apache-2.0 / MPL-2.0 / MIT | the frontend's tests; not part of the built app |
 | FastAPI, Starlette, uvicorn, websockets, pydantic, SQLAlchemy, Alembic, httpx | MIT / BSD | the web app's server (`chessme app`); installed with pip, pinned in `requirements.txt` |
 
 Notes:

@@ -26,13 +26,22 @@ chessme/                        Python
   mechess/                      the controller: dial, priors, UCI front end
   style/                        style analysis: features, candidates, model, population, cohort, anchors; game-level features,
                                 the player embedding, move-quality features
-  analysis/                     move classification (win-probability scale, classes, accuracy) and the game runner behind `analyse`
+  analysis/                     move classification (win-probability scale, classes), the game runner behind `analyse`, game accuracy (accuracy.py),
+                                performance rating (performance.py), plain-language reasons for a move (explain.py), tactical motifs (motifs.py)
+  coach/                        feedback on a move (feedback.py), drills, exercises, openings and the opening library (library.py), endgames,
+                                steering, the weakness profile and the reference counts (reference.py, reference_rates.json)
+  prep/                         preparing against an opponent: their games, position graph, traps and the expected-result planner, weaknesses, report
+  mechess/humanprior.py         learns a human move-choice model from the player's own games (used as MeChess's prior)
+  openings_db.py                the name of an opening from its moves (packed Lichess chess-openings data, CC0)
+  app/                          the web app's server: FastAPI routers, SQLite (SQLAlchemy, Alembic migrations), background jobs, live analysis
+                                (WebSocket), play (clocks, human pacing), preparation job, profile service, security; `chessme app`
   books/                        chess books and annotated games: notation and glyph readers, sources, corpora, the language model, preflight
   jobs.py                       pause / resume / stop for long jobs; a worker pool that cannot hang on a dead worker
   kaggle.py                     the Kaggle glue used by the notebooks (linking inputs, restoring checkpoints, slimming outputs)
   uci_client.py                 talks UCI to any engine (ours or Stockfish)
   match.py, sprt.py, selfplay.py, openings.py    engine matches and data generation
 
+frontend/                       the app's pages: React, TypeScript, Tailwind; src/board is our own board component; e2e/ holds the browser tests
 configs/                        example profile; anchor players
 notebooks/                      three thin Kaggle adapters (collect data, train the language model, opening explorer)
 tests/                          Python unit and integration tests (fake engine included)
@@ -63,6 +72,14 @@ docs/                           this documentation
 8. **Books, annotated games and the language model** ([details](language-model.md)): text and glyphs are read, a small model learns concepts,
    move judgements and evaluations from comments.
 
+9. **The app** ([details](app.md)): the server keeps games, analyses (with the engine's lines for every move), practice positions and an opening
+   evaluation cache in one SQLite file; analysis, imports, preparations and style training are background jobs with progress; the pages talk to it over
+   a typed API (TypeScript types generated from the OpenAPI description) and a WebSocket for live engine lines. The review's reasons, performance and
+   the profile are computed from the stored analyses, not from a second engine run.
+10. **Preparing against an opponent**: their public games are analysed with the same cache; a position graph of what they play gives the traps (their usual
+    move gives away points) and a planner that picks, at each of your turns, the move with the best *expected* result against their observed replies,
+    within a tolerance of the engine's best (or a little more when they have often fallen for the line).
+
 ## Design choices worth knowing
 
 - **One CLI, isolated features.** Every command is in one CLI, and the bot starts the engine through it, so feature modules are imported only when
@@ -76,5 +93,9 @@ docs/                           this documentation
 - **Separate rating scales.** Lichess and chess.com ratings are kept apart everywhere (chess.com runs lower).
 - **Deterministic and reproducible.** Pinned requirements, seeded sampling, node-limited engine searches, dataset files
   that record their judge.
+- **The app is local and private.** It listens on 127.0.0.1, needs a per-run access key, makes requests only to the public game APIs when you ask, and keeps
+  everything in one folder you can delete; the frontend loads no outside script, font or image (a test fails otherwise).
+- **Honest numbers.** A figure says how many games or moves it rests on (intervals for performance, a minimum of games for habits and openings); the
+  accuracy method was checked against Lichess's own figures on games they analysed.
 - **External models are optional.** Maia-2 / Maia-3 and Stockfish are used only as external programs or data you
   obtain yourself ([third-party](third-party.md)).

@@ -21,12 +21,18 @@ Everything downloaded or derived is under `data/` (git-ignored):
   (position, played move, rating, game number) are kept, **not** their raw games; the list of candidate usernames
   (`candidates.json`) stays on your disk and must not be published.
 
+## What the app adds
+
+* **Preparing against an opponent** fetches that player's public games from the Lichess or Chess.com API (one request at a time, newest first) or reads a PGN you paste. The games are kept in the app's database for that preparation only and are deleted with it (or never leave your computer if you delete the data folder). Nothing about the opponent is published or sent anywhere.
+* The app's own database (`~/.mechess/mechess.db` by default) holds your games and their analyses; the learned move-choice models are files next to it. Nothing is uploaded.
+* The only requests to other sites are the ones you start (importing games, preparing against an opponent); the pages load no outside script, font or image.
+
 ## Text, annotated games and opening data
 
 | Source | Terms | Used for |
 |---|---|---|
 | Lichess database (`database.lichess.org`) | CC0 | the opening explorer and theory books (streamed, never stored whole) |
-| Lichess chess-openings | CC0 | opening names |
+| Lichess chess-openings | CC0 | opening names (also bundled in packed form, [third-party.md](third-party.md)) |
 | Public-domain books (Project Gutenberg, Internet Archive) | public domain (check per country) | game lines and concept counts |
 | Annotated games (GameKnot, PGN Library, Path to Chess Mastery, Lichess studies, `chess_studies`) | each source's own terms | comments and glyphs for the language model; research and learning use, not redistribution |
 | Chess Stack Exchange, chess Wikipedia articles | CC BY-SA | explanations in prose for concept tagging; not redistributed |

@@ -40,8 +40,8 @@ Not built in CI: try it before relying on it.
 
 | Part | What it does |
 |---|---|
-| **Home** | the numbers that matter (games, accuracy, mistakes, results), your next step, recent games, openings, activity calendar, a checklist of what MeChess found on your computer |
-| **Library** | all your games, searchable and filterable, any size; import from Lichess, Chess.com or a PGN file |
+| **Home** | action tiles first (review your last game, practise, play, prepare), the numbers that matter (games, accuracy, performance, results), your next step, recent games, a card about you (ratings, your best and weakest openings), the activity calendar; the setup checklist only shows when something needed is missing (it is always in Settings) |
+| **Library** | all your games (10,000 and more), searchable, sortable by accuracy, opponent, length or date, filterable by colour, result, speed and analysis; links from Insights open it already filtered; import from Lichess, Chess.com or a PGN file; games without an opening name are named from their moves |
 | **Review** | the board with captured pieces, the clocks and a performance rating for each side; a **coach card** pinned above the move list that says in plain words why each move was good or bad (what it allows, what was better) with the engine's lines; **Next key moment** (N / P): the last move of opening theory, your brilliant and great moves, your mistakes and the opponent's; a graph with both players' mistakes marked, hover and click; a chart of the time spent per move; the opening name as you step and where theory ended; live engine, explorer, side lines; **Retry your mistakes**; sounds, autoplay (Space), copy FEN / PGN, download, open on the analysis board; `?` lists the shortcuts |
 | **Analysis** | the analysis board: paste a FEN or a PGN, move the pieces for both sides, step back and try another line, with the engine and the explorer |
 | **Coach** | practice positions from your own mistakes (repeated on a schedule), opening practice, endgames, steered games, and where you lose points compared with players of your rating. Every move you try is **graded with reasons**: best, great (as good), good but not the best (it counts, and you may try for the best), inaccuracy, mistake, blunder; a bad try says what it allows (checkmate, a lost piece, the engine's line) without giving the answer away |
@@ -50,7 +50,10 @@ Not built in CI: try it before relying on it.
 | **Play** | a game against Stockfish at eight levels, or MeChess at a chosen strength, with or without a clock (1 minute to 3 hours, increments, flagging). The computer **takes its time like a person** (quick in the opening and for a recapture, longer in a tense position, its clock running while it thinks; it can be turned off). MeChess can learn to **choose moves like a person from your own games** (typical players of your library, or you). Finished games go to your library, with their clocks |
 | **Insights** | your profile, filtered by speed, colour and period (the address keeps the filter): performance by play and by result, rating over time, results against stronger and weaker opponents, your openings with links to the games, accuracy by phase and by kind of endgame, tactics found / missed / allowed with the positions, habits (time of day, weekday, how a session goes, what a loss does to the next game), converting and saving, the clock, quality over time |
 | **Activity** | imports, analyses and other work running in the background, with progress and cancel |
-| **Settings** | accounts, engine, opening cache, colours, board and pieces (also your own images) |
+| **Settings** | accounts (and your rating, used when your games carry none), the setup list, engine, opening cache (built at a depth you choose), colours, board size, board and pieces (also your own images) |
+| **Explorer** | what players of a rating band play in any position, from the explorer database |
+| **Books** | search the comments of the collected chess books by idea |
+| **Bot** | start and stop MeChess as a Lichess bot (the token never passes through the app) |
 
 ## Prepare against an opponent
 
@@ -69,15 +72,15 @@ All numbers come from the games found: with few games the report says so. Nothin
 
 ## Your data
 
-One SQLite file, `mechess.db` in the data folder, holds games, analyses (with the engine's lines for every move), practice positions, jobs, settings and the opening cache. Your own piece
+One SQLite file, `mechess.db` in the data folder, holds games, analyses (with the engine's lines for every move), practice positions, repertoires, preparations (with the opponents' games kept for each), jobs, settings and the opening cache; migrations in `chessme/app/migrations` upgrade it on start (0007 recomputes the stored accuracy with the current method). The move-choice models MeChess learns are JSON files in `style/`. Your own piece
 sets and board images are plain folders next to it (`pieces/`, `boards/`). Older work is found and offered for import: the coach's reviewed games (`~/.mechess-coach`) and the folders written by
 `chessme analyse` (`data/analysis/*`). Deleting the opening cache is always safe.
 
 ### The opening cache
 
 The engine's verdict on opening positions (the first ten moves) is kept, so the openings you play are not searched again: analysing games reads from it and fills it, and stepping through a
-game shows the stored lines at once while the engine works on something deeper. Settings has a card for it: how many positions, how often it was used, a button to build it for the
-openings in your own games (optionally the main opening lines too), and one to delete it all.
+game shows the stored lines at once while the engine works on something deeper. Settings has a card for it: how many positions, how often it was used and the deepest search stored, a button to build it for the
+openings in your own games (optionally the main opening lines too) at the depth of your analysis setting, 1 million or 5 million nodes (with a time estimate: a deeper search replaces a shallower one, never the other way round), and one to delete it all.
 
 ## Security model (what is and is not protected)
 
@@ -89,10 +92,16 @@ openings in your own games (optionally the main opening lines too), and one to d
 * Uploaded SVG pieces are checked (no scripts, links or embedded objects) and served with a restrictive policy.
 * Not protected: someone who can read your terminal output (it contains the key), or who is you.
 
+## How the figures are made
+
+* **Accuracy** per game follows Lichess's method (a volatility-weighted mean averaged with the harmonic mean of the move accuracies); on 27 games that Lichess had analysed, ours came out about 3 points lower than Lichess's own figure. **Performance rating** is estimated from how often your moves gave away points compared with players of each rating (range shown), and from the results by the 400 rule. Reasons for each move, tactical motifs and the details: [game-analysis.md](game-analysis.md).
+* **Playing against the computer**: Stockfish at eight levels, or MeChess. MeChess picks among the engine's sound moves with a move-choice model; until it has learned from your games it chooses almost at random, which is not human, so Play offers to teach it (a background job of about ten minutes). The computer's thinking time follows a person's pace ([humanlike.md](humanlike.md)).
+* **The profile** (Insights) reads your stored games and analyses; every section says how many games it rests on and stays silent when there are too few.
+
 ## The API
 
-The same server answers `/api/...` (interactive description at `/api/docs` while the app runs; the TypeScript types of the frontend are generated from it, `tools/gen_ts_types.py`). Long work is a job: start it, watch `/api/events` (server-sent events) or `/api/jobs`.
+The same server answers `/api/...` (interactive description at `/api/docs` while the app runs; the TypeScript types of the frontend are generated from it, `tools/gen_ts_types.py`, and a test fails when they are stale). Long work is a job: start it, watch `/api/events` (server-sent events) or `/api/jobs`. The areas: games, import, analysis and the opening cache, jobs, settings and accounts, `/api/me` (what the app knows about you), `/api/profile` (Insights), the coach (`/api/coach/...`: drills, feedback, library, repertoires, openings, endgames, steered games), `/api/prep` (preparations), `/api/play` (games, clocks, style training), the explorer, live analysis (WebSocket), books, the bot and themes.
 
 ## Tests
 
-`python -m pytest tests/unit -k "app_"` (backend, database, jobs, WebSocket, security), `cd frontend && npm test && npx playwright test` (browser tests against the real server with a temporary data folder).
+`python -m pytest tests/unit` (about 1,450 tests, 7 minutes; the app's are the `test_app_*`, `test_prep_*`, `test_profile`, `test_coach_*`, `test_pacing`, `test_human_style`, `test_explain`, `test_motifs`, `test_performance` and `test_openings_db` files), `cd frontend && npm test && npx playwright test` (12 unit tests; 71 browser tests against the real server with a temporary data folder, including an accessibility scan of every page in several palettes and a size budget). See [testing.md](testing.md).
