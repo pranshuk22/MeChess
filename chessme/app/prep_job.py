@@ -40,22 +40,36 @@ def prune(moves) -> list[dict]:
     return [{k: m[k] for k in KEEP if k in m} for m in moves]
 
 
+def oppgame_from_row(g: Game) -> PG.OppGame | None:
+    """A stored game of the player as an `OppGame` seen from the player's side (None without a known side, a readable game or moves). In it `opp_elo` is the PLAYER's own rating and `their_elo`
+    the opponent's (the record is read as "this player's game")."""
+    if g.user_colour not in ("white", "black") or not g.pgn:
+        return None
+    game = chess.pgn.read_game(io.StringIO(g.pgn))
+    if game is None:
+        return None
+    nodes = list(game.mainline())
+    if not nodes:
+        return None
+    result = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(g.result)
+    score = None if result is None else (result if g.user_colour == "white" else 1.0 - result)
+    mine, theirs = (g.white_elo, g.black_elo) if g.user_colour == "white" else (g.black_elo, g.white_elo)
+    clocks = [None if (c := n.clock()) is None else round(c, 1) for n in nodes]
+    from .services import games as GS
+    tc = GS.parse_tc(game.headers.get("TimeControl"))
+    return PG.OppGame(id=g.id, colour=g.user_colour, moves=[n.move.uci() for n in nodes], score=score, speed=g.speed, date=g.played_at, opening=g.opening, family=PG.family_of(g.opening), opp_elo=mine,
+                      their_elo=theirs, termination=game.headers.get("Termination"), clocks=clocks if any(c is not None for c in clocks) else [], base=tc[0] if tc else None)
+
+
 def user_games(session, limit=1500):
     """The player's own games as `OppGame`s (from the library, with their side known) and their analyses, newest first."""
     out, analyses = [], {}
     q = (select(Game, Analysis).outerjoin(Analysis, Analysis.game_id == Game.id).where(Game.user_colour.in_(("white", "black")))
          .order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(limit))
     for g, a in session.execute(q):
-        game = chess.pgn.read_game(io.StringIO(g.pgn)) if g.pgn else None
-        if game is None:
+        og = oppgame_from_row(g)
+        if og is None:
             continue
-        moves = [m.uci() for m in game.mainline_moves()]
-        if not moves:
-            continue
-        result = {"1-0": 1.0, "0-1": 0.0, "1/2-1/2": 0.5}.get(g.result)
-        score = None if result is None else (result if g.user_colour == "white" else 1.0 - result)
-        mine, theirs = (g.white_elo, g.black_elo) if g.user_colour == "white" else (g.black_elo, g.white_elo)
-        og = PG.OppGame(id=g.id, colour=g.user_colour, moves=moves, score=score, speed=g.speed, date=g.played_at, opening=g.opening, family=PG.family_of(g.opening), opp_elo=mine, their_elo=theirs, termination=None)
         out.append(og)
         if a is not None:
             analyses[g.id] = CO.analysis_moves(g, a)

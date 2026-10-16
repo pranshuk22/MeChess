@@ -21,7 +21,7 @@ from .play import PlayService
 from .bot_service import BotService
 from .coach_modes import CoachModes
 from .quick import QuickEngine
-from .routers import api, books, bot, coach, coach_modes, live, play, prep, themes
+from .routers import api, books, bot, coach, coach_modes, live, play, prep, profile, themes
 from .security import COOKIE, LocalOnly, SecurityHeaders, TokenAuth, allowed, key_ok
 
 HERE = Path(__file__).parent
@@ -122,6 +122,7 @@ def create_app(config: AppConfig | None = None, *, extra_hosts=(), extra_origins
     app.include_router(books.router)
     app.include_router(play.router)
     app.include_router(prep.router)
+    app.include_router(profile.router)
     app.include_router(themes.router)
 
     root = static_dir() if static is True else (static or None)
