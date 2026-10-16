@@ -2,7 +2,7 @@ import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
 import * as Menu from "@radix-ui/react-dropdown-menu";
 import { ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Download, FlipVertical2, GitBranch, Pause, Play, RotateCcw, SkipForward, Sparkles, Target, Undo2, Volume2, VolumeX } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAnalyse, useGame } from "@/api/hooks";
 import type { Arrow } from "@/board/Arrows";
 import { Board } from "@/board/Board";
@@ -54,7 +54,8 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
   const game = useMemo<GameDetail>(() => ({ ...loaded, moves }), [loaded, moves]);
   const analysed = loaded.analysed;
   const userIsWhite = game.user !== "black";
-  const [ply, setPly] = useState(0);
+  const [qs] = useSearchParams();
+  const [ply, setPly] = useState(() => { const n = Number(qs.get("ply")); return Number.isInteger(n) && n > 0 ? Math.min(n, moves.length) : 0; });
   const [flipped, setFlipped] = useState(!userIsWhite);
   const [showBest, setShowBest] = useState(true);
   const [retryOn, setRetryOn] = useState(false);

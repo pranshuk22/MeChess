@@ -271,3 +271,22 @@ def test_two_response_models_never_share_a_name(client):
     import re
     names = client.app.openapi()["components"]["schemas"]
     assert all(re.fullmatch(r"[A-Za-z0-9_]+", n) for n in names), [n for n in names if not re.fullmatch(r"[A-Za-z0-9_]+", n)]
+
+
+def test_the_library_can_be_sorted_and_filtered_by_speed(client):
+    s = client.app.state.sessions()
+    for i, (acc, tc, elo, plies) in enumerate([(90.0, "180+0", 1500, 30), (70.0, "600+0", 1800, 50), (80.0, "180+0", 1300, 20)]):
+        moves = [analysed_move(k + 1, "e4", "e2e4" if k % 2 == 0 else "e7e5", "white" if k % 2 == 0 else "black") for k in range(2)]
+        G.store(s, id=f"z{i}", source="t", headers={"White": "me", "Black": f"o{i}", "Result": "1-0", "WhiteElo": "1500", "BlackElo": str(elo), "TimeControl": tc, "Date": f"2026.06.0{i + 1}"}, user_colour="white", analysis={"moves": moves}, nodes=1, multipv=1)
+        row = s.get(G.Analysis, f"z{i}")
+        row.accuracy_white = acc
+        g = s.get(G.Game, f"z{i}")
+        g.plies = plies
+    s.commit()
+    s.close()
+    ids = lambda **p: [g["id"] for g in client.get("/api/games", params=p).json()["items"]]
+    assert ids() == ["z2", "z1", "z0"]                                                                         # newest first by default
+    assert ids(sort="accuracy", order="desc") == ["z0", "z2", "z1"] and ids(sort="accuracy", order="asc") == ["z1", "z2", "z0"]
+    assert ids(sort="opponent", order="desc") == ["z1", "z0", "z2"] and ids(sort="length", order="asc") == ["z2", "z0", "z1"]
+    assert ids(speed="rapid") == ["z1"] and ids(speed="blitz") == ["z2", "z0"]
+    assert client.get("/api/games", params={"sort": "name"}).status_code == 422 and client.get("/api/games", params={"speed": "x;"}).status_code == 422

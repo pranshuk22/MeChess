@@ -4,7 +4,7 @@ import type { GameDetail, GameSummary, S } from "@/lib/types";
 import { api } from "./client";
 
 export type Job = S.JobOut;
-export interface GameFilters { q?: string; colour?: string; result?: string; analysed?: boolean }
+export interface GameFilters { q?: string; colour?: string; result?: string; analysed?: boolean; speed?: string; sort?: string; order?: string }
 const PAGE = 200;
 
 /** What the app knows about the player (ratings by speed, main speed, explorer band, openings): the defaults of the pages come from it. */

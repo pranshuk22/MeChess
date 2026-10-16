@@ -24,6 +24,7 @@ export function SettingsPage() {
       <div className="min-w-0 space-y-5">
         <PageHeader title="Settings" sub="Everything is stored on this computer." />
         <Accounts />
+        <Panel><PanelTitle sub="What MeChess found on this computer, and what can still be added">Setup</PanelTitle><div className="px-5 pb-2"><SetupList /></div></Panel>
         <Engine />
         <EngineCache />
         <Panel>
@@ -52,6 +53,21 @@ export function SettingsPage() {
       </div>
       <Panel className="sticky top-8 self-start p-3 max-lg:hidden"><Board fen={START_FEN} showCoords={showCoords} /></Panel>
     </div>
+  );
+}
+
+function SetupList() {
+  const ws = useWorkspace().data;
+  return (
+    <ul>
+      {ws?.checks.map((c) => (
+        <li key={c.id} className="flex items-center gap-3 border-t border-border/70 py-2.5 first:border-t-0">
+          <span className={"h-2 w-2 shrink-0 rounded-full " + (c.state === "ok" ? "bg-[var(--q-best)]" : c.state === "todo" ? "bg-[var(--q-inaccuracy)]" : "bg-[var(--faint)]")} aria-hidden />
+          <div className="min-w-0 flex-1"><div className="text-[13.5px] font-medium">{c.title}</div><div className="truncate text-[12px] text-muted" title={c.detail}>{c.detail}</div></div>
+          <span className="text-[12px] text-faint">{c.state === "ok" ? "ready" : c.state === "todo" ? "needed" : "optional"}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -1,8 +1,8 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import clsx from "clsx";
-import { Download, Library as LibraryIcon, Search, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, Library as LibraryIcon, Search, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAnalyse, useGamesInfinite, useStats } from "@/api/hooks";
 import { MiniEval } from "@/components/MiniEval";
 import { Button } from "@/components/ui/Button";
@@ -17,14 +17,28 @@ const COLS = "grid-cols-[64px_minmax(180px,1.5fr)_112px_minmax(150px,1.4fr)_72px
 const RESULT = { win: ["Win", "good"], loss: ["Loss", "bad"], draw: ["Draw", "neutral"], unknown: ["–", "neutral"] } as const;
 const ROW = 58;
 
+function Th({ k, label, sort, setSort, className }: { k: string; label: string; sort: { key: string; order: "asc" | "desc" }; setSort: (s: { key: string; order: "asc" | "desc" }) => void; className?: string }) {
+  const on = sort.key === k;
+  return (
+    <span role="columnheader" aria-sort={on ? (sort.order === "asc" ? "ascending" : "descending") : "none"} className={clsx("flex", className)}>
+      <button onClick={() => setSort({ key: k, order: on && sort.order === "desc" ? "asc" : "desc" })} className={clsx("inline-flex cursor-pointer items-center gap-1 uppercase hover:text-text", on && "text-text")} aria-label={`Sort by ${label.toLowerCase()}`}>
+        {label}{on ? (sort.order === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : null}
+      </button>
+    </span>
+  );
+}
+
 export function LibraryPage() {
-  const [q, setQ] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [colour, setColour] = useState("all");
+  const [initial] = useSearchParams();                                                       // a link from Insights opens the library already filtered
+  const [q, setQ] = useState(initial.get("q") ?? "");
+  const [debounced, setDebounced] = useState(initial.get("q") ?? "");
+  const [colour, setColour] = useState(["white", "black"].includes(initial.get("colour") ?? "") ? initial.get("colour")! : "all");
+  const [speed, setSpeed] = useState("all");
+  const [sort, setSort] = useState<{ key: string; order: "asc" | "desc" }>({ key: "date", order: "desc" });
   const [result, setResult] = useState("all");
   const [analysed, setAnalysed] = useState("all");
   useEffect(() => { const t = setTimeout(() => setDebounced(q), 250); return () => clearTimeout(t); }, [q]);
-  const filters = { q: debounced || undefined, colour: colour === "all" ? undefined : colour, result: result === "all" ? undefined : result, analysed: analysed === "all" ? undefined : analysed === "yes" };
+  const filters = { q: debounced || undefined, colour: colour === "all" ? undefined : colour, result: result === "all" ? undefined : result, analysed: analysed === "all" ? undefined : analysed === "yes", speed: speed === "all" ? undefined : speed, sort: sort.key, order: sort.order };
   const query = useGamesInfinite(filters);
   const rows = query.data?.pages.flatMap((p) => p.items) ?? [];
   const total = query.data?.pages[0]?.total ?? 0;
@@ -38,7 +52,7 @@ export function LibraryPage() {
   const items = v.getVirtualItems();
   const last = items.at(-1)?.index ?? 0;
   useEffect(() => { if (last >= rows.length - 25 && query.hasNextPage && !query.isFetchingNextPage) query.fetchNextPage(); }, [last, rows.length, query]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const filtered = !!(debounced || colour !== "all" || result !== "all" || analysed !== "all");
+  const filtered = !!(debounced || colour !== "all" || result !== "all" || analysed !== "all" || speed !== "all");
 
   return (
     <div className="mx-auto flex h-full max-w-[1240px] flex-col px-8 py-8 max-md:px-4">
@@ -51,12 +65,17 @@ export function LibraryPage() {
         <div className="w-72 max-md:w-full"><Input icon={<Search size={15} />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search players or openings" aria-label="Search games" /></div>
         <Segmented size="sm" label="Colour" value={colour} onChange={setColour} options={[["all", "Any colour"], ["white", "White"], ["black", "Black"]]} />
         <Segmented size="sm" label="Result" value={result} onChange={setResult} options={[["all", "Any result"], ["win", "Wins"], ["loss", "Losses"], ["draw", "Draws"]]} />
+        <Segmented size="sm" label="Speed" value={speed} onChange={setSpeed} options={[["all", "Any speed"], ["bullet", "Bullet"], ["blitz", "Blitz"], ["rapid", "Rapid"], ["classical", "Classical"]]} />
         <Segmented size="sm" label="Analysis" value={analysed} onChange={setAnalysed} options={[["all", "All"], ["yes", "Analysed"], ["no", "Not analysed"]]} />
       </div>
 
       <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden" role="table" aria-label="Games" aria-rowcount={total + 1}>
         <div className={clsx("grid items-center gap-4 border-b border-border bg-surface-2/60 px-5 max-md:px-3 py-2.5 font-display text-[11px] font-semibold uppercase tracking-[0.06em] text-muted", COLS)} role="row">
-          <span role="columnheader">Result</span><span role="columnheader">Opponent</span><span role="columnheader" className="max-lg:hidden">Accuracy</span><span role="columnheader" className="max-lg:hidden">Opening</span><span role="columnheader" className="max-lg:hidden">Speed</span><span role="columnheader" className="max-md:hidden">Evaluation</span><span role="columnheader" className="text-right">Date</span>
+          <span role="columnheader">Result</span>
+          <Th k="opponent" label="Opponent" sort={sort} setSort={setSort} />
+          <Th k="accuracy" label="Accuracy" sort={sort} setSort={setSort} className="max-lg:hidden" />
+          <span role="columnheader" className="max-lg:hidden">Opening</span><span role="columnheader" className="max-lg:hidden">Speed</span><span role="columnheader" className="max-md:hidden">Evaluation</span>
+          <Th k="date" label="Date" sort={sort} setSort={setSort} className="justify-end" />
         </div>
         <div ref={scroller} className="min-h-0 flex-1 overflow-auto" role="rowgroup">
           {query.isLoading && Array.from({ length: 9 }, (_, i) => <div key={i} className="border-b border-border/60 px-5 py-3.5"><Skeleton className="h-7" /></div>)}

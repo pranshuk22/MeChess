@@ -31,9 +31,10 @@ def current_settings(s: Session) -> Settings:
 # ---- games ---------------------------------------------------------------------------------------------------------------------------------------
 
 @router.get("/games", response_model=GamePage)
-def list_games(q: str | None = None, colour: str | None = None, result: str | None = None, analysed: bool | None = None,
+def list_games(q: str | None = None, colour: str | None = None, result: str | None = None, analysed: bool | None = None, speed: str | None = Query(None, pattern="^[a-z]{3,16}$"),
+               sort: str = Query("date", pattern="^(date|accuracy|opponent|length)$"), order: str = Query("desc", pattern="^(asc|desc)$"),
                limit: int = Query(100, ge=1, le=500), offset: int = Query(0, ge=0), s: Session = Depends(db)):
-    total, items = G.page(s, q=q, colour=colour, result=result, analysed=analysed, limit=limit, offset=offset)
+    total, items = G.page(s, q=q, colour=colour, result=result, analysed=analysed, speed=speed, sort=sort, order=order, limit=limit, offset=offset)
     return {"total": total, "items": items}
 
 

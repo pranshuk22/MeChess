@@ -1,4 +1,4 @@
-import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CircleAlert, Download, Minus, Sparkles, Swords } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Check, CircleAlert, Crosshair, Download, GraduationCap, Minus, PlayCircle, RotateCcw, Sparkles, Swords } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAnalyse, useDrillStats, useMe, useGame, useGamesPage, useImportLegacy, useStats, useWorkspace } from "@/api/hooks";
 import { Board } from "@/board/Board";
@@ -25,7 +25,7 @@ function Delta({ now, before, invert = false, unit = "" }: { now: number | null;
 }
 
 export function HomePage() {
-  const stats = useStats(), ws = useWorkspace(), recent = useGamesPage({}, 7), me = useMe().data;
+  const stats = useStats(), ws = useWorkspace(), recent = useGamesPage({}, 7), me = useMe().data, drills = useDrillStats();
   const setImportOpen = useDialogs((s) => s.setImportOpen);
   const empty = stats.data && stats.data.games === 0 && !ws.isLoading && !ws.data?.checks.some((c) => c.id === "legacy");
   return (
@@ -34,6 +34,7 @@ export function HomePage() {
       {empty ? (
         <Panel><EmptyState icon={Swords} title="Bring in your games" text="Import your games from Lichess, Chess.com or a PGN file. They are analysed on this computer and never leave it." action={<Button variant="primary" size="lg" onClick={() => setImportOpen(true)}><Download size={16} /> Import games</Button>} /></Panel>
       ) : (<>
+        <ActionTiles last={recent.data?.items[0]} due={drills.data?.due} />
         <StatRow stats={stats.data} loading={stats.isLoading} />
         <div className="mt-5 grid grid-cols-[minmax(0,1fr)_360px] gap-5 max-lg:grid-cols-1">
           <div className="space-y-5">
@@ -44,7 +45,7 @@ export function HomePage() {
           </div>
           <div className="space-y-5">
             {me && me.games > 0 && <YouCard me={me} />}
-            <Workspace ws={ws.data} loading={ws.isLoading} />
+            {ws.data?.checks.some((c) => c.state === "todo") && <Workspace ws={ws.data} loading={ws.isLoading} />}
             {stats.data && Object.keys(stats.data.classCounts).length > 0 && <Panel><PanelTitle sub="Your last 100 analysed games">Move quality</PanelTitle><div className="px-5 pb-5"><QualityBar counts={stats.data.classCounts} /></div></Panel>}
             <PracticeCard />
             <PrepareCard />
@@ -55,17 +56,44 @@ export function HomePage() {
   );
 }
 
+const plural = (n: number, one: string, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+
 function StatRow({ stats, loading }: { stats?: S.Stats; loading: boolean }) {
   if (loading || !stats) return <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-[108px] rounded-[8px]" />)}</div>;
-  const r = stats.results, played = r.win + r.draw + r.loss;
+  const r = stats.results, played = r.win + r.draw + r.loss, perf = stats.performance;
   return (
     <div className="grid grid-cols-4 gap-4 max-lg:grid-cols-2">
       <Stat label="Games" value={stats.games.toLocaleString()} sub={`${stats.analysed.toLocaleString()} analysed`} />
-      <Stat label="Accuracy" value={stats.accuracy.recent === null ? "–" : stats.accuracy.recent.toFixed(1)} sub={<Delta now={stats.accuracy.recent} before={stats.accuracy.previous} unit="" />}><Spark values={stats.accuracy.series} domain={[Math.max(0, Math.min(...(stats.accuracy.series.length ? stats.accuracy.series : [50])) - 5), 100]} /></Stat>
-      <Stat label="Mistakes per game" value={stats.mistakesPerGame.recent === null ? "–" : stats.mistakesPerGame.recent.toFixed(1)} sub={<Delta now={stats.mistakesPerGame.recent} before={stats.mistakesPerGame.previous} invert />} />
-      <Stat label="Results" value={played ? `${Math.round((100 * (r.win + r.draw / 2)) / played)}%` : "–"} sub={played ? `${r.win} wins · ${r.draw} draws · ${r.loss} losses` : "no results yet"}>
-        {played > 0 && <div className="mb-1 flex h-9 w-2.5 flex-col-reverse overflow-hidden rounded-full" aria-hidden><span style={{ height: `${(100 * r.win) / played}%`, background: "var(--q-best)" }} /><span style={{ height: `${(100 * r.draw) / played}%`, background: "var(--faint)" }} /><span style={{ height: `${(100 * r.loss) / played}%`, background: "var(--q-blunder)" }} /></div>}
-      </Stat>
+      <Stat label="Accuracy" value={stats.accuracy.recent === null ? "–" : stats.accuracy.recent.toFixed(1)} sub={stats.accuracy.recent === null ? "analyse a few games" : <Delta now={stats.accuracy.recent} before={stats.accuracy.previous} unit="" />}><Spark values={stats.accuracy.series} domain={[Math.max(0, Math.min(...(stats.accuracy.series.length ? stats.accuracy.series : [50])) - 5), 100]} /></Stat>
+      <Stat label="Performance" value={perf?.rating ? String(perf.rating) : "–"} sub={perf?.rating ? `from your last ${perf.games} games (${perf.low}–${perf.high})` : "analyse a few games"} />
+      <div className="min-w-0 rounded-[8px] border border-border bg-surface px-4 py-3.5 shadow-[var(--shadow-sm)]">
+        <div className="text-[12px] font-medium text-muted">Results</div>
+        <div className="tnum mt-1.5 text-[24px] font-semibold leading-8 tracking-[-0.03em]">{played ? `${Math.round((100 * (r.win + r.draw / 2)) / played)}%` : "–"}</div>
+        {played > 0 ? <>
+          <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-sunken" role="img" aria-label={`${plural(r.win, "win")}, ${plural(r.draw, "draw")}, ${plural(r.loss, "loss", "losses")}`}><span style={{ width: `${(100 * r.win) / played}%`, background: "var(--q-best)" }} /><span style={{ width: `${(100 * r.draw) / played}%`, background: "var(--faint)" }} /><span style={{ width: `${(100 * r.loss) / played}%`, background: "var(--q-blunder)" }} /></div>
+          <div className="mt-1 text-[12px] text-muted">{plural(r.win, "win")} · {plural(r.draw, "draw")} · {plural(r.loss, "loss", "losses")}</div></> : <div className="text-[12px] text-muted">no results yet</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The things to do first: look at the last game, practise, play, prepare. */
+function ActionTiles({ last, due }: { last?: GameSummary; due?: number }) {
+  const tiles = [
+    last ? { to: `/review/${encodeURIComponent(last.id)}`, icon: RotateCcw, title: "Review your last game", text: `${RESULT[outcome(last)][0]} against ${opponent(last).name}${myAccuracy(last) !== null ? ` · ${myAccuracy(last)!.toFixed(0)}% accuracy` : ""}` }
+      : { to: "/library", icon: RotateCcw, title: "Review a game", text: "Open one from your library" },
+    { to: "/coach", icon: GraduationCap, title: due ? `Practise (${due} due)` : "Practise", text: due ? "Positions from your own mistakes" : "Openings, endgames and your mistakes" },
+    { to: "/play", icon: PlayCircle, title: "Play a game", text: "Against MeChess, at your level" },
+    { to: "/prepare", icon: Crosshair, title: "Prepare for an opponent", text: "Their weak openings and a plan" },
+  ];
+  return (
+    <div className="mb-5 grid grid-cols-4 gap-4 max-lg:grid-cols-2 max-sm:grid-cols-1">
+      {tiles.map((t) => (
+        <Link key={t.to} to={t.to} className="group flex items-start gap-3 rounded-[8px] border border-border bg-surface p-4 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--border-strong)] hover:bg-surface-2">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[8px] bg-accent-soft text-accent"><t.icon size={18} strokeWidth={1.8} /></span>
+          <span className="min-w-0"><span className="block text-[14px] font-semibold leading-5">{t.title}</span><span className="mt-0.5 block truncate text-[12.5px] text-muted">{t.text}</span></span>
+        </Link>
+      ))}
     </div>
   );
 }
@@ -142,7 +170,7 @@ function Openings({ openings }: { openings: S.OpeningStat[] }) {
   );
 }
 
-function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
+export function Workspace({ ws, loading }: { ws?: S.Workspace; loading: boolean }) {
   const setImportOpen = useDialogs((s) => s.setImportOpen);
   const legacy = useImportLegacy(), analyse = useAnalyse(), nav = useNavigate();
   const act = (a?: string | null) => {

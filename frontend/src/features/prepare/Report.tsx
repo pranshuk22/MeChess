@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
 import type { Arrow } from "@/board/Arrows";
-import { Board } from "@/board/Board";
+import { MiniBoard } from "@/components/MiniBoard";
 import { Button } from "@/components/ui/Button";
 import { Segmented } from "@/components/ui/Segmented";
 import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
@@ -24,10 +24,6 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 function numbered(san: string, fen: string) {
   const [, turn, , , , full] = fen.split(" ");
   return turn === "b" ? `${full}.${san}` : `${Number(full) - 1}...${san}`;
-}
-
-function MiniBoard({ fen, orientation, arrows = [], size = 280 }: { fen: string; orientation: Colour; arrows?: Arrow[]; size?: number }) {
-  return <div className="w-full overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_8px_24px_-12px_rgba(16,24,32,0.3)]" style={{ maxWidth: size }}><Board fen={fen} orientation={orientation} movable={null} arrows={arrows} /></div>;
 }
 
 function ScoreBar({ w, d, l }: { w: number; d: number; l: number }) {

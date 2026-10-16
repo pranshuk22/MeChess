@@ -9,9 +9,10 @@ test("home shows the numbers and the workspace checklist from the backend", asyn
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   await expect(page.getByText("Games", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Your workspace")).toBeVisible();
-  await expect(page.getByText("Games imported")).toBeVisible();
+  await expect(page.getByRole("link", { name: /Review your last game/ })).toBeVisible();                 // the things to do come first
+  await expect(page.getByRole("link", { name: /Prepare for an opponent/ })).toBeVisible();
   await expect(page.getByText("Recent games")).toBeVisible();
+  await expect(page.getByText("Performance", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Import games" }).first().click();
   await expect(page.getByRole("dialog", { name: "Import games" })).toBeVisible();
   await page.keyboard.press("Escape");
@@ -60,6 +61,7 @@ test("importing a PGN runs as a job, shows in Activity and lands in the library,
 
 test("accounts and engine settings are saved by the backend", async ({ page, request }) => {
   await page.goto("/settings");
+  await expect(page.getByText("Games imported")).toBeVisible();                                             // what was found on this computer lives here now
   await page.getByPlaceholder("username").first().fill("some_lichess_name");
   await page.getByLabel("Your rating (optional)").fill("1650");
   await page.getByRole("button", { name: "Save" }).first().click();
@@ -106,13 +108,34 @@ test("when the server is not reachable the app says so and reconnects by itself"
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible({ timeout: 15_000 });
 });
 
-test("insights show the calendar, phases and move kinds", async ({ page }) => {
+test("insights show the profile: summary, rating, openings, phases, habits and the activity calendar, with filters kept in the address", async ({ page }) => {
   await page.goto("/insights");
   await expect(page.getByRole("heading", { name: "Insights" })).toBeVisible();
   await expect(page.getByText("Accuracy by phase")).toBeVisible();
+  await expect(page.getByText("Your openings")).toBeVisible();
   await expect(page.getByRole("img", { name: /games in the last 26 weeks/ })).toBeVisible();
-  await expect(page.getByRole("img", { name: "Move kinds" })).toBeVisible();
+  await expect(page.getByText("Results by opponent strength")).toBeVisible();
+  await page.getByRole("button", { name: "Blitz", exact: true }).click();
+  await expect(page).toHaveURL(/speed=blitz/);
+  await page.getByRole("button", { name: "White", exact: true }).click();
+  await expect(page).toHaveURL(/colour=white/);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Blitz", exact: true })).toHaveAttribute("aria-pressed", "true");     // the filter survives a reload
 });
+
+test("the library sorts by a column, filters by speed and opens already filtered from a link", async ({ page, request }) => {
+  await page.goto("/library");
+  await page.getByRole("button", { name: "Sort by accuracy" }).click();
+  await expect(page.getByRole("columnheader", { name: /accuracy/i })).toHaveAttribute("aria-sort", "descending");
+  const top = (await (await request.get("/api/games?sort=accuracy&order=desc&limit=1")).json()).items[0];
+  await expect(page.getByRole("row").nth(1)).toContainText(top.white === top.black ? "" : (top.user === "white" ? top.black : top.white));
+  await page.getByRole("button", { name: "Blitz", exact: true }).click();
+  await expect(page.getByRole("row").nth(1)).toBeVisible();
+  await page.goto("/library?q=Italian&colour=white");
+  await expect(page.getByLabel("Search games")).toHaveValue("Italian");
+  await expect(page.getByRole("button", { name: "White", exact: true })).toHaveAttribute("aria-pressed", "true");
+});
+
 
 test("the opening cache can be built from your games, used, and deleted", async ({ page, request }) => {
   const ws = await (await request.get("/api/workspace")).json();

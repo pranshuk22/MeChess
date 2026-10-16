@@ -3,7 +3,7 @@ import io
 
 import chess
 import chess.pgn
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from ... import openings_db as OD
@@ -223,7 +223,10 @@ def _uci_of_pgn(pgn):
     return [m.uci() for m in g.mainline_moves()] if g else []
 
 
-def page(session: Session, *, q=None, colour=None, result=None, analysed=None, limit=100, offset=0):
+SORTS = ("date", "accuracy", "opponent", "length")
+
+
+def page(session: Session, *, q=None, colour=None, result=None, analysed=None, speed=None, sort="date", order="desc", limit=100, offset=0):
     """(total, [summary dicts]) newest first, with optional filters: text in players/opening/title, the player's colour, the player's result, analysed or not."""
     cond = []
     if q:
@@ -231,6 +234,8 @@ def page(session: Session, *, q=None, colour=None, result=None, analysed=None, l
         cond.append(or_(func.lower(Game.white).like(like, escape="\\"), func.lower(Game.black).like(like, escape="\\"), func.lower(func.coalesce(Game.opening, "")).like(like, escape="\\"), func.lower(func.coalesce(Game.title, "")).like(like, escape="\\")))
     if colour in ("white", "black"):
         cond.append(Game.user_colour == colour)
+    if speed:
+        cond.append(Game.speed == speed)
     if result in ("win", "loss", "draw"):
         if result == "draw":
             cond.append(Game.result == "1/2-1/2")
@@ -243,8 +248,11 @@ def page(session: Session, *, q=None, colour=None, result=None, analysed=None, l
     elif analysed is False:
         cond.append(Game.id.not_in(select(Analysis.game_id)))
     total = session.scalar(select(func.count()).select_from(Game).where(*cond)) or 0
+    key = {"date": Game.played_at, "length": Game.plies, "opponent": case((Game.user_colour == "white", Game.black_elo), else_=Game.white_elo),
+           "accuracy": case((Game.user_colour == "white", Analysis.accuracy_white), else_=Analysis.accuracy_black)}.get(sort, Game.played_at)
+    first = key.asc().nulls_last() if order == "asc" else key.desc().nulls_last()
     rows = session.execute(select(Game, Analysis).outerjoin(Analysis, Analysis.game_id == Game.id).where(*cond)
-                           .order_by(Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(limit).offset(offset)).all()
+                           .order_by(first, Game.played_at.desc().nulls_last(), Game.played_time.desc().nulls_last(), Game.created_at.desc()).limit(limit).offset(offset)).all()
     return total, [summary(g, a) for g, a in rows]
 
 
