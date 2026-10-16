@@ -13,6 +13,9 @@ class StartBody(BaseModel):
     colour: str = Field("white", description="white, black or random")
     opponent: str = Field("stockfish", description="stockfish or mechess")
     level: int = Field(4, description="Stockfish level 1 to 8, or the MeChess rating (800 to 2600)")
+    base: int | None = Field(None, description="seconds each side has (None: no clock)")
+    inc: int = Field(0, description="increment in seconds after each move")
+    pace: bool = Field(True, description="the computer takes its time like a person (the page waits before showing its move)")
 
 
 class MoveBody(BaseModel):
@@ -58,7 +61,7 @@ def options(request: Request):
 
 @router.post("/start")
 def start(body: StartBody, request: Request):
-    s = _call(request.app.state.play.start, body.colour, body.opponent, body.level, _engine_path(request))
+    s = _call(request.app.state.play.start, body.colour, body.opponent, body.level, _engine_path(request), body.base, body.inc, body.pace)
     return _finish(request, s)
 
 
@@ -80,3 +83,8 @@ def takeback(sid: str, request: Request):
 @router.post("/{sid}/resign")
 def resign(sid: str, request: Request):
     return _finish(request, _call(request.app.state.play.resign, sid))
+
+
+@router.post("/{sid}/flag")
+def flag(sid: str, request: Request):
+    return _finish(request, _call(request.app.state.play.flag, sid))

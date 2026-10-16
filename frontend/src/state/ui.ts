@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { BOARD_THEMES, DEFAULT_BOARD, PALETTES, type BoardTheme, type Mode } from "@/board/themes";
 import { customPieceSet, DEFAULT_PIECE_SET, pieceSets, type PieceSet } from "@/board/pieces";
 import { useThemes } from "@/api/hooks";
+import { setSoundEnabled, soundEnabled } from "@/lib/sound";
 
 const read = (k: string): string | null => { try { return localStorage.getItem(k); } catch { return null; } };
 const write = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode: the choice just is not remembered */ } };
@@ -27,6 +28,8 @@ interface UiState {
   mode: Mode;
   palette: string;
   boardId: string;
+  sound: boolean;
+  setSound: (v: boolean) => void;
   boardSize: number;
   custom: { light: string; dark: string } | null;
   grain: boolean;
@@ -48,6 +51,8 @@ export const useUi = create<UiState>((set, get) => ({
   palette: storedPalette(),
   boardId: read("mechess.board") ?? DEFAULT_BOARD.id,
   boardSize: storedSize(),
+  sound: soundEnabled(),
+  setSound: (v) => { setSoundEnabled(v); set({ sound: v }); },
   custom: storedCustom(),
   grain: read("mechess.grain") === "1",                                              // flat squares unless the texture is switched on
   pieceSetId: read("mechess.pieces") ?? DEFAULT_PIECE_SET.id,

@@ -5,7 +5,7 @@ import { CLASS_LABEL, CLASS_ORDER, type GameDetail } from "@/lib/types";
 const PHASES = [["opening", "Opening"], ["middlegame", "Middlegame"], ["endgame", "Endgame"]] as const;
 
 /** The game at a glance: accuracy of both players, how many moves of every kind each played, and accuracy by phase. */
-export const Summary = memo(function Summary({ game }: { game: GameDetail }) {
+export const Summary = memo(function Summary({ game, perf, resultPerf }: { game: GameDetail; perf?: GameDetail["perf"]; resultPerf?: GameDetail["resultPerf"] }) {
   const { counts, phase } = useMemo(() => {
     const counts = CLASS_ORDER.map((cls) => ({ cls, white: 0, black: 0 }));
     game.moves.forEach((m, i) => {
@@ -26,6 +26,10 @@ export const Summary = memo(function Summary({ game }: { game: GameDetail }) {
             <div className="tnum text-[11.5px] text-muted">{p.elo ?? "unrated"}</div>
             <div className="tnum mt-1.5 text-[26px] font-semibold leading-none">{p.acc.toFixed(1)}</div>
             <div className="mt-1 text-[10.5px] uppercase tracking-wide text-faint">accuracy</div>
+            {perf?.[i === 0 ? "white" : "black"] && <div className="mt-2 border-t border-border pt-2 text-[12px] text-muted" title="From how often the moves gave away points, compared with players of each rating (Lichess games analysed the same way)">
+              performance <b className="tnum text-text">{perf[i === 0 ? "white" : "black"]!.rating}</b> <span className="tnum text-faint">({perf[i === 0 ? "white" : "black"]!.low}–{perf[i === 0 ? "white" : "black"]!.high})</span>
+              {resultPerf?.[i === 0 ? "white" : "black"] ? <div>by the result <b className="tnum text-text">{resultPerf[i === 0 ? "white" : "black"]}</b></div> : null}
+            </div>}
           </div>
         ))}
       </div>

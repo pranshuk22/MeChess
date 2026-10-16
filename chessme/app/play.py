@@ -1,6 +1,7 @@
 """Playing against the computer: Stockfish at eight levels, or the MeChess controller (book + engine candidates + a rating dial that plays human-like mistakes).
 Games are kept in memory while they last; a finished game is saved to the library (and analysed in the background when an engine is available)."""
 import random
+import time
 import sys
 import threading
 import uuid
@@ -10,6 +11,7 @@ import chess
 import chess.pgn
 
 from ..uci_client import UciEngine
+from . import pacing
 from .config import AppConfig
 from .workspace import find_engine
 
@@ -76,8 +78,14 @@ class MeChessOpponent(Opponent):
 
 
 class Session:
-    def __init__(self, sid, colour, opponent, opponent_kind, level):
+    def __init__(self, sid, colour, opponent, opponent_kind, level, base=None, inc=0, pace=True):
         self.id, self.colour, self.opponent, self.kind, self.level = sid, colour, opponent, opponent_kind, level
+        self.base, self.inc, self.pace = base, inc, pace
+        self.clock = {"white": float(base), "black": float(base)} if base else None            # seconds left, as of `turn_started`
+        self.turn_started = time.monotonic()                                                   # when the running clock began (later than now while the opponent is "thinking")
+        self.think_ms = 0                                                                      # how long the opponent's last reply took
+        self.clock_log: list[float] = []                                                       # the mover's clock after each move (for the saved PGN)
+        self.rng = random.Random()
         self.board = chess.Board()
         self.result: str | None = None
         self.reason: str | None = None
@@ -96,10 +104,36 @@ class Session:
             b.push(m)
         return out
 
+    @property
+    def running(self):
+        """The colour whose clock runs, or None (untimed, or the game is over)."""
+        return None if self.clock is None or self.over else ("white" if self.board.turn else "black")
+
+    def remaining(self, colour, now=None):
+        """Seconds left for `colour` now."""
+        if self.clock is None:
+            return None
+        now = time.monotonic() if now is None else now
+        left = self.clock[colour]
+        if colour == self.running:
+            left -= max(0.0, now - self.turn_started)
+        return left
+
+    def check_flag(self):
+        """End the game when the running clock has reached zero (the side whose time ran out loses)."""
+        c = self.running
+        if c is not None and self.remaining(c) <= 0:
+            self.clock[c] = 0.0
+            self.result = "0-1" if c == "white" else "1-0"
+            self.reason = "time"
+        return self.over
+
     def state(self):
+        self.check_flag()
         return {"id": self.id, "fen": self.board.fen(), "colour": self.colour, "turn": "white" if self.board.turn else "black", "moves": self.moves(),
                 "status": "over" if self.over else "playing", "result": self.result, "reason": self.reason, "gameId": self.game_id, "opponent": self.opponent.label,
-                "inCheck": self.board.is_check()}
+                "inCheck": self.board.is_check(), "timeControl": {"base": self.base, "inc": self.inc} if self.base else None,
+                "clock": {c: round(self.remaining(c), 1) for c in ("white", "black")} if self.clock else None, "running": self.running, "thinkMs": self.think_ms, "pace": self.pace}
 
     def check_end(self):
         out = self.board.outcome(claim_draw=True)
@@ -114,9 +148,15 @@ class Session:
         you, opp = "You", self.opponent.label
         game.headers.update({"Event": "Casual game against the computer", "Site": "MeChess", "Date": date.today().strftime("%Y.%m.%d"), "White": you if self.colour == "white" else opp,
                              "Black": opp if self.colour == "white" else you, "Result": self.result or "*"})
+        if self.base:
+            game.headers["TimeControl"] = f"{self.base}+{self.inc}"
+            if self.reason == "time":
+                game.headers["Termination"] = "Time forfeit"
         node = game
-        for m in self.board.move_stack:
+        for i, m in enumerate(self.board.move_stack):
             node = node.add_variation(m)
+            if i < len(self.clock_log):
+                node.set_clock(max(0.0, self.clock_log[i]))
         return game
 
 
@@ -144,7 +184,7 @@ class PlayService:
                 self._sf = UciEngine([path], options={"Threads": 1, "Hash": 64}).start()
             return self._sf
 
-    def start(self, colour: str, kind: str, level: int, settings_engine_path=None):
+    def start(self, colour: str, kind: str, level: int, settings_engine_path=None, base: int | None = None, inc: int = 0, pace: bool = True):
         if colour == "random":
             colour = random.choice(["white", "black"])
         if colour not in ("white", "black"):
@@ -166,7 +206,11 @@ class PlayService:
             while len(self.sessions) >= MAX_SESSIONS:                               # the oldest game makes room
                 old = self.sessions.pop(next(iter(self.sessions)))
                 old.opponent.close()
-        s = Session(uuid.uuid4().hex[:10], colour, opponent, kind, level)
+        if base is not None and not 10 <= base <= 3 * 3600:
+            raise PlayError(422, "the time is between 10 seconds and 3 hours")
+        if not 0 <= inc <= 180:
+            raise PlayError(422, "the increment is between 0 and 180 seconds")
+        s = Session(uuid.uuid4().hex[:10], colour, opponent, kind, level, base=base, inc=inc, pace=pace)
         self.sessions[s.id] = s
         if colour == "black":
             self._reply(s)
@@ -184,7 +228,16 @@ class PlayService:
         mv = s.opponent.move(s.board)
         if mv not in s.board.legal_moves:                                           # an engine answer that is not legal must not corrupt the game
             mv = random.choice(list(s.board.legal_moves))
+        opp = "black" if s.colour == "white" else "white"
+        t = 0.0
+        if s.pace or s.clock is not None:                                           # a person's pace: the reply took this long (the page shows it after that time)
+            t = pacing.think_seconds(s.board, strength=pacing.strength_scale(s.kind, s.level), remaining=s.clock[opp] if s.clock else None, inc=s.inc, rng=s.rng)
         s.board.push(mv)
+        s.think_ms = int(t * 1000)
+        if s.clock is not None:
+            s.clock[opp] = s.clock[opp] - t + s.inc
+            s.clock_log.append(s.clock[opp])
+        s.turn_started = time.monotonic() + t                                       # your clock starts when the reply appears
         s.check_end()
 
     def move(self, sid, uci: str) -> Session:
@@ -200,9 +253,23 @@ class PlayService:
                 raise PlayError(422, "that is not a move")
             if mv not in s.board.legal_moves:
                 raise PlayError(422, "that move is not legal")
+            if s.check_flag():                                                       # your time ran out before the move
+                return s
+            if s.clock is not None:
+                s.clock[s.colour] = s.remaining(s.colour) + s.inc
             s.board.push(mv)
+            if s.clock is not None:
+                s.clock_log.append(s.clock[s.colour])
+            s.think_ms = 0
             if not s.check_end():
                 self._reply(s)
+        return s
+
+    def flag(self, sid) -> Session:
+        """The page reports that a clock reached zero: the server checks against its own clock."""
+        s = self.get(sid)
+        with s.lock:
+            s.check_flag()
         return s
 
     def takeback(self, sid) -> Session:
@@ -215,6 +282,8 @@ class PlayService:
                 raise PlayError(409, "nothing to take back")
             for _ in range(min(undo, len(s.board.move_stack))):
                 s.board.pop()
+            s.clock_log = s.clock_log[:len(s.board.move_stack)]
+            s.turn_started, s.think_ms = time.monotonic(), 0
         return s
 
     def resign(self, sid) -> Session:

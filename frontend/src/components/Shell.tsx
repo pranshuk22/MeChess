@@ -27,6 +27,8 @@ function Mark({ size = 26 }: { size?: number }) {
 const ImportDialog = lazy(() => import("@/features/library/ImportDialog").then((m) => ({ default: m.ImportDialog })));
 const CommandPalette = lazy(() => import("./CommandPalette").then((m) => ({ default: m.CommandPalette })));          // loaded the first time it is opened
 
+const ShortcutsDialog = lazy(() => import("./ShortcutsDialog").then((m) => ({ default: m.ShortcutsDialog })));
+
 const initials = (name?: string | null) => (name ? name.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "ME" : "ME");
 
 export function Shell() {
@@ -44,6 +46,12 @@ export function Shell() {
   const importOpen = useDialogs((s) => s.importOpen);
   const [importEverOpened, setImportEverOpened] = useState(false);
   useEffect(() => { if (importOpen) setImportEverOpened(true); }, [importOpen]);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  useEffect(() => {                                                                                  // ? opens the list of keyboard shortcuts (not while typing)
+    const onKey = (e: KeyboardEvent) => { const t = e.target as HTMLElement; if (e.key === "?" && !e.ctrlKey && !e.metaKey && !t.closest("input, textarea, select, [contenteditable]")) { e.preventDefault(); setShortcutsOpen((v) => !v); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [paletteLoaded, setPaletteLoaded] = useState(false);
   useEffect(() => { if (paletteOpen) setPaletteLoaded(true); }, [paletteOpen]);
   useEffect(() => {                                                                                  // the shortcut works before the palette's code is loaded
@@ -123,6 +131,7 @@ export function Shell() {
         </div>
       </div>
       {importEverOpened && <Suspense fallback={null}><ImportDialog /></Suspense>}
+      {shortcutsOpen && <Suspense fallback={null}><ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} /></Suspense>}
       {paletteLoaded && <Suspense fallback={null}><CommandPalette /></Suspense>}
     </TipProvider>
   );

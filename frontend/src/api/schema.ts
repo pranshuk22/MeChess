@@ -339,6 +339,9 @@ export interface StartBody {
   colour: string;
   opponent: string;
   level: number;
+  base: number | null;
+  inc: number;
+  pace: boolean;
 }
 
 export interface Stats {

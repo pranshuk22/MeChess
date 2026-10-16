@@ -68,3 +68,23 @@ export function pvToSan(fen: string, ucis: string[], max = 6): string[] {
   }
   return out;
 }
+
+const PIECE_VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+export interface Captured { white: string[]; black: string[]; diff: number }       // pieces each side has taken (by type), and material: positive = white is ahead
+
+/** The pieces taken so far after each half-move of a game given as UCI moves (index 0 = start); `white` lists what White has captured. Promotions count as the extra material they are. */
+export function capturedAfter(uci: string[]): Captured[] {
+  const chess = new Chess();
+  const white: string[] = [], black: string[] = [];
+  let diff = 0;
+  const out: Captured[] = [{ white: [], black: [], diff: 0 }];
+  for (const u of uci) {
+    let m;
+    try { m = chess.move({ from: u.slice(0, 2), to: u.slice(2, 4), promotion: u[4] }); } catch { break; }
+    const sign = m.color === "w" ? 1 : -1;
+    if (m.captured) { (m.color === "w" ? white : black).push(m.captured); diff += sign * PIECE_VALUE[m.captured]; }
+    if (m.promotion) diff += sign * (PIECE_VALUE[m.promotion] - 1);
+    out.push({ white: [...white], black: [...black], diff });
+  }
+  return out;
+}

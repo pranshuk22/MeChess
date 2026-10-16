@@ -35,3 +35,37 @@ test("the setup says when an opponent is not available", async ({ page, request 
   await expect(page.getByText("The MeChess engine is not built")).toBeVisible();
   void request;
 });
+
+test("a timed game: clocks run, the computer takes its time, and its reply is not instant", async ({ page, request }) => {
+  const opts = await (await request.get("/api/play/options")).json();
+  test.skip(!opts.stockfish.available, "needs Stockfish");
+  await page.goto("/play");
+  await page.getByRole("group", { name: "Level" }).getByRole("button", { name: /Beginner/ }).click();
+  await page.getByRole("group", { name: "Time control" }).getByRole("button", { name: "1 min" }).click();
+  await page.getByRole("button", { name: "Start the game" }).click();
+  const board = page.locator(".board");
+  await expect(board.locator(".piece")).toHaveCount(32);
+  await expect(page.getByText("1:00").first()).toBeVisible();                                   // both clocks start at one minute
+  const t0 = Date.now();
+  await drag(page, board, "e2", "e4");
+  const moves = page.getByRole("list", { name: "Moves" });
+  await expect(page.getByRole("status").filter({ hasText: "thinking" })).toBeVisible();          // the computer is "thinking"
+  await expect(moves).toHaveText(/1\.\s*e4\s*\S+/, { timeout: 15_000 });                          // ... and answers after a person's pause
+  expect(Date.now() - t0).toBeGreaterThan(350);
+  await expect(page.getByText(/^0:[0-5]\d$/).first()).toBeVisible();                              // a clock is below a minute now
+});
+
+test("a game with the pace turned off gets its reply at once", async ({ page, request }) => {
+  const opts = await (await request.get("/api/play/options")).json();
+  test.skip(!opts.stockfish.available, "needs Stockfish");
+  await page.goto("/play");
+  await page.getByRole("group", { name: "Level" }).getByRole("button", { name: /Beginner/ }).click();
+  await page.getByLabel("The computer takes its time like a person").uncheck();
+  await page.getByRole("button", { name: "Start the game" }).click();
+  const board = page.locator(".board");
+  await expect(board.locator(".piece")).toHaveCount(32);
+  const t0 = Date.now();
+  await drag(page, board, "e2", "e4");
+  await expect(page.getByRole("list", { name: "Moves" }).locator("b")).toHaveCount(2, { timeout: 15_000 });
+  expect(Date.now() - t0).toBeLessThan(1500);
+});
