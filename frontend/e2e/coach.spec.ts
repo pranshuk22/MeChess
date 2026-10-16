@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 test("practice from your own mistakes: add, hint, reveal, finish, and the schedule moves", async ({ page, request }) => {
   await page.goto("/coach");
   await expect(page.getByRole("heading", { name: "Coach" })).toBeVisible();
-  const empty = page.getByText("No practice positions yet");
+  const empty = page.getByText("Where to start");
+  await expect(empty.or(page.getByText(/positions? due of \d+/))).toBeVisible({ timeout: 10_000 });      // (the page has loaded one way or the other)
   if (await empty.isVisible()) await page.getByRole("button", { name: "Add from my games" }).first().click();
   await expect(page.getByText(/positions? due of \d+/)).toBeVisible({ timeout: 10_000 });
   const before = await (await request.get("/api/coach/drills")).json();

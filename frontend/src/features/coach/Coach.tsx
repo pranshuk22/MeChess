@@ -1,11 +1,12 @@
 import { TabList, TabTrigger, Tabs } from "@/components/ui/Tabs";
-import { GraduationCap, Plus, Play } from "lucide-react";
+import { Plus, Play } from "lucide-react";
 import { useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "@/api/client";
-import { useDrillStats, type Drill } from "@/api/hooks";
+import { useDrillStats, useGamesPage, type Drill } from "@/api/hooks";
 import { Button } from "@/components/ui/Button";
-import { EmptyState, Skeleton } from "@/components/ui/Misc";
+import { Skeleton } from "@/components/ui/Misc";
 import { PageHeader, Panel, PanelTitle } from "@/components/ui/Panel";
 import { Endgames } from "./Endgames";
 import { Openings } from "./Openings";
@@ -14,10 +15,12 @@ import { Steered } from "./Steered";
 import { Weaknesses } from "./Weaknesses";
 
 export function CoachPage() {
+  const [sp] = useSearchParams();
+  const tab = ["practice", "openings", "endgames", "steered", "weaknesses"].includes(sp.get("tab") ?? "") ? sp.get("tab")! : "practice";
   return (
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
       <PageHeader title="Coach" sub="Practice that comes from your own games." />
-      <Tabs.Root defaultValue="practice">
+      <Tabs.Root defaultValue={tab}>
         <TabList className="mb-5" aria-label="Coach sections">
           {[["practice", "Practice"], ["openings", "Openings"], ["endgames", "Endgames"], ["steered", "Steered game"], ["weaknesses", "Weaknesses"]].map(([v, l]) => (
             <TabTrigger key={v} value={v}>{l}</TabTrigger>
@@ -35,6 +38,7 @@ export function CoachPage() {
 
 function PracticeHome() {
   const stats = useDrillStats().data;
+  const last = useGamesPage({ analysed: true }, 1).data?.items[0];
   const qc = useQueryClient();
   const [session, setSession] = useState<Drill[] | null>(null);
   const [result, setResult] = useState<{ found: number; total: number } | null>(null);
@@ -54,11 +58,19 @@ function PracticeHome() {
   if (!stats) return <Skeleton className="h-48 rounded-[8px]" />;
   const max = Math.max(1, ...stats.boxes);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_340px] gap-5 max-lg:grid-cols-1">
+    <div className={stats.total > 0 ? "grid grid-cols-[minmax(0,1fr)_340px] gap-5 max-lg:grid-cols-1" : ""}>
       <Panel>
         {stats.total === 0 ? (
-          <EmptyState icon={GraduationCap} title="No practice positions yet" text="They come from your own analysed games: the moments where you gave away the most. Analyse your games, then add them here."
-            action={<Button variant="primary" onClick={refresh} disabled={busy}><Plus size={15} /> Add from my games</Button>} />
+          <div className="p-6">
+            <h2 className="text-[17px] font-semibold">Where to start</h2>
+            <p className="mt-1 text-[13.5px] text-muted">Practice positions come from the moments in your own games where you gave away the most. Until there are some, here is what you can do now.</p>
+            <div className="mt-4 grid grid-cols-3 gap-3 max-md:grid-cols-1">
+              <div className="rounded-[8px] border border-border p-4"><b className="text-[14px]">Turn your mistakes into practice</b><p className="mt-1 text-[12.5px] text-muted">Adds the biggest mistake of each analysed game, to come back on a schedule.</p><Button className="mt-3" size="sm" variant="primary" onClick={refresh} disabled={busy}><Plus size={14} /> Add from my games</Button></div>
+              <div className="rounded-[8px] border border-border p-4"><b className="text-[14px]">{last ? "Retry your last game" : "Review a game"}</b><p className="mt-1 text-[12.5px] text-muted">{last ? "Step through it with the coach card and retry each mistake on the board." : "Open a game from your library to see where points were lost."}</p><Link to={last ? `/review/${encodeURIComponent(last.id)}` : "/library"}><Button className="mt-3" size="sm">{last ? "Open it" : "Library"}</Button></Link></div>
+              <div className="rounded-[8px] border border-border p-4"><b className="text-[14px]">Practise an opening</b><p className="mt-1 text-[12.5px] text-muted">The repertoire you already play, or a ready-made one from the opening library.</p><Link to="/coach?tab=openings"><Button className="mt-3" size="sm">Openings</Button></Link></div>
+            </div>
+            {msg && <p role="status" className="mt-4 text-[13px] text-muted">{msg}</p>}
+          </div>
         ) : (
           <div className="p-6">
             {result && <p className="mb-4 rounded-[6px] bg-accent-soft px-4 py-2.5 text-[13.5px] text-accent">Done: you found {result.found} of {result.total} without a hint on the first try.</p>}
@@ -69,9 +81,9 @@ function PracticeHome() {
             {msg && <p role="status" className="mt-4 text-[13px] text-muted">{msg}</p>}
           </div>
         )}
-        {stats.total === 0 && msg && <p role="status" className="px-6 pb-5 text-center text-[13px] text-muted">{msg}</p>}
+        {false && <p role="status" className="px-6 pb-5 text-center text-[13px] text-muted">{msg}</p>}
       </Panel>
-      <Panel>
+      {stats.total > 0 && <Panel>
         <PanelTitle sub="Each position moves up a box when you find the move at once, and back to the start when you do not">Your positions by box</PanelTitle>
         <div className="space-y-2.5 px-5 pb-5 pt-1">
           {stats.boxes.map((n, b) => (
@@ -83,7 +95,7 @@ function PracticeHome() {
           ))}
           <Button variant="ghost" size="sm" className="mt-2" onClick={refresh} disabled={busy}><Plus size={14} /> Add from my games</Button>
         </div>
-      </Panel>
+      </Panel>}
     </div>
   );
 }
