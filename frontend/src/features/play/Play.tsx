@@ -2,7 +2,8 @@ import { useMe } from "@/api/hooks";
 import { FlipVertical2, Flag, Loader2, RotateCcw, Swords, Undo2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRunningJobs } from "@/api/hooks";
 import { api } from "@/api/client";
 import { Board } from "@/board/Board";
 import { AppearanceButton } from "@/components/Appearance";
@@ -18,7 +19,8 @@ import { applyUci, capturedAfter, checkSquare, legalMap, START_FEN, uciToSan } f
 import { play as playSound, soundForSan } from "@/lib/sound";
 
 interface PlayState { timeControl: { base: number; inc: number } | null; clock: { white: number; black: number } | null; running: "white" | "black" | null; thinkMs: number; pace: boolean; id: string; fen: string; colour: "white" | "black"; turn: "white" | "black"; moves: { uci: string; san: string }[]; status: "playing" | "over"; result: string | null; reason: string | null; gameId: string | null; opponent: string; inCheck: boolean }
-interface Options { stockfish: { available: boolean; levels: { id: number; label: string }[] }; mechess: { available: boolean; min: number; max: number } }
+type StyleStatus = Record<"population" | "me", { available: boolean; positions: number; top1: number | null; uniform_top1: number | null; trained: string | null }>;
+interface Options { stockfish: { available: boolean; levels: { id: number; label: string }[] }; mechess: { available: boolean; min: number; max: number; styles?: StyleStatus } }
 
 const post = <T,>(path: string, json?: unknown) => api<T>(path, { method: "POST", json });
 
@@ -34,8 +36,33 @@ export function PlayPage() {
   return game ? <GameView game={game} setGame={setGame} onNew={() => setGame(null)} /> : <Setup onStart={setGame} />;
 }
 
+function StylePicker({ styles, style, setStyle, training, onTrain, error }: { styles?: StyleStatus; style: string; setStyle: (v: string) => void; training: boolean; onTrain: (s: "population" | "me") => void; error: string }) {
+  const have = styles && (styles.population.available || styles.me.available);
+  const options: [string, string][] = [["auto", "Best it has learned"], ...(styles?.population.available ? [["population", "Like players in my library"] as [string, string]] : []), ...(styles?.me.available ? [["me", "Like me"] as [string, string]] : []), ["none", "Engine-like"]];
+  return (
+    <div className="mt-4 rounded-[8px] border border-border p-3.5">
+      <div className="mb-1.5 text-[12.5px] font-medium">How it chooses its moves</div>
+      {have ? <Segmented label="Style" value={style} onChange={setStyle} options={options} /> : <p className="text-[12.5px] text-muted"><b className="text-text">Right now it chooses among the engine's good moves almost at random</b>, which is not how people play. Teach it from your own games and it picks the moves a person tempted by captures, checks and natural development would pick, and its slips look like human slips.</p>}
+      {styles && (
+        <ul className="mt-2.5 space-y-1.5 text-[12.5px]">
+          {(["population", "me"] as const).map((sc) => (
+            <li key={sc} className="flex items-center gap-3"><span className="min-w-0 flex-1 text-muted">{sc === "population" ? "Typical players" : "Your own moves"}: {styles[sc].available ? <>learned from <b className="tnum text-text">{styles[sc].positions.toLocaleString()}</b> decisions{styles[sc].top1 != null && styles[sc].uniform_top1 != null ? <> (picks the human's move {Math.round(100 * styles[sc].top1!)}% of the time, a random choice {Math.round(100 * styles[sc].uniform_top1!)}%)</> : null}</> : "not learned yet"}</span>
+              <Button size="sm" disabled={training} onClick={() => onTrain(sc)}>{training ? "Learning…" : styles[sc].available ? "Learn again" : "Learn from my games"}</Button></li>
+          ))}
+        </ul>
+      )}
+      {training && <p className="mt-2 text-[12px] text-muted" role="status">Learning in the background (the engine looks at a few thousand positions, about 10 minutes): see Activity. You can play meanwhile.</p>}
+      {error && <p role="alert" className="mt-2 text-[12px] text-[var(--q-blunder)]">{error}</p>}
+    </div>
+  );
+}
+
 function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
-  const opts = useQuery({ queryKey: ["play-options"], queryFn: () => api<Options>("/api/play/options") }).data;
+  const running = useRunningJobs().filter((j) => j.kind === "train-style");
+  const opts = useQuery({ queryKey: ["play-options"], queryFn: () => api<Options>("/api/play/options"), refetchInterval: running.length ? 4000 : false }).data;
+  const qc = useQueryClient();
+  const train = useMutation({ mutationFn: (scope: "population" | "me") => post("/api/play/train-style", { scope }), onSuccess: () => qc.invalidateQueries({ queryKey: ["jobs"] }) });
+  const [style, setStyle] = useState("auto");
   const [kind, setKind] = useState<"stockfish" | "mechess">("stockfish");
   const me = useMe().data;
   const [chosen, setChosen] = useState<{ level?: number; elo?: number }>({});
@@ -53,7 +80,7 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
   const start = async () => {
     setBusy(true); setError("");
     const [base, inc] = tc === "none" ? [null, 0] : tc === "custom" ? [Math.round(Number(custom.min) * 60), Math.round(Number(custom.inc))] : tc.split("+").map(Number);
-    try { onStart(await post<PlayState>("/api/play/start", { colour, opponent: kind, level: kind === "stockfish" ? level : elo, base, inc, pace })); }
+    try { onStart(await post<PlayState>("/api/play/start", { colour, opponent: kind, level: kind === "stockfish" ? level : elo, base, inc, pace, style })); }
     catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   };
   return (
@@ -79,6 +106,7 @@ function Setup({ onStart }: { onStart: (s: PlayState) => void }) {
           ) : (
             <div><div className="mb-1.5 flex items-baseline justify-between text-[12.5px] font-medium"><span>Playing strength</span><span className="tnum font-display text-[15px]">about {elo}</span></div>
               <input type="range" min={opts?.mechess.min ?? 800} max={opts?.mechess.max ?? 2600} step={100} value={elo} onChange={(e) => setElo(Number(e.target.value))} aria-label="Playing strength" className="w-full accent-[var(--accent)]" />
+              <StylePicker styles={opts?.mechess.styles} style={style} setStyle={setStyle} training={running.length > 0} onTrain={(sc) => train.mutate(sc)} error={train.isError ? (train.error as Error).message : ""} />
               <p className="mt-2 text-[12px] text-muted">MeChess picks sound candidate moves and chooses among them the way a player of this strength does, so it also makes human-like mistakes. The number is a rough guide.{me?.rating ? ` It starts at your own rating (${me.rating}${me.mainSpeed ? ` in ${me.mainSpeed}` : ""}).` : ""}</p>
             </div>
           )}

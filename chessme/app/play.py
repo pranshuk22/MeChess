@@ -63,8 +63,8 @@ class StockfishOpponent(Opponent):
 class MeChessOpponent(Opponent):
     """The MeChess controller as a UCI engine of its own (one process per game)."""
 
-    def __init__(self, elo: int, config: AppConfig, prior: str = "uniform"):
-        self.label = f"MeChess, about {elo}"
+    def __init__(self, elo: int, config: AppConfig, prior: str = "uniform", style_label: str = ""):
+        self.label = f"MeChess, about {elo}" + (f" ({style_label})" if style_label else "")
         book = config.explorer_path.parent if config.explorer_path.is_file() else None
         cmd = [sys.executable, "-m", "chessme", "mechess", "--elo", str(elo), "--prior", prior] + (["--book", str(book)] if book else [])
         self.engine = UciEngine(cmd).start()
@@ -173,7 +173,7 @@ class PlayService:
         from ..cli import ENGINE_BIN
         mech = ENGINE_BIN.exists()
         return {"stockfish": {"available": sf, "levels": [{"id": k, "label": v[0]} for k, v in STOCKFISH_LEVELS.items()]},
-                "mechess": {"available": mech, "min": MECHESS_ELO[0], "max": MECHESS_ELO[1]}}
+                "mechess": {"available": mech, "min": MECHESS_ELO[0], "max": MECHESS_ELO[1], "styles": __import__("chessme.app.style_job", fromlist=["x"]).status(self.config)}}
 
     def _stockfish(self, settings_engine_path):
         with self._guard:
@@ -184,7 +184,7 @@ class PlayService:
                 self._sf = UciEngine([path], options={"Threads": 1, "Hash": 64}).start()
             return self._sf
 
-    def start(self, colour: str, kind: str, level: int, settings_engine_path=None, base: int | None = None, inc: int = 0, pace: bool = True):
+    def start(self, colour: str, kind: str, level: int, settings_engine_path=None, base: int | None = None, inc: int = 0, pace: bool = True, style: str = "auto"):
         if colour == "random":
             colour = random.choice(["white", "black"])
         if colour not in ("white", "black"):
@@ -196,8 +196,16 @@ class PlayService:
         elif kind == "mechess":
             if not MECHESS_ELO[0] <= level <= MECHESS_ELO[1]:
                 raise PlayError(422, f"the rating must be between {MECHESS_ELO[0]} and {MECHESS_ELO[1]}")
+            from . import style_job
+            avail = style_job.status(self.config)
+            chosen = ("population" if avail["population"]["available"] else "me" if avail["me"]["available"] else "none") if style == "auto" else style
+            if chosen not in ("none", "population", "me"):
+                raise PlayError(422, "style is auto, none, population or me")
+            if chosen != "none" and not avail[chosen]["available"]:
+                raise PlayError(409, "MeChess has not learned that style yet: train it first")
             try:
-                opponent = MeChessOpponent(level, self.config)
+                opponent = MeChessOpponent(level, self.config, prior=f"style={style_job.model_path(self.config, chosen)}" if chosen != "none" else "uniform",
+                                           style_label={"population": "plays like players of your library", "me": "plays like you", "none": ""}[chosen])
             except Exception as e:
                 raise PlayError(409, f"MeChess could not be started (build the engine with `make -C engine`): {e}")
         else:

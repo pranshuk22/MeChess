@@ -16,6 +16,7 @@ class StartBody(BaseModel):
     base: int | None = Field(None, description="seconds each side has (None: no clock)")
     inc: int = Field(0, description="increment in seconds after each move")
     pace: bool = Field(True, description="the computer takes its time like a person (the page waits before showing its move)")
+    style: str = Field("auto", description="MeChess's move choice: auto (the best it has learned), population, me or none")
 
 
 class MoveBody(BaseModel):
@@ -61,7 +62,7 @@ def options(request: Request):
 
 @router.post("/start")
 def start(body: StartBody, request: Request):
-    s = _call(request.app.state.play.start, body.colour, body.opponent, body.level, _engine_path(request), body.base, body.inc, body.pace)
+    s = _call(request.app.state.play.start, body.colour, body.opponent, body.level, _engine_path(request), body.base, body.inc, body.pace, body.style)
     return _finish(request, s)
 
 
@@ -88,3 +89,23 @@ def resign(sid: str, request: Request):
 @router.post("/{sid}/flag")
 def flag(sid: str, request: Request):
     return _finish(request, _call(request.app.state.play.flag, sid))
+
+
+class TrainBody(BaseModel):
+    scope: str = Field("population", description="population (every move of your library) or me (your own moves)")
+    decisions: int = Field(3000, ge=500, le=20000)
+
+
+@router.post("/train-style", status_code=202)
+def train_style(body: TrainBody, request: Request):
+    """Teach MeChess to choose like a person from your library (a background job: the engine looks at a few thousand of the positions)."""
+    from .. import style_job
+    from .api import current_settings
+    app = request.app
+    if body.scope not in style_job.SCOPES:
+        raise HTTPException(422, "scope is population or me")
+    with app.state.sessions() as s:
+        settings = current_settings(s)
+    job = app.state.jobs.submit("train-style", "Teach MeChess to choose like a person" if body.scope == "population" else "Teach MeChess your style",
+                                lambda ctx: style_job.train(app.state.config, app.state.sessions, settings, ctx, scope=body.scope, decisions=body.decisions, engine_factory=getattr(app.state, "style_engine_factory", None)))
+    return app.state.jobs.get(job)

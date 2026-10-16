@@ -342,6 +342,7 @@ export interface StartBody {
   base: number | null;
   inc: number;
   pace: boolean;
+  style: string;
 }
 
 export interface Stats {
@@ -363,6 +364,11 @@ export interface Stats {
 export interface SteerStart {
   colour: string;
   foci: Record<string, number>;
+}
+
+export interface TrainBody {
+  scope: string;
+  decisions: number;
 }
 
 export interface Workspace {

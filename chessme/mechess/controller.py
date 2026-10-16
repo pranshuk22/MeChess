@@ -145,7 +145,7 @@ class MeChess:
         cands = [Candidate(chess.Move.from_uci(l.move), l.cp, loss=min(LOSS_CAP, max(0, best - l.cp))) for l in keep]
         if len(cands) == 1:
             cands[0].prob = 1.0
-            return self._with_blunder(board, Choice(cands[0].move, "search", cands), settings)
+            return self._with_blunder(board, Choice(cands[0].move, "search", cands), settings, elo, opp_elo, platform)
 
         # 3. prior over the candidates
         probs = self.prior(board, elo, opp_elo, platform)
@@ -165,14 +165,19 @@ class MeChess:
             move = max(cands, key=lambda c: (c.prior, -c.loss)).move   # the most likely candidate (the smaller loss breaks a tie)
         else:
             move = self.rng.choices([c.move for c in cands], weights=[c.prob for c in cands])[0]
-        return self._with_blunder(board, Choice(move, "search", cands), settings)
+        return self._with_blunder(board, Choice(move, "search", cands), settings, elo, opp_elo, platform)
 
-    def _with_blunder(self, board, choice, settings):
-        """With probability `blunder_rate`, replace a search move by a random other legal move (a strength knob for the weak end)."""
+    def _with_blunder(self, board, choice, settings, elo=1500, opp_elo=None, platform=0):
+        """With probability `blunder_rate`, replace a search move by another legal move (a strength knob for the weak end). The slip is drawn mostly (70%) with the prior's weights and otherwise at random, so with a human
+        move-choice model it is a move a person would be tempted by (a capture, a check, a developing move), not a random one; with the uniform prior it is a random legal move."""
         if settings.blunder_rate > 0 and self.rng.random() < settings.blunder_rate:
             others = [m for m in board.legal_moves if m != choice.move]
             if others:
-                return Choice(self.rng.choice(others), "blunder", choice.candidates)
+                probs = self.prior(board, elo, opp_elo or elo, platform)
+                raw = [max(probs.get(m, 0.0), 0.0) for m in others]
+                total = sum(raw) or 1.0
+                weights = [0.7 * r / total + 0.3 / len(others) for r in raw]                 # mostly what a person would be tempted by, sometimes anything
+                return Choice(self.rng.choices(others, weights=weights)[0], "blunder", choice.candidates)
         return choice
 
     @staticmethod
