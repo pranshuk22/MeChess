@@ -50,6 +50,7 @@ function useMoves(game: GameDetail): AnalysedMove[] {
 }
 
 function ReviewGame({ game: loaded }: { game: GameDetail }) {
+  const nav = useNavigate();
   const moves = useMoves(loaded);
   const game = useMemo<GameDetail>(() => ({ ...loaded, moves }), [loaded, moves]);
   const analysed = loaded.analysed;
@@ -190,7 +191,7 @@ function ReviewGame({ game: loaded }: { game: GameDetail }) {
             <Menu.Trigger asChild><IconButton label="Copy or download"><Download size={18} /></IconButton></Menu.Trigger>
             <Menu.Portal>
               <Menu.Content align="end" sideOffset={6} className="z-50 min-w-[190px] rounded-[8px] border border-border bg-surface p-1 text-[13px] shadow-[var(--shadow)]">
-                {[["Copy FEN of this position", () => copy(fenNow)], ["Copy PGN of the game", () => copy(loaded.pgn ?? "")], ["Download PGN", download]].map(([l, f]) => (
+                {[["Analyse this position on the analysis board", () => nav(`/analysis?fen=${encodeURIComponent(fenNow)}`)], ["Copy FEN of this position", () => copy(fenNow)], ["Copy PGN of the game", () => copy(loaded.pgn ?? "")], ["Download PGN", download]].map(([l, f]) => (
                   <Menu.Item key={l as string} onSelect={f as () => void} className="cursor-pointer rounded-[5px] px-2.5 py-1.5 outline-none data-[highlighted]:bg-surface-2">{l as string}</Menu.Item>
                 ))}
               </Menu.Content>

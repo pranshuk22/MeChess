@@ -11,6 +11,7 @@ const SettingsPage = lazy(() => import("@/features/settings/Settings").then((m) 
 const CoachPage = lazy(() => import("@/features/coach/Coach").then((m) => ({ default: m.CoachPage })));
 const ExplorerPage = lazy(() => import("@/features/explorer/ExplorerPage").then((m) => ({ default: m.ExplorerPage })));
 const PreparePage = lazy(() => import("@/features/prepare/Prepare").then((m) => ({ default: m.PreparePage })));
+const AnalysisPage = lazy(() => import("@/features/analysis/AnalysisBoard").then((m) => ({ default: m.AnalysisPage })));
 const BotPage = lazy(() => import("@/features/bot/BotPage").then((m) => ({ default: m.BotPage })));
 const BooksPage = lazy(() => import("@/features/books/BooksPage").then((m) => ({ default: m.BooksPage })));
 const PlayPage = lazy(() => import("@/features/play/Play").then((m) => ({ default: m.PlayPage })));
@@ -34,6 +35,7 @@ const router = createBrowserRouter([{
     { path: "/insights", element: wait(<InsightsPage />) },
     { path: "/books", element: wait(<BooksPage />) },
     { path: "/prepare/:id?", element: wait(<PreparePage />) },
+    { path: "/analysis", element: wait(<AnalysisPage />) },
     { path: "/bot", element: wait(<BotPage />) },
     { path: "/activity", element: wait(<ActivityPage />) },
   ],

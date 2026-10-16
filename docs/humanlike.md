@@ -41,3 +41,8 @@ Reported with the numbers and the intervals in the accompanying paper when it is
 ## Not included
 
 Maia, Allie, Stockfish and tablebase files are downloaded by the user and never bundled ([third-party.md](third-party.md)).
+
+
+## MeChess in the app: choosing like a person from your own games
+
+MeChess (the opponent in Play) takes the engine's sound candidate moves and chooses among them with a **prior**. With the uniform prior that choice is almost random, which does not feel human. In the app the prior is a move-choice model (`chessme.style`: a conditional logit over move features such as captures, checks, castling, king attacks, pawn breaks) learned from your own library: the app samples a few thousand decisions from your games (from move 10), asks Stockfish for the sound candidates at each, and fits the model; held-out decisions say how much better than a random choice it predicts (a pilot on 300 games: the human's move was picked 49% of the time, a random choice 26%). Two models: the typical players of your library, and you. Its slips (the weak levels' blunder knob) are drawn mostly with the same weights, so they are moves a person would be tempted by. The strength dial was calibrated with the uniform prior; with a learned prior the rating is a rough guide until it is measured again. The computer's thinking time (`app/pacing.py`) follows a person's pace: quick for the first moves and a recapture, longer in tense positions, scaled by strength and by the clock.

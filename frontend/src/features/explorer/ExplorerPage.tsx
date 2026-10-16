@@ -1,4 +1,5 @@
 import { useMe } from "@/api/hooks";
+import { Details } from "@/components/ui/Details";
 import { BookOpen, FlipVertical2, RotateCcw, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useExplorer } from "@/api/hooks";
@@ -29,7 +30,7 @@ export function ExplorerPage() {
     <div className="mx-auto max-w-[1180px] px-8 py-8 max-md:px-4">
       <PageHeader title="Opening explorer" sub={q.data?.opening ? `${q.data.opening.name} (${q.data.opening.eco})` : "What players of your rating play in any position."}
         actions={<div className="w-40"><Select value={rating} onChange={(e) => setPicked(Number(e.target.value))} aria-label="Rating">{[1000, 1200, 1400, 1500, 1600, 1800, 2000, 2200, 2400].map((r) => <option key={r} value={r}>around {r}{r === me?.band ? " (you)" : ""}</option>)}</Select></div>} />
-      {q.data === null ? <Panel><EmptyState icon={BookOpen} title="The opening explorer is not built yet" text="It needs the explorer database built from the Lichess games (see docs/opening-explorer.md); the workspace checklist on the home page shows its state." /></Panel> : (
+      {q.data === null ? <Panel><EmptyState icon={BookOpen} title="The opening explorer is not set up yet" text="It shows what players of your rating really play in any position, from millions of public Lichess games. It needs a one-time download of opening data, prepared outside the app." action={<Details><p>The data is a single file named <code className="font-mono text-text">explorer.db</code>, built from the public Lichess game archives with <code className="font-mono text-text">chessme explorer-build</code> (see docs/opening-explorer.md in the project folder).</p><p>Put it in your data folder; the app finds it by itself the next time it starts.</p></Details>} /></Panel> : (
         <div className="grid grid-cols-[minmax(0,1fr)_380px] gap-6 max-lg:grid-cols-1">
           <div className="mx-auto w-full" style={{ maxWidth: "min(100%, calc((100dvh - var(--topbar) - 240px) * var(--board-scale, 1)))" }}>
             <div className="overflow-hidden rounded-[6px] shadow-[0_1px_2px_rgba(16,24,32,0.12),0_12px_32px_-12px_rgba(16,24,32,0.3)]">

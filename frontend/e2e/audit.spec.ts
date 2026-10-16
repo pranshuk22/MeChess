@@ -58,7 +58,8 @@ test("leaving a retry through the move list starts the next retry from the begin
 test("settings can be reached on a narrow screen", async ({ page }) => {
   await page.setViewportSize({ width: 600, height: 800 });
   await page.goto("/");
-  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "More" }).click();
+  await page.getByRole("dialog").getByRole("link", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\/settings/);
 });
 

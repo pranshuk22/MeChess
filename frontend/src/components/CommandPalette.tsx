@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, BarChart3, BookOpen, Bot, Compass, Crosshair, Download, GraduationCap, Home, Library, Moon, Search, Settings, Swords, type LucideIcon } from "lucide-react";
+import { Activity, BarChart3, BookOpen, Bot, Compass, Crosshair, Download, GraduationCap, Home, Library, Microscope, Moon, Search, Settings, Swords, type LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
@@ -31,7 +31,7 @@ export function CommandPalette() {
   const base: Item[] = useMemo(() => [
     { id: "home", label: "Home", icon: Home, run: go("/"), group: "Go to" }, { id: "library", label: "Library", icon: Library, run: go("/library"), group: "Go to" },
     { id: "coach", label: "Coach", hint: "practice, openings, endgames", icon: GraduationCap, run: go("/coach"), group: "Go to" }, { id: "play", label: "Play", icon: Swords, run: go("/play"), group: "Go to" },
-    { id: "prepare", label: "Prepare against an opponent", icon: Crosshair, run: go("/prepare"), group: "Go to" }, { id: "explorer", label: "Opening explorer", icon: Compass, run: go("/explorer"), group: "Go to" },
+    { id: "prepare", label: "Prepare against an opponent", icon: Crosshair, run: go("/prepare"), group: "Go to" }, { id: "analysis", label: "Analysis board", hint: "any position or game", icon: Microscope, run: go("/analysis"), group: "Go to" }, { id: "explorer", label: "Opening explorer", icon: Compass, run: go("/explorer"), group: "Go to" },
     { id: "insights", label: "Insights", icon: BarChart3, run: go("/insights"), group: "Go to" }, { id: "books", label: "Books", icon: BookOpen, run: go("/books"), group: "Go to" },
     { id: "bot", label: "Bot", icon: Bot, run: go("/bot"), group: "Go to" }, { id: "activity", label: "Activity", icon: Activity, run: go("/activity"), group: "Go to" },
     { id: "settings", label: "Settings", icon: Settings, run: go("/settings"), group: "Go to" },

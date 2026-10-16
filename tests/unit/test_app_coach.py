@@ -140,6 +140,7 @@ def test_no_engine_gives_a_clear_message(client, monkeypatch):
 def test_the_weakness_profile_is_built_from_analysed_games_and_compared_with_players_of_your_rating(client):
     for i in range(3):
         seed(client, f"p{i}", elo=1450)
+    client.app.state.reference = None                                                                         # (the packaged reference counts are there in a real app)
     prof = client.get("/api/coach/profile").json()
     assert prof["games"] == 3 and prof["moves"] == 6 and prof["mistake_rate"] == pytest.approx(0.5) and "reference" not in prof
     assert isinstance(prof["sentences"], list) and isinstance(prof["foci"], list)

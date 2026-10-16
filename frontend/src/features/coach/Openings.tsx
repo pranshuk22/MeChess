@@ -1,4 +1,5 @@
 import { useMe } from "@/api/hooks";
+import { Details } from "@/components/ui/Details";
 import { BookOpen, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -58,7 +59,7 @@ export function Openings() {
   const coverMine = (colour: string) => guard(async () => { const id = await makeMine(colour); setCov({ id, c: await api<Coverage>(`/api/coach/repertoires/${id}/coverage?rating=${rating}`) }); });
 
 
-  if (status && !status.explorer) return <Panel><EmptyState icon={BookOpen} title="The opening explorer is not built yet" text="Opening practice plays your repertoire against the replies players of your rating really make, which comes from the explorer database (docs/opening-explorer.md)." /></Panel>;
+  if (status && !status.explorer) return <Panel><EmptyState icon={BookOpen} title="Opening practice needs the opening explorer" text="You practise your openings against the replies players of your rating really make, which come from the opening explorer data. It is a one-time setup prepared outside the app." action={<Details><p>The data is a single file named <code className="font-mono text-text">explorer.db</code> built from the public Lichess game archives (see docs/opening-explorer.md in the project folder). Put it in your data folder and restart the app.</p></Details>} /></Panel>;
 
   if (session) {
     const v = session.view;

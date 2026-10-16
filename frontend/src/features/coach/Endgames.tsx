@@ -1,3 +1,4 @@
+import { Details } from "@/components/ui/Details";
 import { Lightbulb, Shapes } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -29,7 +30,7 @@ export function Endgames() {
   });
   const hint = () => guard(async () => { const level = Math.min(3, hints.length + 1); const r = await api<{ hint: string }>(`/api/coach/endgames/${s!.session}/hint`, { method: "POST", json: { level } }); setHints([...hints, r.hint]); });
 
-  if (status && !status.tablebase) return <Panel><EmptyState icon={Shapes} title="No endgame tablebases found" text="Endgame practice checks every move against Syzygy tablebases. Download the 3 to 5 piece files (about 1 GB) into a folder named syzygy in your data folder." /></Panel>;
+  if (status && !status.tablebase) return <Panel><EmptyState icon={Shapes} title="Endgame practice needs endgame tables" text="Each move you play is checked against perfect endgame knowledge (the Syzygy tablebases), so the coach can tell you exactly whether a move wins, draws or loses. The tables are a one-time download of about 1 GB." action={<Details><p>Download the 3, 4 and 5 piece Syzygy files (the <code className="font-mono text-text">.rtbw</code> and <code className="font-mono text-text">.rtbz</code> files) and put them in a folder named <code className="font-mono text-text">syzygy</code> inside your data folder, then restart the app.</p></Details>} /></Panel>;
   if (s) {
     const v = s.view;
     return (

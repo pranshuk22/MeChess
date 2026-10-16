@@ -59,3 +59,21 @@ and gate. They feed the style work described in [style-analysis.md](style-analys
 - Fixed nodes, not fixed depth: very sharp positions can move between runs of a different budget.
 - Clock use, time trouble and the human difficulty of a move are not part of the classification.
 - The thresholds are hand-set, not learned from data.
+
+
+## Performance rating
+
+Two numbers per player per game, and for the last games together (`analysis/performance.py`):
+
+* **By play.** The reference counts (Lichess games analysed with the app's own settings, 347k moves; `coach/reference_rates.json`) say how often a move is fine, a mistake (10 to 20 points of win chance) or a blunder (20 or more) at each rating and speed. The moves of one player are a sample of those rates; the rating whose rates make the sample most likely, with a wide prior around 1500, is the performance, with an 80% interval. One game has about 30 moves, so the interval is wide (hundreds of points); the figure for the last 50 games is much tighter. The mistake rate changes only from about 13% at 1000 to 6% at 2400, so this is a coarse instrument: read the interval, not the point. Bullet is read against blitz and classical against rapid (the reference has two speeds).
+* **By result.** The opponent's rating plus 400 for every net win (the 400 rule), where the opponent's rating is known.
+
+A finer reference (the whole distribution of losses per rating, not only the two thresholds) would narrow the interval; it needs another run on Kaggle.
+
+## Reasons for a move
+
+`analysis/explain.py` writes one to three sentences for every move of an analysed game from the stored engine lines and the board only: what the move does, what the engine expected after it or what it allows (a mate, a piece that can be taken, the engine's line), and what was better. The practice feedback (`coach/feedback.py`) uses the same ideas live, against the engine.
+
+## Tactical motifs
+
+`analysis/motifs.py` names what the better move was: mate, back-rank mate, promotion, fork, pin, discovered attack, a piece left hanging, a sacrifice, a trade or a quiet move, from the board and the move alone. The profile counts, for your moves, tactics found (you played it), missed (the engine's better move was one and you lost 10 points or more) and allowed (the engine's reply to your mistake was one).

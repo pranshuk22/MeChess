@@ -1,5 +1,6 @@
 import clsx from "clsx";
-import { Activity, BarChart3, Bot, BookOpen, ChevronsLeft, Compass, Crosshair, GraduationCap, Home, Library, Loader2, Moon, PanelLeft, Search, Settings, Sun, Swords } from "lucide-react";
+import { Activity, BarChart3, Bot, BookOpen, ChevronsLeft, Compass, Crosshair, GraduationCap, Home, Library, Loader2, Microscope, MoreHorizontal, Moon, PanelLeft, Search, Settings, Sun, Swords } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +14,7 @@ import { TipProvider, Tip } from "./ui/Tip";
 const GROUPS = [
   { label: "Overview", items: [{ to: "/", label: "Home", icon: Home, end: true }, { to: "/library", label: "Library", icon: Library }] },
   { label: "Train", items: [{ to: "/coach", label: "Coach", icon: GraduationCap }, { to: "/play", label: "Play", icon: Swords }, { to: "/prepare", label: "Prepare", icon: Crosshair }] },
-  { label: "Explore", items: [{ to: "/explorer", label: "Explorer", icon: Compass }, { to: "/insights", label: "Insights", icon: BarChart3 }, { to: "/books", label: "Books", icon: BookOpen }, { to: "/bot", label: "Bot", icon: Bot }] },
+  { label: "Explore", items: [{ to: "/analysis", label: "Analysis", icon: Microscope }, { to: "/explorer", label: "Explorer", icon: Compass }, { to: "/insights", label: "Insights", icon: BarChart3 }, { to: "/books", label: "Books", icon: BookOpen }, { to: "/bot", label: "Bot", icon: Bot }] },
 ];
 
 function Mark({ size = 26 }: { size?: number }) {
@@ -63,13 +64,15 @@ export function Shell() {
   const toggle = () => setCollapsed((c) => { try { localStorage.setItem("mechess.rail", c ? "0" : "1"); } catch { /* not remembered */ } return !c; });
 
   const { pathname } = useLocation();
+  const [moreOpen, setMoreOpen] = useState(false);
+  useEffect(() => setMoreOpen(false), [pathname]);
   /** (The active state is worked out here and a plain class string is given to NavLink: a function as className is turned into text by the tooltip trigger around it.) */
   const link = (to: string, label: string, Icon: typeof Home, opts: { end?: boolean; badge?: number } = {}) => {
     const isActive = opts.end ? pathname === to : pathname === to || pathname.startsWith(to + "/");
     return (
       <Tip key={to} label={label} side="right">
         <NavLink to={to} end={opts.end} aria-label={label} aria-current={isActive ? "page" : undefined}
-          className={clsx("group relative flex h-8 items-center gap-2.5 rounded-[6px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot", "/prepare"].includes(to) && "max-md:hidden", "max-md:h-auto max-md:flex-col max-md:justify-center max-md:gap-0.5 max-md:px-0 max-md:text-[10.5px]",
+          className={clsx("group relative flex h-8 items-center gap-2.5 rounded-[6px] px-2.5 text-[13.5px] font-medium transition-colors", collapsed && "justify-center px-0", ["/insights", "/books", "/bot", "/prepare", "/analysis"].includes(to) && "max-md:hidden", "max-md:h-auto max-md:flex-col max-md:justify-center max-md:gap-0.5 max-md:px-0 max-md:text-[10.5px]",
             isActive ? "bg-[var(--rail-active)] text-[var(--rail-strong)]" : "text-[var(--rail-text)] hover:bg-[var(--rail-hover)] hover:text-[var(--rail-strong)]")}>
           <Icon size={17} strokeWidth={1.75} className={clsx("shrink-0", isActive && "text-accent")} />
           {!collapsed && <span className="truncate">{label}</span>}
@@ -96,7 +99,9 @@ export function Shell() {
               </div>
             ))}
           </div>
-          <div className="hidden max-md:contents">{link("/settings", "Settings", Settings)}</div>
+          <div className="hidden max-md:contents">
+            <button onClick={() => setMoreOpen(true)} aria-label="More" className="flex h-auto cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[6px] text-[10.5px] font-medium text-[var(--rail-text)]"><MoreHorizontal size={17} strokeWidth={1.75} /><span>More</span></button>
+          </div>
           <div className="mt-3 space-y-0.5 border-t border-[var(--rail-line)] pt-3 max-md:hidden">
             {link("/activity", "Activity", Activity, { badge: running.length || undefined })}
             {link("/settings", "Settings", Settings)}
@@ -131,6 +136,20 @@ export function Shell() {
         </div>
       </div>
       {importEverOpened && <Suspense fallback={null}><ImportDialog /></Suspense>}
+      <Dialog.Root open={moreOpen} onOpenChange={setMoreOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-[#0b1118]/45 md:hidden" />
+          <Dialog.Content aria-describedby={undefined} className="fixed inset-x-0 bottom-0 z-50 rounded-t-[16px] border-t border-border bg-surface p-4 pb-6 shadow-[var(--shadow)] md:hidden">
+            <Dialog.Title className="sr-only">More places</Dialog.Title>
+            <div className="grid grid-cols-3 gap-2">
+              {[["/prepare", "Prepare", Crosshair], ["/analysis", "Analysis", Microscope], ["/insights", "Insights", BarChart3], ["/explorer", "Explorer", Compass], ["/books", "Books", BookOpen], ["/bot", "Bot", Bot], ["/activity", "Activity", Activity], ["/settings", "Settings", Settings]].map(([to, label, Icon]) => {
+                const I = Icon as typeof Home;
+                return <NavLink key={to as string} to={to as string} className="flex flex-col items-center gap-1.5 rounded-[10px] border border-border px-2 py-3 text-[12px] font-medium text-text hover:bg-surface-2"><I size={20} strokeWidth={1.6} className="text-accent" />{label as string}</NavLink>;
+              })}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {shortcutsOpen && <Suspense fallback={null}><ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} /></Suspense>}
       {paletteLoaded && <Suspense fallback={null}><CommandPalette /></Suspense>}
     </TipProvider>

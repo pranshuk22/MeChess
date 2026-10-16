@@ -1,3 +1,4 @@
+import { Details } from "@/components/ui/Details";
 import { Bot, Play, Square } from "lucide-react";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +20,7 @@ export function BotPage() {
     <div className="mx-auto max-w-[860px] px-8 py-8 max-md:px-4">
       <PageHeader title="Lichess bot" sub="Let other players challenge MeChess on Lichess, at a strength you choose." />
       {s && !s.installed ? (
-        <Panel><EmptyState icon={Bot} title="The bot program is not installed" text={<>MeChess uses <code className="rounded bg-sunken px-1 font-mono text-[12px]">lichess-bot</code> in <code className="rounded bg-sunken px-1 font-mono text-[12px]">{s.dir}</code>. Use a <b>new</b> Lichess account for the bot (it can only play as a bot afterwards); the steps are in docs/lichess-bot.md.</>} /></Panel>
+        <Panel><EmptyState icon={Bot} title="The bot program is not installed" text={<>Run MeChess as a Lichess bot so other players can challenge it at a strength you choose. This needs a small helper program and a <b>new</b> Lichess account used only for the bot (an account can only play as a bot once it is upgraded).</>} action={<Details><p>The helper is <code className="font-mono text-text">lichess-bot</code>, expected in <code className="font-mono text-text">{s.dir}</code>. The steps are in docs/lichess-bot.md in the project folder.</p></Details>} /></Panel>
       ) : (
         <div className="space-y-5">
           <Panel className="p-5">
@@ -27,7 +28,7 @@ export function BotPage() {
               <div className="flex items-center gap-3"><Badge tone={s?.running ? "good" : "neutral"}>{s?.running ? "Running" : "Stopped"}</Badge><Badge tone={s?.token ? "good" : "warn"}>{s?.token ? "Token found" : "No token"}</Badge></div>
               {s?.running ? <Button onClick={() => act.mutate("stop")} disabled={act.isPending}><Square size={15} /> Stop the bot</Button> : <Button variant="primary" onClick={() => act.mutate("start")} disabled={act.isPending || !s}><Play size={15} /> Start the bot</Button>}
             </div>
-            {!s?.token && s && <p className="mt-3 text-[13px] text-muted">The token is never typed here. Set <code className="rounded bg-sunken px-1 font-mono text-[12px]">LICHESS_BOT_TOKEN</code> in the terminal where you start MeChess, or keep it in the macOS Keychain (docs/lichess-bot.md).</p>}
+            {!s?.token && s && <div className="mt-3 text-[13px] text-muted"><p>The bot needs the access token of its Lichess account. For your safety the token is never typed into this page.</p><Details summary="Where the token goes"><p>Set <code className="font-mono text-text">LICHESS_BOT_TOKEN</code> in the terminal where you start MeChess, or keep it in the macOS Keychain (docs/lichess-bot.md).</p></Details></div>}
             {error && <p role="alert" className="mt-3 text-[13px] text-[var(--q-blunder)]">{error}</p>}
           </Panel>
           <Panel>

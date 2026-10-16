@@ -1,3 +1,4 @@
+import { Details } from "@/components/ui/Details";
 import { BookOpen, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -30,8 +31,8 @@ export function BooksPage() {
     return (
       <div className="mx-auto max-w-[760px] px-8 py-10"><PageHeader title="Books" />
         <Panel><EmptyState icon={BookOpen} title={s.available ? "Index the book comments" : "No book comments found"}
-          text={s.available ? "The book reader's output is on this computer. Indexing makes its comments searchable by words and ideas." : "Run `chessme books-learn` (docs/language-model.md) to collect public-domain books and annotated games, then come back."}
-          action={s.available ? <Button variant="primary" onClick={() => index.mutate()} disabled={index.isPending}>Index the comments</Button> : undefined} /></Panel></div>
+          text={s.available ? "Comments from chess books and annotated games were found on this computer. Indexing makes them searchable by words and ideas, and shows them next to the positions they are about." : "Commentary from public-domain chess books and annotated games, searchable by idea (outpost, zugzwang, minority attack) and shown with the position each comment is about. None has been collected yet."}
+          action={s.available ? <Button variant="primary" onClick={() => index.mutate()} disabled={index.isPending}>Index the comments</Button> : <Details summary="How to collect books"><p>Run <code className="font-mono text-text">chessme books-learn</code> in the project folder (see docs/language-model.md); it collects public-domain books and annotated games. Then open this page again.</p></Details>} /></Panel></div>
     );
   }
   return (

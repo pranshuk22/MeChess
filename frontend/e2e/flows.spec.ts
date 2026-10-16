@@ -160,9 +160,10 @@ test("the opening cache can be built from your games, used, and deleted", async 
 
 test("the explorer page, the books page and the bot page say what is missing instead of failing", async ({ page }) => {
   await page.goto("/explorer");
-  await expect(page.getByText("The opening explorer is not built yet")).toBeVisible();
+  await expect(page.getByText("The opening explorer is not set up yet")).toBeVisible();
   await page.goto("/books");
   await expect(page.getByText("No book comments found")).toBeVisible();
+  await expect(page.getByText("chessme books-learn")).toBeHidden();                                          // the technical steps are folded away, not in the plain sentence
   await page.goto("/bot");
   await expect(page.getByText("The bot program is not installed")).toBeVisible();
 });

@@ -40,9 +40,9 @@ test("the home page shows how many practice positions are due", async ({ page, r
 test("opening practice and endgames say what data they need when it is missing", async ({ page }) => {
   await page.goto("/coach");
   await page.getByRole("tab", { name: "Openings" }).click();
-  await expect(page.getByText("The opening explorer is not built yet")).toBeVisible();
+  await expect(page.getByText("Opening practice needs the opening explorer")).toBeVisible();
   await page.getByRole("tab", { name: "Endgames" }).click();
-  await expect(page.getByText("No endgame tablebases found")).toBeVisible();
+  await expect(page.getByText("Endgame practice needs endgame tables")).toBeVisible();
 });
 
 test("a steered game: choose a focus, play, finish, see the report, review the saved game", async ({ page, request }) => {

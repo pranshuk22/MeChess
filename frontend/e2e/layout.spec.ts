@@ -53,5 +53,10 @@ test("on a phone the pages do not scroll sideways and the bottom bar shows the m
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), path).toBe(true);
   }
   const bar = page.getByRole("navigation", { name: "Main" });
-  for (const name of ["Home", "Library", "Coach", "Play", "Settings"]) await expect(bar.getByRole("link", { name }).first()).toBeVisible();
+  for (const name of ["Home", "Library", "Coach", "Play"]) await expect(bar.getByRole("link", { name }).first()).toBeVisible();
+  await bar.getByRole("button", { name: "More" }).click();                                          // everything else is one tap away
+  for (const name of ["Prepare", "Analysis", "Insights", "Explorer", "Books", "Bot", "Activity", "Settings"]) await expect(page.getByRole("dialog").getByRole("link", { name })).toBeVisible();
+  await page.getByRole("dialog").getByRole("link", { name: "Insights" }).click();
+  await expect(page).toHaveURL(/\/insights/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
 });
